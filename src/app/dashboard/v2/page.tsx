@@ -12,6 +12,7 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -545,6 +546,11 @@ const getInteractionStatus = useCallback((
             <DateRangePicker date={dateRange} onDateChange={setDateRange} className="text-xs" />
           </div>
         </CardContent>
+        <CardFooter>
+            <p className="text-xs text-muted-foreground">
+                Lembrete de Limites Mensais: <strong>Feedback:</strong> 10; <strong>N3 (Alfa/Beta/Senior):</strong> 4/2/1; <strong>Outros:</strong> 1.
+            </p>
+        </CardFooter>
       </Card>
 
       <Card>
@@ -738,3 +744,5 @@ const getInteractionStatus = useCallback((
     </div>
   );
 }
+
+    

@@ -51,6 +51,10 @@ const faqSections = [
         answer: "As interações obrigatórias e suas frequências são:\n\n- **N3 Individual:** A frequência varia com o segmento do colaborador (Alfa: 4/mês, Beta: 2/mês, Senior: 1/mês).\n- **Índice de Risco:** Deve ser registrado mensalmente para acompanhar a evolução do colaborador.\n- **1:1 (One-on-One):** É uma interação trimestral. Os registros são esperados nos meses de Março, Junho, Setembro e Dezembro.\n- **PDI (Diagnóstico):** A avaliação do diagnóstico é semestral. Os registros são esperados nos meses de Janeiro e Julho."
     },
     {
+        question: "Qual o limite de registros por tipo de interação?",
+        answer: "Para garantir a organização e a qualidade dos dados, o sistema aplica limites mensais para o registro de interações por colaborador:\n\n- **N3 Individual:** O limite depende do segmento do colaborador (Alfa: 4/mês, Beta: 2/mês, Senior: 1/mês).\n- **Feedback:** É possível registrar até 10 interações de feedback por mês.\n- **Índice de Risco:** Limitado a 1 registro por mês.\n- **1:1 (One-on-One):** Limitado a 1 registro por mês.\n- **PDI (Ações e Diagnóstico):** Limitado a 1 registro por mês."
+    },
+    {
         question: "Como o 'Índice de Aderência' é calculado no Ranking?",
         answer: "O Índice de Aderência mede a proporção de interações obrigatórias que um líder realizou com sua equipe em relação ao total previsto para o período selecionado. Por exemplo, se um líder deveria ter 10 interações no mês e realizou 8, seu índice será de 80%. Apenas as interações 'N3 Individual', 'Índice de Risco', '1:1' e 'PDI' contam para este cálculo."
     },
@@ -135,3 +139,5 @@ export function UsageGuideDialog() {
     </Dialog>
   );
 }
+
+    

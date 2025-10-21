@@ -67,6 +67,8 @@ const n3Limits = {
     'Senior': 1
 };
 
+const feedbackLimit = 10;
+
 
 export default function IndividualTrackingPage() {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
@@ -255,6 +257,22 @@ export default function IndividualTrackingPage() {
             return;
         }
 
+    } else if (interactionType === 'Feedback') {
+        const countThisMonth = interactions.filter(
+            (interaction) =>
+                interaction.type === 'Feedback' &&
+                isSameMonth(parseISO(interaction.date), now) &&
+                isSameYear(parseISO(interaction.date), now)
+        ).length;
+
+        if (countThisMonth >= feedbackLimit) {
+            toast({
+                variant: "destructive",
+                title: "Limite Atingido",
+                description: `O limite de ${feedbackLimit} registros de "Feedback" já foi atingido este mês.`,
+            });
+            return;
+        }
     } else {
         // Check for existing interaction of other types in the current month
         const hasExistingInteractionThisMonth = interactions.some(
@@ -610,5 +628,3 @@ export default function IndividualTrackingPage() {
     </div>
   );
 }
-
-    

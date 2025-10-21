@@ -61,6 +61,12 @@ const initialN3Notes: N3IndividualNotes = {
 
 const adminEmails = ['matheus@3ainvestimentos.com.br', 'lucas.nogueira@3ainvestimentos.com.br'];
 
+const n3Limits = {
+    'Alfa': 4,
+    'Beta': 2,
+    'Senior': 1
+};
+
 
 export default function IndividualTrackingPage() {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
@@ -209,7 +215,7 @@ export default function IndividualTrackingPage() {
   };
   
   const handleSaveInteraction = async () => {
-    if (!interactionsCollection || !user || !interactions ) {
+    if (!interactionsCollection || !user || !interactions || !selectedEmployee) {
         toast({
             variant: "destructive",
             title: "Erro de Validação",
@@ -227,24 +233,46 @@ export default function IndividualTrackingPage() {
         return;
     }
 
-    // Check for existing interaction of the same type in the current month
     const now = new Date();
-    const hasExistingInteractionThisMonth = interactions.some(
-        (interaction) =>
-            interaction.type === interactionType &&
-            isSameMonth(parseISO(interaction.date), now) &&
-            isSameYear(parseISO(interaction.date), now)
-    );
+    
+    if (interactionType === 'N3 Individual') {
+        const segment = selectedEmployee.segment as keyof typeof n3Limits | undefined;
+        const limit = segment ? n3Limits[segment] : 0;
+        
+        const countThisMonth = interactions.filter(
+            (interaction) =>
+                interaction.type === 'N3 Individual' &&
+                isSameMonth(parseISO(interaction.date), now) &&
+                isSameYear(parseISO(interaction.date), now)
+        ).length;
 
-    if (hasExistingInteractionThisMonth) {
-        toast({
-            variant: "destructive",
-            title: "Registro Duplicado",
-            description: `Uma interação do tipo "${interactionType}" já foi registrada para este colaborador no mês corrente.`,
-        });
-        return;
+        if (countThisMonth >= limit) {
+            toast({
+                variant: "destructive",
+                title: "Limite Atingido",
+                description: `O limite de ${limit} registro(s) de "N3 Individual" para o segmento "${segment}" já foi atingido este mês.`,
+            });
+            return;
+        }
+
+    } else {
+        // Check for existing interaction of other types in the current month
+        const hasExistingInteractionThisMonth = interactions.some(
+            (interaction) =>
+                interaction.type === interactionType &&
+                isSameMonth(parseISO(interaction.date), now) &&
+                isSameYear(parseISO(interaction.date), now)
+        );
+
+        if (hasExistingInteractionThisMonth) {
+            toast({
+                variant: "destructive",
+                title: "Registro Duplicado",
+                description: `Uma interação do tipo "${interactionType}" já foi registrada para este colaborador no mês corrente.`,
+            });
+            return;
+        }
     }
-
 
     let notesToSave: string | OneOnOneNotes | N3IndividualNotes;
     let isNotesEmpty = true;
@@ -582,3 +610,5 @@ export default function IndividualTrackingPage() {
     </div>
   );
 }
+
+    

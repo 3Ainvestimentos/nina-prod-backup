@@ -548,7 +548,7 @@ const getInteractionStatus = useCallback((
         </CardContent>
         <CardFooter>
             <p className="text-xs text-muted-foreground">
-                Lembrete de Limites Mensais: <strong>Feedback:</strong> 10; <strong>N3 (Alfa/Beta/Senior):</strong> 4/2/1; <strong>Outros:</strong> 1.
+                Lembrete de Limites Mensais: <strong>N3 (Alfa/Beta/Senior):</strong> 4/2/1; <strong>Feedback:</strong> 10; <strong>Índice de Risco:</strong> 1; <strong>1:1:</strong> 1. Para registros adicionais, use a interação 'Feedback'.
             </p>
         </CardFooter>
       </Card>
@@ -744,5 +744,3 @@ const getInteractionStatus = useCallback((
     </div>
   );
 }
-
-    

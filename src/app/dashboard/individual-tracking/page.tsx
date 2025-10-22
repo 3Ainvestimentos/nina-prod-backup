@@ -74,7 +74,7 @@ export default function IndividualTrackingPage() {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
   const [openInteractionDialog, setOpenInteractionDialog] = useState(false);
   const [openRiskDialog, setOpenRiskDialog] = useState(false);
-  const [interactionType, setInteractionType] = useState<Interaction['type']>('1:1');
+  const [interactionType, setInteractionType] = useState<Interaction['type']>('N3 Individual');
   const [simpleNotes, setSimpleNotes] = useState("");
   const [oneOnOneNotes, setOneOnOneNotes] = useState<OneOnOneNotes>(initialOneOnOneNotes);
   const [n3Notes, setN3Notes] = useState<N3IndividualNotes>(initialN3Notes);
@@ -167,7 +167,7 @@ export default function IndividualTrackingPage() {
     setSimpleNotes("");
     setOneOnOneNotes(initialOneOnOneNotes);
     setN3Notes(initialN3Notes);
-    setInteractionType('1:1');
+    setInteractionType('N3 Individual');
     setNextInteractionDate(undefined);
     clearStorage();
   }, [clearStorage]);
@@ -180,7 +180,7 @@ export default function IndividualTrackingPage() {
     const savedData = localStorage.getItem(key);
     if (savedData) {
       const data = JSON.parse(savedData);
-      setInteractionType(data.interactionType || '1:1');
+      setInteractionType(data.interactionType || 'N3 Individual');
       setOneOnOneNotes(data.oneOnOneNotes || initialOneOnOneNotes);
       setN3Notes(data.n3Notes || initialN3Notes);
       setSimpleNotes(data.simpleNotes || "");
@@ -192,7 +192,7 @@ export default function IndividualTrackingPage() {
         setSimpleNotes("");
         setOneOnOneNotes(initialOneOnOneNotes);
         setN3Notes(initialN3Notes);
-        setInteractionType('1:1');
+        setInteractionType('N3 Individual');
         setNextInteractionDate(undefined);
     }
   }, [selectedEmployeeId, getStorageKey]);
@@ -388,11 +388,8 @@ export default function IndividualTrackingPage() {
     const employeeDocRef = doc(firestore, "employees", selectedEmployee.id);
 
     try {
-        // Use Promise.all to handle both writes concurrently
-        await Promise.all([
-            addDoc(interactionsCollection, interactionToSave),
-            setDoc(employeeDocRef, { riskScore: score }, { merge: true })
-        ]);
+        await addDoc(interactionsCollection, interactionToSave);
+        await setDoc(employeeDocRef, { riskScore: score }, { merge: true });
 
         toast({
             title: "Avaliação de Risco Salva!",
@@ -506,12 +503,10 @@ export default function IndividualTrackingPage() {
                         <SelectValue placeholder="Selecione o tipo" />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="N3 Individual">N3 Individual</SelectItem>
                         <SelectItem value="1:1">1:1</SelectItem>
-                        <SelectItem value="Feedback">Feedback</SelectItem>
-                        <SelectItem value="N3 Individual">
-                          N3 Individual
-                        </SelectItem>
                         <SelectItem value="Índice de Risco">Índice de Risco</SelectItem>
+                        <SelectItem value="Feedback">Feedback</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

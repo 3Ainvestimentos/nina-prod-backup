@@ -140,7 +140,7 @@ export default function IndividualTrackingPage() {
     if (currentUserEmployee.isAdmin || currentUserEmployee.isDirector) {
         return employees;
     }
-    if (currentUserEmployee.role === 'Líder') {
+    if (currentUserEmployee.role === 'Líder' || currentUserEmployee.role === 'Diretor') {
         return employees.filter(e => e.leaderId === currentUserEmployee.id);
     }
     return [];
@@ -346,7 +346,7 @@ export default function IndividualTrackingPage() {
   };
 
   const handleSaveRiskAssessment = async (score: number, details: string) => {
-    if (!interactionsCollection || !user || !selectedEmployee || !interactions) {
+    if (!interactionsCollection || !user || !selectedEmployee || !interactions || !firestore) {
         toast({
             variant: "destructive",
             title: "Erro",
@@ -385,10 +385,11 @@ export default function IndividualTrackingPage() {
     const employeeDocRef = doc(firestore, "employees", selectedEmployee.id);
 
     try {
-        // Save interaction
-        await addDoc(interactionsCollection, interactionToSave);
-        // Update employee's risk score
-        await setDoc(employeeDocRef, { riskScore: score }, { merge: true });
+        // Use Promise.all to handle both writes concurrently
+        await Promise.all([
+            addDoc(interactionsCollection, interactionToSave),
+            setDoc(employeeDocRef, { riskScore: score }, { merge: true })
+        ]);
 
         toast({
             title: "Avaliação de Risco Salva!",
@@ -628,3 +629,5 @@ export default function IndividualTrackingPage() {
     </div>
   );
 }
+
+    

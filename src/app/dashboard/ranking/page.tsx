@@ -2,10 +2,10 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import type { Employee, Interaction } from "@/lib/types";
+import type { Employee, Interaction, PDIAction } from "@/lib/types";
 import { useCollection, useFirestore, useMemoFirebase } from "@/firebase";
 import { collection, getDocs, query } from "firebase/firestore";
-import { isSameYear, differenceInMonths, startOfMonth, endOfMonth, isWithinInterval } from "date-fns";
+import { isWithinInterval, differenceInMonths, startOfMonth, endOfMonth, getMonth, getYear, parseISO } from "date-fns";
 import { DateRange } from "react-day-picker";
 
 import {
@@ -35,27 +35,16 @@ interface LeaderRanking extends Employee {
   totalCount: number;
 }
 
-const calculateAnnualInteractions = (employee: Employee): number => {
-    let total = 0;
-    // PDI: semestral = 2/ano
-    total += 2;
-    // 1:1: trimestral = 4/ano
-    total += 4;
-    // Índice de Risco: mensal = 12/ano
-    total += 12;
-    // N3 Individual: varia com segmento
-    switch (employee.segment) {
-    case 'Alfa':
-        total += 4 * 12; // 4 por mês
-        break;
-    case 'Beta':
-        total += 2 * 12; // 2 por mês
-        break;
-    case 'Senior':
-        total += 1 * 12; // 1 por mês
-        break;
-    }
-    return total;
+const n3IndividualSchedule = {
+  'Alfa': 4, // 4 por mês
+  'Beta': 2, // 2 por mês
+  'Senior': 1, // 1 por mês
+};
+
+const interactionSchedules: { [key in "1:1" | "PDI" | "Índice de Risco"]?: number[] } = {
+  'PDI': [0, 6], // Janeiro e Julho
+  '1:1': [2, 5, 8, 11], // Março, Junho, Setembro, Dezembro
+  'Índice de Risco': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], // Todos os meses
 };
 
 
@@ -75,100 +64,145 @@ export default function RankingPage() {
   const { data: employees, isLoading: areEmployeesLoading } = useCollection<Employee>(employeesCollection);
 
   const [interactions, setInteractions] = useState<Map<string, Interaction[]>>(new Map());
-  const [loadingInteractions, setLoadingInteractions] = useState(true);
+  const [pdiActionsMap, setPdiActionsMap] = useState<Map<string, PDIAction[]>>(new Map());
+  const [loadingData, setLoadingData] = useState(true);
 
   useEffect(() => {
-    const fetchInteractions = async () => {
+    const fetchAllData = async () => {
       if (!firestore || !employees) return;
 
-      setLoadingInteractions(true);
+      setLoadingData(true);
       const allManagedEmployeeIds = employees
         .filter(e => e.isUnderManagement)
         .map(e => e.id);
 
       const interactionsMap = new Map<string, Interaction[]>();
+      const pdiMap = new Map<string, PDIAction[]>();
+
       for (const id of allManagedEmployeeIds) {
         const interactionsQuery = query(collection(firestore, "employees", id, "interactions"));
-        const snapshot = await getDocs(interactionsQuery);
-        const employeeInteractions = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }) as Interaction);
+        const pdiActionsQuery = query(collection(firestore, "employees", id, "pdiActions"));
+        
+        const [interactionsSnapshot, pdiActionsSnapshot] = await Promise.all([
+          getDocs(interactionsQuery),
+          getDocs(pdiActionsQuery)
+        ]);
+
+        const employeeInteractions = interactionsSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }) as Interaction);
         interactionsMap.set(id, employeeInteractions);
+
+        const employeePdiActions = pdiActionsSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }) as PDIAction);
+        pdiMap.set(id, employeePdiActions);
       }
       
       setInteractions(interactionsMap);
-      setLoadingInteractions(false);
+      setPdiActionsMap(pdiMap);
+      setLoadingData(false);
     };
 
-    fetchInteractions();
+    fetchAllData();
   }, [employees, firestore]);
   
   const { leaderRankings, uniqueAxes } = useMemo(() => {
-    if (!employees || interactions.size === 0) return { leaderRankings: [], uniqueAxes: [] };
+    if (!employees || loadingData || !dateRange?.from || !dateRange?.to) {
+        return { leaderRankings: [], uniqueAxes: [] };
+    }
   
     const leaders = employees.filter(e => e.role === 'Líder');
     const axes = [...new Set(leaders.map(l => l.axis).filter(Boolean))].sort();
     
-    // Calculate the number of months in the selected range for prorating
-    const monthsInRange = dateRange?.from && dateRange?.to 
-      ? differenceInMonths(dateRange.to, dateRange.from) + 1 
-      : 12;
-    const yearlyProportion = monthsInRange / 12;
+    const range = { start: dateRange.from, end: dateRange.to };
+    const fromMonth = getMonth(range.start);
+    const fromYear = getYear(range.start);
+    const toMonth = getMonth(range.end);
+    const toYear = getYear(range.end);
+    const monthsInRange = differenceInMonths(range.end, range.start) + 1;
 
-  
     const rankings = leaders.map(leader => {
       const teamMembers = employees.filter(e => e.leaderId === leader.id && e.isUnderManagement);
       
       if (teamMembers.length === 0) {
-        return {
-          ...leader,
-          adherenceScore: 0,
-          completedCount: 0,
-          totalCount: 0,
-        };
+        return { ...leader, adherenceScore: 0, completedCount: 0, totalCount: 0 };
       }
   
-      // Calculate prorated total count based on the date range
-      const totalCount = teamMembers.reduce((acc, member) => {
-        const annualInteractions = calculateAnnualInteractions(member);
-        return acc + (annualInteractions * yearlyProportion);
-      }, 0);
-      
-      // Calculate completed count within the date range
-      const completedCount = teamMembers.reduce((acc, member) => {
-          const memberInteractions = interactions.get(member.id) || [];
-          const interactionsInRange = memberInteractions.filter(interaction => {
-              const interactionDate = new Date(interaction.date);
-              return dateRange?.from && dateRange?.to && isWithinInterval(interactionDate, { start: dateRange.from, end: dateRange.to }) &&
-                     ['1:1', 'N3 Individual', 'Índice de Risco'].includes(interaction.type);
-          }).length;
-          
-          // Prorate PDI actions as well
-          const annualPdiActions = 2; // Semestral
-          const expectedPdiInPeriod = annualPdiActions * yearlyProportion;
-          // Simplified: Count 'Completed' as 2, 'In Progress' as 1
-          const pdiStatusToValue = (member.diagnosis?.status === 'Concluído' ? 2 : (member.diagnosis?.status === 'Em Andamento' ? 1 : 0));
-          // Use PDI actions from history, assuming they are fetched, similar to interactions.
-          // This part of the logic might need adjustment if PDI actions aren't fetched globally.
-          // For now, let's use the diagnosis status as a proxy.
-          const completedPdiActions = pdiStatusToValue;
-          const proratedCompletedPdi = Math.min(completedPdiActions, expectedPdiInPeriod);
+      let totalCompleted = 0;
+      let totalRequired = 0;
 
+      teamMembers.forEach(member => {
+        const memberInteractions = interactions.get(member.id) || [];
+        const memberPdiActions = pdiActionsMap.get(member.id) || [];
 
-          return acc + interactionsInRange + proratedCompletedPdi;
-      }, 0);
+        // N3 Individual
+        const n3Segment = member.segment as keyof typeof n3IndividualSchedule | undefined;
+        if (n3Segment && n3IndividualSchedule[n3Segment]) {
+            const requiredN3 = n3IndividualSchedule[n3Segment] * monthsInRange;
+            const completedN3 = memberInteractions.filter(i => i.type === 'N3 Individual' && isWithinInterval(parseISO(i.date), range)).length;
+            totalRequired += requiredN3;
+            totalCompleted += Math.min(completedN3, requiredN3);
+        }
+
+        // 1:1 and Índice de Risco
+        (['1:1', 'Índice de Risco'] as const).forEach(type => {
+            const schedule = interactionSchedules[type];
+            if(schedule) {
+                const requiredMonths = schedule.filter(month => {
+                    for (let y = fromYear; y <= toYear; y++) {
+                        const startM = (y === fromYear) ? fromMonth : 0;
+                        const endM = (y === toYear) ? toMonth : 11;
+                        if (month >= startM && month <= endM) return true;
+                    }
+                    return false;
+                });
+                const requiredCount = requiredMonths.length;
+                totalRequired += requiredCount;
+
+                const executedMonths = new Set<number>();
+                 memberInteractions.forEach(i => {
+                    const intDate = parseISO(i.date);
+                    if(i.type === type && isWithinInterval(intDate, range) && requiredMonths.includes(getMonth(intDate))) {
+                        executedMonths.add(getMonth(intDate));
+                    }
+                });
+                totalCompleted += executedMonths.size;
+            }
+        });
+
+        // PDI
+        const pdiSchedule = interactionSchedules['PDI'] || [];
+        const requiredPdiMonths = pdiSchedule.filter(month => {
+            for (let y = fromYear; y <= toYear; y++) {
+                const startM = (y === fromYear) ? fromMonth : 0;
+                const endM = (y === toYear) ? toMonth : 11;
+                if (month >= startM && month <= endM) return true;
+            }
+            return false;
+        });
+        const requiredPdiCount = requiredPdiMonths.length;
+        totalRequired += requiredPdiCount;
+        
+        const executedPdiMonths = new Set<number>();
+        memberPdiActions.forEach(action => {
+            const actionDate = parseISO(action.startDate);
+            if(isWithinInterval(actionDate, range) && requiredPdiMonths.includes(getMonth(actionDate))) {
+                executedPdiMonths.add(getMonth(actionDate));
+            }
+        });
+        totalCompleted += executedPdiMonths.size;
+      });
   
-      const adherenceScore = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
+      const adherenceScore = totalRequired > 0 ? (totalCompleted / totalRequired) * 100 : 0;
       
       return {
         ...leader,
         adherenceScore,
-        completedCount: Math.round(completedCount),
-        totalCount: Math.round(totalCount),
+        completedCount: Math.round(totalCompleted),
+        totalCount: Math.round(totalRequired),
       };
     }).sort((a, b) => b.adherenceScore - a.adherenceScore);
   
     return { leaderRankings: rankings, uniqueAxes: axes };
   
-  }, [employees, interactions, dateRange]);
+  }, [employees, interactions, pdiActionsMap, dateRange, loadingData]);
   
   const filteredLeaderRankings = useMemo(() => {
     if (axisFilter === "all") {
@@ -187,7 +221,7 @@ export default function RankingPage() {
     return names[0]?.substring(0, 2) || '';
   };
   
-  const isLoading = areEmployeesLoading || loadingInteractions;
+  const isLoading = areEmployeesLoading || loadingData;
 
   const getRankIcon = (index: number) => {
     if (index === 0) return <Crown className="h-6 w-6 text-yellow-500" />;
@@ -274,5 +308,3 @@ export default function RankingPage() {
     </Card>
   );
 }
-
-    

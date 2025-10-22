@@ -241,22 +241,39 @@ const getInteractionStatus = useCallback((
         const toMonth = getMonth(range.end);
         const toYear = getYear(range.end);
 
-        let requiredCountInPeriod = 0;
+        let requiredMonthsInPeriod: number[] = [];
         for (let y = fromYear; y <= toYear; y++) {
             const startMonth = (y === fromYear) ? fromMonth : 0;
             const endMonth = (y === toYear) ? toMonth : 11;
-            requiredCountInPeriod += schedule.filter(month => month >= startMonth && month <= endMonth).length;
+            schedule.forEach(month => {
+                if(month >= startMonth && month <= endMonth) {
+                    requiredMonthsInPeriod.push(month);
+                }
+            });
         }
-
+        
+        const requiredCountInPeriod = requiredMonthsInPeriod.length;
         if (requiredCountInPeriod === 0) return "N/A";
 
         let executedCount = 0;
         if (type === 'PDI') {
-            executedCount = employeePdiActions.filter(action => isWithinInterval(parseISO(action.startDate), range)).length;
+            const executedMonths = new Set<number>();
+            employeePdiActions.forEach(action => {
+                const actionDate = parseISO(action.startDate);
+                if (isWithinInterval(actionDate, range) && requiredMonthsInPeriod.includes(getMonth(actionDate))) {
+                    executedMonths.add(getMonth(actionDate));
+                }
+            });
+            executedCount = executedMonths.size;
         } else {
-            executedCount = employeeInteractions.filter(int => 
-                int.type === type && isWithinInterval(parseISO(int.date), range)
-            ).length;
+            const executedMonths = new Set<number>();
+            employeeInteractions.forEach(int => {
+                const intDate = parseISO(int.date);
+                if (int.type === type && isWithinInterval(intDate, range) && requiredMonthsInPeriod.includes(getMonth(intDate))) {
+                    executedMonths.add(getMonth(intDate));
+                }
+            });
+            executedCount = executedMonths.size;
         }
         
         if (executedCount >= requiredCountInPeriod) return "Executada";
@@ -306,7 +323,7 @@ const getInteractionStatus = useCallback((
                         totalRequired += parseInt(match[2], 10);
                     }
                 } else if (status === "Executada") {
-                    let required = 1;
+                    let required = 0;
                     if (type === 'N3 Individual') {
                         const segment = employee.segment as keyof typeof n3IndividualSchedule | undefined;
                         const requiredCountPerMonth = segment ? n3IndividualSchedule[segment] : 0;

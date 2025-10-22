@@ -492,7 +492,7 @@ export default function AdminPage() {
     }
   }
 
-  const handlePermissionToggle = async (employeeId: string, field: 'isDirector' | 'isAdmin', value: boolean) => {
+  const handlePermissionToggle = async (employeeId: string, field: 'isAdmin', value: boolean) => {
     if (!firestore) return;
     const docRef = doc(firestore, "employees", employeeId);
     try {
@@ -739,7 +739,6 @@ export default function AdminPage() {
                     <TableHead>Interações / Ano</TableHead>
                     <TableHead>Função</TableHead>
                     <TableHead>Gerenciamento</TableHead>
-                    <TableHead>Diretor</TableHead>
                     <TableHead>Admin</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
@@ -753,7 +752,6 @@ export default function AdminPage() {
                           <TableCell><Skeleton className="h-5 w-20" /></TableCell>
                           <TableCell><Skeleton className="h-5 w-20" /></TableCell>
                           <TableCell><Skeleton className="h-9 w-[180px]" /></TableCell>
-                          <TableCell><Skeleton className="h-6 w-12" /></TableCell>
                           <TableCell><Skeleton className="h-6 w-12" /></TableCell>
                           <TableCell><Skeleton className="h-6 w-12" /></TableCell>
                           <TableCell className="text-right"><Skeleton className="h-8 w-8 rounded-full" /></TableCell>
@@ -823,15 +821,6 @@ export default function AdminPage() {
                                   id={`management-${employee.id}`}
                                   checked={!!employee.isUnderManagement}
                                   onCheckedChange={(checked) => handleManagementToggle(employee.id, checked)}
-                              />
-                          </div>
-                      </TableCell>
-                      <TableCell>
-                          <div className="flex items-center space-x-2">
-                              <Switch 
-                                  id={`director-${employee.id}`}
-                                  checked={!!employee.isDirector}
-                                  onCheckedChange={(checked) => handlePermissionToggle(employee.id, 'isDirector', checked)}
                               />
                           </div>
                       </TableCell>

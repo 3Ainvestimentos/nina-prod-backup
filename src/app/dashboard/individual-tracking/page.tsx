@@ -226,7 +226,7 @@ export default function IndividualTrackingPage() {
         return;
     }
 
-    if (!nextInteractionDate) {
+    if (interactionType !== 'Feedback' && !nextInteractionDate) {
         toast({
             variant: "destructive",
             title: "Data da Próxima Interação",
@@ -317,13 +317,16 @@ export default function IndividualTrackingPage() {
     
     setIsSaving(true);
     
-    const interactionToSave = {
+    const interactionToSave: Partial<Interaction> = {
         type: interactionType,
         notes: notesToSave,
         authorId: user.uid,
         date: new Date().toISOString(),
-        nextInteractionDate: nextInteractionDate.toISOString(),
     };
+
+    if (nextInteractionDate) {
+        interactionToSave.nextInteractionDate = nextInteractionDate.toISOString();
+    }
 
     try {
         await addDoc(interactionsCollection, interactionToSave);
@@ -575,32 +578,34 @@ export default function IndividualTrackingPage() {
                         />
                     </div>
                   )}
-                   <div className="space-y-2">
-                    <Label htmlFor="next-interaction-date">Próxima Interação</Label>
-                     <Popover>
-                        <PopoverTrigger asChild>
-                            <Button
-                                id="next-interaction-date"
-                                variant={"outline"}
-                                className={cn(
-                                    "w-full justify-start text-left font-normal",
-                                    !nextInteractionDate && "text-muted-foreground"
-                                )}
-                            >
-                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                {nextInteractionDate ? format(nextInteractionDate, "PPP") : <span>Escolha uma data</span>}
-                            </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0">
-                            <Calendar
-                                mode="single"
-                                selected={nextInteractionDate}
-                                onSelect={setNextInteractionDate}
-                                initialFocus
-                            />
-                        </PopoverContent>
-                    </Popover>
-                  </div>
+                   {interactionType !== 'Feedback' && (
+                    <div className="space-y-2">
+                      <Label htmlFor="next-interaction-date">Próxima Interação</Label>
+                      <Popover>
+                          <PopoverTrigger asChild>
+                              <Button
+                                  id="next-interaction-date"
+                                  variant={"outline"}
+                                  className={cn(
+                                      "w-full justify-start text-left font-normal",
+                                      !nextInteractionDate && "text-muted-foreground"
+                                  )}
+                              >
+                                  <CalendarIcon className="mr-2 h-4 w-4" />
+                                  {nextInteractionDate ? format(nextInteractionDate, "PPP") : <span>Escolha uma data</span>}
+                              </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0">
+                              <Calendar
+                                  mode="single"
+                                  selected={nextInteractionDate}
+                                  onSelect={setNextInteractionDate}
+                                  initialFocus
+                              />
+                          </PopoverContent>
+                      </Popover>
+                    </div>
+                   )}
                 </div>
                 <DialogFooter>
                   <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={isSaving}>Cancelar</Button>

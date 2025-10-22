@@ -70,7 +70,7 @@ const emailsToPromote = [
     'matheus@3ainvestimentos.com.br'
 ];
 
-const roles: Role[] = ["Colaborador", "Líder"];
+const roles: Role[] = ["Colaborador", "Líder", "Diretor"];
 const adminEmails = ['matheus@3ainvestimentos.com.br', 'lucas.nogueira@3ainvestimentos.com.br'];
 
 
@@ -143,7 +143,16 @@ export default function AdminPage() {
     if (!firestore) return;
     const docRef = doc(firestore, "employees", employeeId);
     try {
-      await updateDoc(docRef, { role: newRole });
+      // If the new role is Director, also set isDirector to true
+      // If it's something else, ensure isDirector is false
+      const updates: { role: Role, isDirector?: boolean } = { role: newRole };
+      if (newRole === 'Diretor') {
+        updates.isDirector = true;
+      } else if (employees?.find(e => e.id === employeeId)?.isDirector) {
+        updates.isDirector = false;
+      }
+
+      await updateDoc(docRef, updates);
     } catch (error) {
        console.error("Error updating role:", error);
     }
@@ -166,7 +175,7 @@ export default function AdminPage() {
         const cities = [...new Set(employees.map(e => e.city).filter(Boolean))].sort();
         const roleValues = [...new Set(employees.map(e => e.role).filter(Boolean))].sort() as Role[];
 
-        const leaders = employees.filter(e => e.role === 'Líder');
+        const leaders = employees.filter(e => e.role === 'Líder' || e.role === 'Diretor');
         const directors = employees.filter(e => e.isDirector).sort((a,b) => a.name.localeCompare(b.name));
         
         // 1. Get admins from DB
@@ -302,7 +311,7 @@ export default function AdminPage() {
   
     const leaderIdToNameMap = new Map<string, string>();
     employees.forEach(e => {
-        if(e.role === 'Líder') {
+        if(e.role === 'Líder' || e.role === 'Diretor') {
             leaderIdToNameMap.set(e.id, e.name);
         }
     });

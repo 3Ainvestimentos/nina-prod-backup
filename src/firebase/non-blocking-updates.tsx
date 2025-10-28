@@ -19,10 +19,10 @@ import {FirestorePermissionError} from '@/firebase/errors';
  * as a false positive during UI race conditions, but it will still throw
  * other legitimate errors.
  */
-export function setDocumentNonBlocking(docRef: DocumentReference, data: any, options?: SetOptions) {
+export function setDocumentNonBlocking(docRef: DocumentReference, data: any, options?: SetOptions): Promise<void> {
   const promise = setDoc(docRef, data, options || {});
   
-  promise.catch(error => {
+  return promise.catch(error => {
     // Only emit a global permission error if the code is 'permission-denied'.
     // This allows the global error handler to catch critical permission issues
     // while letting local try/catch blocks handle other potential write errors.
@@ -42,8 +42,6 @@ export function setDocumentNonBlocking(docRef: DocumentReference, data: any, opt
         throw error;
     }
   });
-
-  return promise;
 }
 
 

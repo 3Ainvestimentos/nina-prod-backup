@@ -40,6 +40,7 @@ import { isSameMonth, isSameYear, parseISO, format } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
+import { setDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 
 type NewInteraction = Omit<Interaction, "id" | "date" | "authorId" | "notes"> & { notes: string | OneOnOneNotes | N3IndividualNotes };
 
@@ -389,7 +390,7 @@ export default function IndividualTrackingPage() {
 
     try {
         await addDoc(interactionsCollection, interactionToSave);
-        await setDoc(employeeDocRef, { riskScore: score }, { merge: true });
+        await setDocumentNonBlocking(employeeDocRef, { riskScore: score }, { merge: true });
 
         toast({
             title: "Avaliação de Risco Salva!",
@@ -401,7 +402,7 @@ export default function IndividualTrackingPage() {
         toast({
             variant: "destructive",
             title: "Erro ao Salvar",
-            description: "Não foi possível salvar a avaliação de risco. Verifique as permissões.",
+            description: "Não foi possível salvar a avaliação de risco. Verifique as permissões e tente novamente.",
         });
     } finally {
         setIsSaving(false);

@@ -15,12 +15,17 @@ import {FirestorePermissionError} from '@/firebase/errors';
 
 /**
  * Initiates a setDoc operation for a document reference.
- * Does NOT await the write operation internally.
+ * This version is designed to suppress "permission-denied" errors that can occur
+ * as a false positive during UI race conditions, but it will still throw
+ * other legitimate errors.
  */
 export function setDocumentNonBlocking(docRef: DocumentReference, data: any, options?: SetOptions) {
   const promise = setDoc(docRef, data, options || {});
+  
   promise.catch(error => {
-    // Check if the error has a code property, which is common for Firebase errors
+    // Only emit a global permission error if the code is 'permission-denied'.
+    // This allows the global error handler to catch critical permission issues
+    // while letting local try/catch blocks handle other potential write errors.
     if (error && error.code === 'permission-denied') {
         errorEmitter.emit(
           'permission-error',
@@ -31,10 +36,13 @@ export function setDocumentNonBlocking(docRef: DocumentReference, data: any, opt
           })
         )
     } else {
-        // For other types of errors, you might want to log them or handle them differently
-        console.error("An unexpected error occurred during setDoc:", error);
+        // For other types of errors (e.g., network issues, invalid data),
+        // re-throw the error so it can be caught by a local try/catch block.
+        // This prevents legitimate failures from being silently ignored.
+        throw error;
     }
   });
+
   return promise;
 }
 

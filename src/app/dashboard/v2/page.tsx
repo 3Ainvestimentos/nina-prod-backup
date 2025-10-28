@@ -403,8 +403,8 @@ const getInteractionStatus = useCallback((
             if (aValue === undefined || bValue === undefined || aValue === null || bValue === null) return 0;
             
             if (typeof aValue === 'string' && typeof bValue === 'string') {
-                 if (aValue < bValue) return sortConfig.direction === 'ascending' ? -1 : 1;
-                 if (aValue > bValue) return sortConfig.direction === 'ascending' ? 1 : -1;
+                 if (aValue.localeCompare(bValue) < 0) return sortConfig.direction === 'ascending' ? -1 : 1;
+                 if (aValue.localeCompare(bValue) > 0) return sortConfig.direction === 'ascending' ? 1 : -1;
             }
              if (typeof aValue === 'number' && typeof bValue === 'number') {
                 if (aValue < bValue) return sortConfig.direction === 'ascending' ? -1 : 1;
@@ -423,8 +423,8 @@ const getInteractionStatus = useCallback((
         return acc;
     }, {} as { [key: string]: TrackedEmployee[] });
 
-    // Do not sort employees within group if a sort is active
-    if (!sortConfig || sortConfig.key !== 'name') {
+    // Do not sort employees within group if a global sort is active
+    if (!sortConfig || (sortConfig.key !== 'name' && sortConfig.key !== 'leader' && sortConfig.key !== 'interactionStatus')) {
       for (const area in grouped) {
           grouped[area].sort((a, b) => a.name.localeCompare(b.name));
       }
@@ -666,7 +666,12 @@ const getInteractionStatus = useCallback((
                         <ArrowUpDown className="ml-2 h-4 w-4" />
                     </Button>
                 </TableHead>
-                <TableHead className="hidden md:table-cell">Líder</TableHead>
+                <TableHead className="hidden md:table-cell">
+                    <Button variant="ghost" onClick={() => requestSort('leader')} className="px-1">
+                        Líder
+                        <ArrowUpDown className="ml-2 h-4 w-4" />
+                    </Button>
+                </TableHead>
                 <TableHead className="hidden lg:table-cell">Área</TableHead>
                 <TableHead className="hidden sm:table-cell">
                      <Button variant="ghost" onClick={() => requestSort('lastInteraction')} className="px-1">
@@ -680,7 +685,12 @@ const getInteractionStatus = useCallback((
                         <ArrowUpDown className="ml-2 h-4 w-4" />
                     </Button>
                 </TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>
+                    <Button variant="ghost" onClick={() => requestSort('interactionStatus')} className="px-1">
+                        Status
+                        <ArrowUpDown className="ml-2 h-4 w-4" />
+                    </Button>
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -706,7 +716,7 @@ const getInteractionStatus = useCallback((
               ) : hasSearched && groupedAndFilteredEmployees.length > 0 ? (
                 groupedAndFilteredEmployees.map(([area, members]) => (
                   <React.Fragment key={area}>
-                    {(!sortConfig || sortConfig.key !== 'name') && 
+                    {(!sortConfig || (sortConfig.key !== 'name' && sortConfig.key !== 'leader' && sortConfig.key !== 'interactionStatus')) && 
                       <TableRow className="bg-muted/50 hover:bg-muted/50">
                         <TableCell colSpan={6} className="font-bold text-foreground">
                           {area}

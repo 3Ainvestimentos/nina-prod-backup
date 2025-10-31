@@ -77,8 +77,7 @@ export default function IndividualTrackingPage() {
   const [n3Notes, setN3Notes] = useState<N3IndividualNotes>(initialN3Notes);
   const [nextInteractionDate, setNextInteractionDate] = useState<Date>();
   const [isSaving, setIsSaving] = useState(false);
-  const [isAuthLoading, setIsAuthLoading] = useState(false);
-
+  
   const firestore = useFirestore();
   const { user } = useUser();
   const { toast } = useToast();
@@ -236,6 +235,16 @@ export default function IndividualTrackingPage() {
         });
         return;
     }
+    
+     if (interactionType === 'N3 Individual' && !isLeaderAuthorizedForCalendar) {
+        toast({
+            variant: "destructive",
+            title: "Agendamento desativado",
+            description: "O líder precisa autorizar o Google Calendar para registrar N3 Individual.",
+        });
+        return;
+    }
+
 
     const now = new Date();
     
@@ -424,39 +433,6 @@ export default function IndividualTrackingPage() {
         setInteractionType(type);
     }
   };
-  
-    const handleGoogleAuth = async () => {
-        if (!user) {
-            toast({ variant: "destructive", title: "Erro", description: "Usuário não autenticado." });
-            return;
-        }
-        setIsAuthLoading(true);
-        try {
-            // Use fetch to call the onRequest function
-            const response = await fetch(`https://southamerica-east1-studio-9152494730-25d31.cloudfunctions.net/googleAuthInit?uid=${user.uid}`);
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || "Falha ao obter URL de autorização.");
-            }
-            const result: any = await response.json();
-            const authUrl = result.authUrl;
-
-            if (authUrl) {
-                window.location.href = authUrl;
-            } else {
-                throw new Error("URL de autorização não recebida.");
-            }
-        } catch (error: any) {
-            console.error("Erro ao iniciar autorização com Google:", error);
-            toast({
-                variant: "destructive",
-                title: "Erro de Autorização",
-                description: error.message || "Não foi possível iniciar a conexão com o Google Calendar.",
-            });
-            setIsAuthLoading(false);
-        }
-    };
-
 
   const handleOneOnOneNotesChange = (field: keyof OneOnOneNotes, value: string) => {
     setOneOnOneNotes(prev => ({...prev, [field]: value}));
@@ -633,15 +609,11 @@ export default function IndividualTrackingPage() {
                     <div className="space-y-2">
                       <Label>Próxima Interação (Google Calendar)</Label>
                       {!isLeaderAuthorizedForCalendar ? (
-                        <Alert>
-                           <AlertTitle>Conecte seu Calendário</AlertTitle>
+                        <Alert variant="destructive">
+                           <AlertTitle>Conexão com Google Calendar Necessária</AlertTitle>
                            <AlertDescription>
-                             Para agendar a próxima interação automaticamente, você precisa autorizar o acesso à sua agenda do Google.
+                             Para agendar interações, seu líder precisa primeiro autorizar o acesso ao Google Calendar na tela de login.
                            </AlertDescription>
-                           <Button onClick={handleGoogleAuth} disabled={isAuthLoading} className="mt-4 w-full">
-                              {isAuthLoading ? 'Aguarde...' : 'Conectar Google Calendar'}
-                              <ExternalLink className="ml-2 h-4 w-4" />
-                           </Button>
                         </Alert>
                       ) : (
                         <Popover>

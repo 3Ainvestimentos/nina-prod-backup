@@ -55,7 +55,7 @@ export const setAdminClaim = functions.https.onCall(async (data, context) => {
  * Função de gatilho para processar escritas em interações e PDIs.
  * Aciona a atualização do ranking e a criação de eventos no calendário.
  */
-export const onInteractionWrite = functions.region("southamerica-east1").firestore
+export const onInteractionWrite = functions.firestore
     .document("/employees/{employeeId}/{collection}/{docId}")
     .onWrite(async (change, context) => {
         const { employeeId, collection } = context.params;
@@ -89,3 +89,5 @@ export const onInteractionWrite = functions.region("southamerica-east1").firesto
 
 // Exporta as outras funções.
 export { setupFirstAdmin, googleAuthInit, googleAuthCallback };
+
+    

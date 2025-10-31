@@ -565,7 +565,7 @@ export default function AdminPage() {
     setSetupLoading(prev => ({...prev, [email]: true}));
     
     try {
-        const functions = getFunctions(firebaseApp);
+        const functions = getFunctions(firebaseApp, 'southamerica-east1');
         const setupFirstAdmin = httpsCallable(functions, 'setupFirstAdmin');
         
         const result: any = await setupFirstAdmin({ email: email });
@@ -594,7 +594,7 @@ export default function AdminPage() {
         }
         setIsAuthLoading(true);
         try {
-            const functions = getFunctions(firebaseApp);
+            const functions = getFunctions(firebaseApp, 'southamerica-east1');
             const googleAuthInit = httpsCallable(functions, 'googleAuthInit');
             const result: any = await googleAuthInit();
             const authUrl = result.data.authUrl;

@@ -31,7 +31,7 @@ export default function SetupAdminPage() {
         setLoading(prev => ({...prev, [email]: true}));
         
         try {
-            const functions = getFunctions(firebaseApp);
+            const functions = getFunctions(firebaseApp, 'southamerica-east1');
             const setupFirstAdmin = httpsCallable(functions, 'setupFirstAdmin');
             
             const result: any = await setupFirstAdmin({ email: email });
@@ -106,3 +106,5 @@ export default function SetupAdminPage() {
         </Card>
     );
 }
+
+    

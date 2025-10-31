@@ -223,11 +223,11 @@ export default function IndividualTrackingPage() {
         return;
     }
 
-    if (interactionType !== 'Feedback' && !nextInteractionDate) {
+    if (interactionType === 'N3 Individual' && !nextInteractionDate) {
         toast({
             variant: "destructive",
             title: "Data da Próxima Interação",
-            description: "Por favor, selecione a data para a próxima interação.",
+            description: "Para N3 Individual, a data da próxima interação é obrigatória.",
         });
         return;
     }
@@ -318,7 +318,7 @@ export default function IndividualTrackingPage() {
         date: new Date().toISOString(),
     };
 
-    if (nextInteractionDate) {
+    if (interactionType === 'N3 Individual' && nextInteractionDate) {
         interactionToSave.nextInteractionDate = nextInteractionDate.toISOString();
     }
 
@@ -567,7 +567,7 @@ export default function IndividualTrackingPage() {
                         />
                     </div>
                   )}
-                   {interactionType !== 'Feedback' && (
+                   {interactionType === 'N3 Individual' && (
                     <div className="space-y-2">
                       <Label htmlFor="next-interaction-date">Próxima Interação</Label>
                       <Popover>

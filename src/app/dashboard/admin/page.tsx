@@ -1093,7 +1093,7 @@ export default function AdminPage() {
                     <CardTitle>Setup de Administrador</CardTitle>
                     <CardDescription>
                       Use esta seção para conceder permissões de administrador aos usuários.
-                      Esta função executa a Cloud Function setupFirstAdmin.
+                      Esta função executa a Cloud Function `setupFirstAdmin`.
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -1101,7 +1101,7 @@ export default function AdminPage() {
                       <ShieldCheck className="h-4 w-4" />
                       <AlertTitle>Configuração de Admin</AlertTitle>
                       <AlertDescription>
-                        Esta função define o Custom Claim isAdmin para o usuário especificado.
+                        Esta função define o Custom Claim `isAdmin` para o usuário especificado.
                       </AlertDescription>
                     </Alert>
                     <div className="space-y-3">

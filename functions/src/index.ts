@@ -3,9 +3,13 @@ import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 import { updateLeaderRanking } from './update-ranking';
 import { createCalendarEvent } from './calendar-events';
+import { googleAuthInit, googleAuthCallback } from './google-auth';
+import { setupFirstAdmin } from './setup-admin';
 
 // Inicializa o SDK do Firebase Admin.
-admin.initializeApp();
+if (!admin.apps.length) {
+    admin.initializeApp();
+}
 
 /**
  * Função chamável para definir um Custom Claim de administrador em um usuário.
@@ -60,12 +64,15 @@ export const onInteractionWrite = functions.region("southamerica-east1").firesto
         const tasks: Promise<any>[] = [];
 
         // Tarefa 1: Atualizar o ranking do líder.
+        // A função updateLeaderRanking já busca o líder a partir do employeeId.
         tasks.push(updateLeaderRanking(employeeId));
 
         // Tarefa 2: Se for uma nova interação, tentar criar um evento no calendário.
         if (collection === 'interactions' && !change.before.exists && change.after.exists) {
             const interactionData = change.after.data();
-            tasks.push(createCalendarEvent(interactionData, employeeId));
+            if (interactionData) {
+                tasks.push(createCalendarEvent(interactionData, employeeId));
+            }
         }
 
         // Executa todas as tarefas em paralelo.
@@ -81,5 +88,4 @@ export const onInteractionWrite = functions.region("southamerica-east1").firesto
 
 
 // Exporta as outras funções.
-export { setupFirstAdmin } from './setup-admin';
-export { googleAuthInit, googleAuthCallback } from './google-auth';
+export { setupFirstAdmin, googleAuthInit, googleAuthCallback };

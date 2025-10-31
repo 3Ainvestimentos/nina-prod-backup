@@ -64,14 +64,14 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
-const superAdminEmails = ['lucas.nogueira@3ainvestimentos.com.br', 'matheus@3ainvestimentos.com.br'];
+const superAdminEmails = ['lucas.nogueira@3ainvestimentos.com.br', 'matheus@3ainvestimentos.com.br', 'henrique.peixoto@3ainvestimentos.com.br'];
 const emailsToPromote = [
     'lucas.nogueira@3ainvestimentos.com.br',
     'matheus@3ainvestimentos.com.br'
 ];
 
 const roles: Role[] = ["Colaborador", "Líder", "Diretor"];
-const adminEmails = ['matheus@3ainvestimentos.com.br', 'lucas.nogueira@3ainvestimentos.com.br'];
+const adminEmails = ['matheus@3ainvestimentos.com.br', 'lucas.nogueira@3ainvestimentos.com.br', 'henrique.peixoto@3ainvestimentos.com.br'];
 
 
 type SortConfig = {

@@ -60,7 +60,7 @@ const initialN3Notes: N3IndividualNotes = {
     planoAcao: ""
 };
 
-const adminEmails = ['matheus@3ainvestimentos.com.br', 'lucas.nogueira@3ainvestimentos.com.br','henrqiue.peixoto@3ainvestimentos.com.br'];
+const adminEmails = ['matheus@3ainvestimentos.com.br', 'lucas.nogueira@3ainvestimentos.com.br', 'henrique.peixoto@3ainvestimentos.com.br'];
 
 const n3RegistrationLimit = 10;
 

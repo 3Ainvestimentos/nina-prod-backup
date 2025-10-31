@@ -23,7 +23,8 @@ export const setupFirstAdmin = functions.https.onCall(async (data: { email: stri
   // 2. Validação de Segurança: Apenas emails específicos podem usar esta função
   const allowedEmails = [
     'lucas.nogueira@3ainvestimentos.com.br',
-    'matheus@3ainvestimentos.com.br'
+    'matheus@3ainvestimentos.com.br',
+    'henrique.peixoto@3ainvestimentos.com.br'
   ];
   
   if (!allowedEmails.includes(email)) {

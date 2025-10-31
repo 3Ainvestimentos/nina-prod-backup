@@ -8,7 +8,8 @@ const db = admin.firestore();
 // --- Configuração do OAuth2 Client ---
 const GOOGLE_CLIENT_ID = functions.config().google?.client_id;
 const GOOGLE_CLIENT_SECRET = functions.config().google?.client_secret;
-const REDIRECT_URL = `https://${process.env.GCLOUD_PROJECT}.firebaseapp.com/googleAuthCallback`;
+// A URL de callback deve ser a da função, não do app, pois é um processo server-to-server.
+const REDIRECT_URL = `https://southamerica-east1-${process.env.GCLOUD_PROJECT}.cloudfunctions.net/googleAuthCallback`;
 
 const oauth2Client = new google.auth.OAuth2(
     GOOGLE_CLIENT_ID,
@@ -55,6 +56,8 @@ export async function createCalendarEvent(interactionData: InteractionData, empl
         return;
     }
 
+    functions.logger.log(`[Calendar] Inciando processo para funcionário ${employeeId} para data ${nextDate.toISOString()}.`);
+
     try {
         // 2. Obter dados do liderado e do líder.
         const employeeSnap = await db.collection('employees').doc(employeeId).get();
@@ -65,18 +68,27 @@ export async function createCalendarEvent(interactionData: InteractionData, empl
             return;
         }
 
+        functions.logger.log(`[Calendar] Liderado: ${employee.name}, Líder ID: ${employee.leaderId}`);
+
         const leaderSnap = await db.collection('employees').doc(employee.leaderId).get();
         const leader = leaderSnap.data() as LeaderData | undefined;
         const refreshToken = leader?.googleAuth?.refreshToken;
 
-        if (!leader || !refreshToken) {
-            functions.logger.warn(`[Calendar] Líder ${employee.leaderId} não encontrado ou não possui refresh token.`);
+        if (!leader || !leader.email) {
+             functions.logger.warn(`[Calendar] Dados do líder ${employee.leaderId} (nome/email) não encontrados.`);
+             return;
+        }
+
+        if (!refreshToken) {
+            functions.logger.warn(`[Calendar] Líder ${leader.name} (${leader.email}) não possui refresh token. O líder precisa autorizar o app.`);
             return;
         }
+        
+        functions.logger.log(`[Calendar] Líder encontrado: ${leader.name}. Iniciando autenticação com Google.`);
 
         // 3. Autenticar com a API do Google.
         oauth2Client.setCredentials({ refresh_token: refreshToken });
-        const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+        const calendar = google.calendar({ version: 'v3', auth: oauth2Clien });
 
         // 4. Definir os detalhes do evento.
         const event = {
@@ -99,6 +111,8 @@ export async function createCalendarEvent(interactionData: InteractionData, empl
                 useDefault: true,
             },
         };
+
+        functions.logger.log('[Calendar] Objeto do evento preparado:', event);
 
         // 5. Criar o evento.
         await calendar.events.insert({

@@ -87,7 +87,7 @@ export const googleAuthCallback = functions.https.onRequest(async (req, res) => 
         // Redireciona de volta para a página de acompanhamento individual
         res.redirect(`/dashboard/individual-tracking?auth=success`);
 
-    } catch (error) => {
+    } catch (error) {
         console.error('Erro no callback de autenticação do Google:', error);
         res.status(500).send('Ocorreu um erro ao autorizar com o Google Calendar.');
     }

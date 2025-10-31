@@ -46,7 +46,11 @@ export default function LoginPage() {
     }
     setIsAuthLoading(true);
     try {
-        const response = await fetch(`https://southamerica-east1-${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID}.cloudfunctions.net/googleAuthInit?uid=${user.uid}`);
+        const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+        const uid = user.uid;
+        const url = `https://us-central1-${projectId}.cloudfunctions.net/googleAuthInit?uid=${uid}`;
+        
+        const response = await fetch(url, { method: "GET" });
         
         if (!response.ok) {
             const errorData = await response.json();
@@ -56,7 +60,7 @@ export default function LoginPage() {
         const authUrl = result.authUrl;
 
         if (authUrl) {
-            const popup = window.open(authUrl, 'google-auth', 'width=600,height=700');
+            const popup = window.open(authUrl, 'google-auth', 'width=520,height=650');
             
             if (!popup || popup.closed || typeof popup.closed == 'undefined') {
                  toast({

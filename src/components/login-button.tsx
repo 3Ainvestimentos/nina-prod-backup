@@ -41,8 +41,12 @@ export function LoginButton() {
     }
     setIsAuthLoading(true);
     try {
-        // Use fetch to call the onRequest function
-        const response = await fetch(`https://southamerica-east1-studio-9152494730-25d31.cloudfunctions.net/googleAuthInit?uid=${user.uid}`);
+        const projectId = "studio-9152494730-25d31";
+        const uid = user.uid;
+        const url = `https://us-central1-${projectId}.cloudfunctions.net/googleAuthInit?uid=${uid}`;
+        
+        const response = await fetch(url, { method: "GET" });
+
         if (!response.ok) {
             const errorData = await response.json();
             throw new Error(errorData.error || "Falha ao obter URL de autorização.");
@@ -52,7 +56,7 @@ export function LoginButton() {
 
         if (authUrl) {
             // Instead of redirecting the whole window, open a popup
-            const popup = window.open(authUrl, 'google-auth', 'width=600,height=700');
+            const popup = window.open(authUrl, 'google-auth', 'width=520,height=650');
             
             // Check if the popup was blocked
             if (!popup || popup.closed || typeof popup.closed == 'undefined') {

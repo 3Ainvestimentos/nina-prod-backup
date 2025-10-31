@@ -52,35 +52,51 @@ export const setAdminClaim = functions.https.onCall(async (data, context) => {
 });
 
 /**
- * Função de gatilho para processar escritas em interações e PDIs.
+ * Função de gatilho para processar a criação de interações.
  * Aciona a atualização do ranking e a criação de eventos no calendário.
  */
-export const onInteractionWrite = functions.firestore
-    .document("/employees/{employeeId}/{collection}/{docId}")
-    .onWrite(async (change, context) => {
-        const { employeeId, collection } = context.params;
+export const onInteractionCreate = functions.firestore
+    .document("/employees/{employeeId}/interactions/{interactionId}")
+    .onCreate(async (snap, context) => {
+        const { employeeId } = context.params;
+        const interactionData = snap.data();
 
         // Lista de promessas para as tarefas a serem executadas.
         const tasks: Promise<any>[] = [];
 
-        // Tarefa 1: Atualizar o ranking do líder.
-        // A função updateLeaderRanking já busca o líder a partir do employeeId.
+        // Tarefa 1: Atualizar o ranking do líder (pode ser executada em paralelo).
         tasks.push(updateLeaderRanking(employeeId));
 
-        // Tarefa 2: Se for uma nova interação, tentar criar um evento no calendário.
-        if (collection === 'interactions' && !change.before.exists && change.after.exists) {
-            const interactionData = change.after.data();
-            if (interactionData) {
-                tasks.push(createCalendarEvent(interactionData, employeeId));
-            }
+        // Tarefa 2: Tentar criar um evento no calendário (pode ser executada em paralelo).
+        if (interactionData) {
+            tasks.push(createCalendarEvent(interactionData, employeeId));
         }
 
         // Executa todas as tarefas em paralelo.
         try {
             await Promise.all(tasks);
-            functions.logger.log(`Tarefas concluídas com sucesso para o gatilho em /employees/${employeeId}/${collection}.`);
+            functions.logger.log(`Tarefas de criação de interação concluídas com sucesso para o funcionário ${employeeId}.`);
         } catch (error) {
-            functions.logger.error("Ocorreu um erro ao processar uma ou mais tarefas do gatilho onInteractionWrite:", error);
+            functions.logger.error(`Ocorreu um erro ao processar uma ou mais tarefas para a criação da interação do funcionário ${employeeId}:`, error);
+        }
+
+        return null;
+    });
+
+/**
+ * Função de gatilho para processar escritas em PDIs.
+ * Aciona apenas a atualização do ranking do líder.
+ */
+export const onPdiWrite = functions.firestore
+    .document("/employees/{employeeId}/pdiActions/{pdiId}")
+    .onWrite(async (change, context) => {
+        const { employeeId } = context.params;
+        
+        try {
+            await updateLeaderRanking(employeeId);
+            functions.logger.log(`Ranking atualizado com sucesso devido à escrita no PDI do funcionário ${employeeId}.`);
+        } catch (error) {
+            functions.logger.error(`Erro ao atualizar ranking após escrita no PDI para o funcionário ${employeeId}:`, error);
         }
 
         return null;
@@ -89,5 +105,3 @@ export const onInteractionWrite = functions.firestore
 
 // Exporta as outras funções.
 export { setupFirstAdmin, googleAuthInit, googleAuthCallback };
-
-    

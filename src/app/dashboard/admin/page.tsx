@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { MoreHorizontal, PlusCircle, Upload, ArrowUpDown, X, Filter, User, ShieldCheck, FileDown, HelpCircle, Copy, Pen, Trash, ExternalLink } from "lucide-react";
+import { MoreHorizontal, PlusCircle, Upload, ArrowUpDown, X, Filter, User, ShieldCheck, FileDown, HelpCircle, Copy, Pen, Trash } from "lucide-react";
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -46,19 +46,16 @@ import {
 } from "@/components/ui/alert-dialog";
 import { CsvUploadDialog } from "@/components/csv-upload-dialog";
 import { InteractionCsvUploadDialog } from "@/components/interaction-csv-upload-dialog";
-import { useState, useMemo, useEffect, useCallback } from "react";
-import { useCollection, useFirestore, useMemoFirebase, useUser, useFirebase } from "@/firebase";
-import { collection, doc, deleteDoc, updateDoc, getDocs, query } from "firebase/firestore";
+import { useState, useMemo, useEffect } from "react";
+import { useCollection, useFirestore, useMemoFirebase, useUser } from "@/firebase";
+import { collection, doc, deleteDoc, updateDoc } from "firebase/firestore";
 import { setDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { EmployeeFormDialog } from "@/components/employee-form-dialog";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { exportData } from "@/lib/export";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -98,8 +95,6 @@ export default function AdminPage() {
   const { user, isUserLoading } = useUser();
   const { toast } = useToast();
   
-  const [isAuthLoading, setIsAuthLoading] = useState(false);
-
   const initialFilters = {
     name: new Set<string>(),
     position: new Set<string>(),
@@ -146,8 +141,6 @@ export default function AdminPage() {
     if (!firestore) return;
     const docRef = doc(firestore, "employees", employeeId);
     try {
-      // If the new role is Director, also set isDirector to true
-      // If it's something else, ensure isDirector is false
       const updates: { role: Role, isDirector?: boolean } = { role: newRole };
       if (newRole === 'Diretor') {
         updates.isDirector = true;
@@ -181,18 +174,15 @@ export default function AdminPage() {
         const leaders = employees.filter(e => e.role === 'Líder' || e.role === 'Diretor');
         const directors = employees.filter(e => e.isDirector).sort((a,b) => a.name.localeCompare(b.name));
         
-        // 1. Get admins from DB
         const adminsFromDb = employees.filter(e => e.isAdmin);
         const adminMap = new Map(adminsFromDb.map(a => [a.email, a]));
 
-        // 2. Add hardcoded admins if they aren't in the DB list yet
         adminEmails.forEach(email => {
             if (!adminMap.has(email)) {
                 const employeeData = employees.find(e => e.email === email);
                 if (employeeData) {
                     adminMap.set(email, { ...employeeData, isAdmin: true });
                 } else {
-                    // Create a placeholder if the user is not in the employees list at all
                      adminMap.set(email, {
                         id: email,
                         id3a: email,
@@ -207,7 +197,8 @@ export default function AdminPage() {
         const admins = Array.from(adminMap.values()).sort((a,b) => a.name.localeCompare(b.name));
 
 
-        const employeesWithoutDiagnosis = employees.filter(emp => emp.isUnderManagement && !emp.diagnosis);
+        const employeesWithoutDiagnosis = employees.filter(emp => emp.isUnderManagement && !(emp as any).diagnosis);
+
 
         return { 
           leaders,
@@ -221,22 +212,18 @@ export default function AdminPage() {
 
     const calculateAnnualInteractions = (employee: Employee) => {
       let total = 0;
-      // PDI: semestral = 2/ano
-      total += 2;
-      // 1:1: trimestral = 4/ano
-      total += 4;
-      // Índice de Risco: mensal = 12/ano
-      total += 12;
-      // N3 Individual: varia com segmento
+      total += 2; // PDI
+      total += 4; // 1:1
+      total += 12; // Risk
       switch (employee.segment) {
         case 'Alfa':
-          total += 48; // 4/mês * 12
+          total += 48;
           break;
         case 'Beta':
-          total += 24; // 2/mês * 12
+          total += 24;
           break;
         case 'Senior':
-            total += 12; // 1/mês * 12
+            total += 12;
             break;
       }
       return total;
@@ -320,8 +307,6 @@ export default function AdminPage() {
     });
     leaderIdToNameMap.set('sem-lider', 'Sem Líder');
 
-
-    // Sort leaders alphabetically by name
     const sortedLeaderIds = [...groupedByLeader.keys()].sort((a, b) => {
       const nameA = leaderIdToNameMap.get(a) || '';
       const nameB = leaderIdToNameMap.get(b) || '';
@@ -330,7 +315,6 @@ export default function AdminPage() {
   
     const sortedMap = new Map<string, Employee[]>();
     sortedLeaderIds.forEach(leaderId => {
-      // Sort employees within each team alphabetically
       const sortedEmployees = groupedByLeader.get(leaderId)?.sort((a, b) => a.name.localeCompare(b.name));
       if (sortedEmployees) {
         sortedMap.set(leaderId, sortedEmployees);
@@ -392,14 +376,13 @@ export default function AdminPage() {
   const handleCopyAndSaveEmployee = async (employee: Employee) => {
     if (!firestore) return;
 
-    // Create a deep copy and prepare it for saving as a new document
     const { id, ...employeeData } = employee;
     const newId3a = `${employee.id3a}-${Date.now()}`;
     
     const employeeCopy: Partial<Employee> = { 
         ...employeeData,
         id3a: newId3a,
-        email: '', // Email must be unique and should be manually set
+        email: '',
         name: `${employee.name} (Cópia)`,
         photoURL: '', 
      };
@@ -455,7 +438,6 @@ export default function AdminPage() {
     
     const employeeDocRef = doc(firestore, "employees", employeeId);
     
-    // If newLeaderId is 'no-leader', it means "Sem Líder" was selected
     if (newLeaderId === "no-leader") {
         const dataToSave = {
             leaderId: "",
@@ -586,38 +568,10 @@ export default function AdminPage() {
         setSetupLoading(prev => ({...prev, [email]: false}));
     }
   };
-  
-    const handleGoogleAuth = async () => {
-        if (!firebaseApp) {
-            toast({ variant: "destructive", title: "Erro", description: "Firebase não inicializado."});
-            return;
-        }
-        setIsAuthLoading(true);
-        try {
-            const functions = getFunctions(firebaseApp, 'southamerica-east1');
-            const googleAuthInit = httpsCallable(functions, 'googleAuthInit');
-            const result: any = await googleAuthInit();
-            const authUrl = result.data.authUrl;
-            if (authUrl) {
-                window.location.href = authUrl;
-            } else {
-                throw new Error("URL de autorização não recebida.");
-            }
-        } catch (error: any) {
-            console.error("Erro ao iniciar autorização com Google:", error);
-            toast({
-                variant: "destructive",
-                title: "Erro de Autorização",
-                description: error.message || "Não foi possível iniciar a conexão com o Google Calendar.",
-            });
-            setIsAuthLoading(false);
-        }
-    };
-
 
   const isLoading = isUserLoading || areEmployeesLoading || loadingReports;
 
-  const FilterComponent = ({ title, filterKey, options, children }: { title: string, filterKey: keyof typeof filters, options: string[], children?: React.ReactNode }) => (
+  const FilterComponent = ({ title, filterKey, options }: { title: string, filterKey: keyof typeof filters, options: string[]}) => (
     <div className="flex items-center gap-1">
       <span>{title}</span>
       <DropdownMenu>
@@ -627,20 +581,16 @@ export default function AdminPage() {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="max-h-96 overflow-y-auto">
-          {children ? children :
-            <>
-              {options.map((option, index) => (
-                <DropdownMenuCheckboxItem
-                  key={`${option}-${index}`}
-                  checked={(filters[filterKey] as Set<string>).has(option)}
-                  onSelect={(e) => e.preventDefault()}
-                  onCheckedChange={() => handleMultiSelectFilterChange(filterKey, option)}
-                >
-                  {option}
-                </DropdownMenuCheckboxItem>
-              ))}
-            </>
-          }
+            {options.map((option, index) => (
+              <DropdownMenuCheckboxItem
+                key={`${option}-${index}`}
+                checked={(filters[filterKey] as Set<string>).has(option)}
+                onSelect={(e) => e.preventDefault()}
+                onCheckedChange={() => handleMultiSelectFilterChange(filterKey, option)}
+              >
+                {option}
+              </DropdownMenuCheckboxItem>
+            ))}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
@@ -702,11 +652,10 @@ export default function AdminPage() {
   return (
     <>
     <Tabs defaultValue="employees" className="w-full">
-      <TabsList className="grid w-full grid-cols-6">
+      <TabsList className="grid w-full grid-cols-5">
         <TabsTrigger value="employees">Funcionários</TabsTrigger>
         <TabsTrigger value="teams">Equipes</TabsTrigger>
         <TabsTrigger value="reports">Relatórios</TabsTrigger>
-        <TabsTrigger value="integrations">Integrações</TabsTrigger>
         <TabsTrigger value="settings">Geral</TabsTrigger>
         <TabsTrigger value="backup">Backup & Import</TabsTrigger>
       </TabsList>
@@ -997,40 +946,6 @@ export default function AdminPage() {
             />
         </div>
       </TabsContent>
-      <TabsContent value="integrations">
-        <Card>
-          <CardHeader>
-            <CardTitle>Integrações</CardTitle>
-            <CardDescription>
-              Conecte a plataforma com outras ferramentas para automatizar fluxos de trabalho.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Card>
-                <CardHeader>
-                    <CardTitle>Google Calendar</CardTitle>
-                    <CardDescription>
-                        Conecte sua conta Google para criar eventos na agenda para as interações agendadas.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="flex items-center justify-between p-4 border rounded-lg">
-                        <div>
-                            <p className="font-medium">Conectar com Google Calendar</p>
-                            <p className="text-sm text-muted-foreground">
-                                Permita que a aplicação crie eventos para N3 Individuais.
-                            </p>
-                        </div>
-                        <Button onClick={handleGoogleAuth} disabled={isAuthLoading}>
-                           {isAuthLoading ? 'Aguarde...' : 'Conectar'}
-                           <ExternalLink className="ml-2 h-4 w-4" />
-                        </Button>
-                    </div>
-                </CardContent>
-            </Card>
-          </CardContent>
-        </Card>
-      </TabsContent>
       <TabsContent value="settings">
         <Card>
           <CardHeader>
@@ -1230,5 +1145,3 @@ export default function AdminPage() {
     </>
   );
 }
-
-    

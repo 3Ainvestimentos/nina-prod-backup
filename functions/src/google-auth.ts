@@ -2,6 +2,9 @@
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
 import { google } from 'googleapis';
+import * as cors from 'cors';
+
+const corsHandler = cors({ origin: true });
 
 if (!admin.apps.length) {
   admin.initializeApp();
@@ -9,14 +12,9 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
-// ATENÇÃO: Estas credenciais devem ser configuradas no ambiente do Firebase.
-// `firebase functions:config:set google.client_id="SEU_CLIENT_ID"`
-// `firebase functions:config:set google.client_secret="SEU_CLIENT_SECRET"`
 const GOOGLE_CLIENT_ID = functions.config().google?.client_id;
 const GOOGLE_CLIENT_SECRET = functions.config().google?.client_secret;
 
-// O URL para onde o Google redirecionará após a autorização.
-// Deve corresponder exatamente ao URI de redirecionamento autorizado no Google Cloud Console.
 const REDIRECT_URL = `https://southamerica-east1-${process.env.GCLOUD_PROJECT}.cloudfunctions.net/googleAuthCallback`;
 
 const oauth2Client = new google.auth.OAuth2(
@@ -26,29 +24,31 @@ const oauth2Client = new google.auth.OAuth2(
 );
 
 const SCOPES = [
-    'https://www.googleapis.com/auth/calendar.events', // Permissão para criar/editar eventos
-    'https://www.googleapis.com/auth/userinfo.email', // Obter o e-mail para verificação
+    'https://www.googleapis.com/auth/calendar.events',
+    'https://www.googleapis.com/auth/userinfo.email',
 ];
 
 /**
  * Inicia o fluxo de autorização OAuth2 para o Google Calendar.
- * Retorna a URL de autorização para o cliente redirecionar o usuário.
+ * Agora é uma função onRequest para controle total sobre CORS.
  */
-export const googleAuthInit = functions.https.onCall(async (data, context) => {
-    if (!context.auth) {
-        throw new functions.https.HttpsError('unauthenticated', 'O usuário precisa estar autenticado.');
-    }
+export const googleAuthInit = functions.https.onRequest((req, res) => {
+    corsHandler(req, res, async () => {
+        const uid = req.query.uid as string;
+        if (!uid) {
+            res.status(400).json({ error: "O UID do usuário é obrigatório." });
+            return;
+        }
 
-    const uid = context.auth.uid;
-    
-    const authUrl = oauth2Client.generateAuthUrl({
-        access_type: 'offline', // Necessário para obter um refresh token
-        scope: SCOPES,
-        state: uid, // Passa o UID do usuário para identificar no callback
-        prompt: 'consent' // Garante que o refresh token seja sempre fornecido
+        const authUrl = oauth2Client.generateAuthUrl({
+            access_type: 'offline',
+            scope: SCOPES,
+            state: uid,
+            prompt: 'consent'
+        });
+
+        res.json({ authUrl });
     });
-
-    return { authUrl };
 });
 
 
@@ -70,12 +70,9 @@ export const googleAuthCallback = functions.https.onRequest(async (req, res) => 
         const refreshToken = tokens.refresh_token;
 
         if (!refreshToken) {
-            // Isso pode acontecer se o usuário já autorizou o app e não revogou o acesso.
-            // O 'prompt: consent' na URL de autorização ajuda a mitigar isso.
             throw new Error('Refresh token não recebido do Google. O usuário pode já ter autorizado o app.');
         }
 
-        // Armazena o refresh token de forma segura no documento do funcionário
         const employeeRef = db.collection('employees').doc(uid);
         await employeeRef.set({
             googleAuth: {
@@ -87,10 +84,10 @@ export const googleAuthCallback = functions.https.onRequest(async (req, res) => 
             }
         }, { merge: true });
 
-        // Redireciona o usuário de volta para uma página de sucesso no app
-        res.redirect('/dashboard/admin?auth=success');
+        // Redireciona de volta para a página de acompanhamento individual
+        res.redirect(`/dashboard/individual-tracking?auth=success`);
 
-    } catch (error) {
+    } catch (error) => {
         console.error('Erro no callback de autenticação do Google:', error);
         res.status(500).send('Ocorreu um erro ao autorizar com o Google Calendar.');
     }

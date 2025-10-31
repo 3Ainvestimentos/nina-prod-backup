@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { CalendarIcon, PlusCircle, Clock } from "lucide-react";
+import { CalendarIcon, PlusCircle, Clock, ExternalLink } from "lucide-react";
 import { Timeline } from "@/components/timeline";
 import {
   Dialog,
@@ -41,6 +41,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { setDocumentNonBlocking } from "@/firebase/non-blocking-updates";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 type NewInteraction = Omit<Interaction, "id" | "date" | "authorId" | "notes"> & { notes: string | OneOnOneNotes | N3IndividualNotes };
 
@@ -63,7 +64,6 @@ const initialN3Notes: N3IndividualNotes = {
 const adminEmails = ['matheus@3ainvestimentos.com.br', 'lucas.nogueira@3ainvestimentos.com.br', 'henrique.peixoto@3ainvestimentos.com.br'];
 
 const n3RegistrationLimit = 10;
-
 const feedbackLimit = 10;
 
 
@@ -77,6 +77,7 @@ export default function IndividualTrackingPage() {
   const [n3Notes, setN3Notes] = useState<N3IndividualNotes>(initialN3Notes);
   const [nextInteractionDate, setNextInteractionDate] = useState<Date>();
   const [isSaving, setIsSaving] = useState(false);
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
 
   const firestore = useFirestore();
   const { user } = useUser();
@@ -119,7 +120,6 @@ export default function IndividualTrackingPage() {
 
     if (!employeeData) return null;
 
-    // Enhance permissions for other admins
     if (employeeData.isAdmin) {
       return {
         ...employeeData,
@@ -152,6 +152,12 @@ export default function IndividualTrackingPage() {
   const selectedEmployee = useMemo(() => {
     return employees?.find((employee) => employee.id === selectedEmployeeId);
   }, [employees, selectedEmployeeId]);
+  
+  const isLeaderAuthorizedForCalendar = useMemo(() => {
+      if (!currentUserEmployee) return false;
+      const leaderData = employees?.find(e => e.id === currentUserEmployee.id);
+      return !!(leaderData as any)?.googleAuth?.refreshToken;
+  }, [currentUserEmployee, employees]);
 
   const clearStorage = useCallback(() => {
     const key = getStorageKey(selectedEmployeeId);
@@ -185,7 +191,6 @@ export default function IndividualTrackingPage() {
         setNextInteractionDate(new Date(data.nextInteractionDate));
       }
     } else {
-        // If no saved data, reset to initial state to avoid carrying over from another user
         setSimpleNotes("");
         setOneOnOneNotes(initialOneOnOneNotes);
         setN3Notes(initialN3Notes);
@@ -268,7 +273,6 @@ export default function IndividualTrackingPage() {
             return;
         }
     } else {
-        // Check for existing interaction of other types in the current month
         const hasExistingInteractionThisMonth = interactions.some(
             (interaction) =>
                 interaction.type === interactionType &&
@@ -413,14 +417,47 @@ export default function IndividualTrackingPage() {
     const type = value as Interaction["type"];
     
     if (type === 'Índice de Risco') {
-        setOpenInteractionDialog(false); // Fecha o modal atual
-        setOpenRiskDialog(true); // Abre o modal de risco
+        setOpenInteractionDialog(false);
+        setOpenRiskDialog(true); 
         resetForms();
     } else {
         setInteractionType(type);
     }
   };
   
+    const handleGoogleAuth = async () => {
+        if (!user) {
+            toast({ variant: "destructive", title: "Erro", description: "Usuário não autenticado." });
+            return;
+        }
+        setIsAuthLoading(true);
+        try {
+            // Use fetch to call the onRequest function
+            const response = await fetch(`https://southamerica-east1-studio-9152494730-25d31.cloudfunctions.net/googleAuthInit?uid=${user.uid}`);
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || "Falha ao obter URL de autorização.");
+            }
+            const result: any = await response.json();
+            const authUrl = result.authUrl;
+
+            if (authUrl) {
+                window.location.href = authUrl;
+            } else {
+                throw new Error("URL de autorização não recebida.");
+            }
+        } catch (error: any) {
+            console.error("Erro ao iniciar autorização com Google:", error);
+            toast({
+                variant: "destructive",
+                title: "Erro de Autorização",
+                description: error.message || "Não foi possível iniciar a conexão com o Google Calendar.",
+            });
+            setIsAuthLoading(false);
+        }
+    };
+
+
   const handleOneOnOneNotesChange = (field: keyof OneOnOneNotes, value: string) => {
     setOneOnOneNotes(prev => ({...prev, [field]: value}));
   }
@@ -434,7 +471,6 @@ export default function IndividualTrackingPage() {
         setNextInteractionDate(undefined);
         return;
     }
-    // Preserve existing time if it exists, otherwise default to 00:00
     const currentHour = nextInteractionDate ? getHours(nextInteractionDate) : 0;
     const currentMinutes = nextInteractionDate ? getMinutes(nextInteractionDate) : 0;
     let newDate = setHours(date, currentHour);
@@ -595,55 +631,68 @@ export default function IndividualTrackingPage() {
                   )}
                    {interactionType === 'N3 Individual' && (
                     <div className="space-y-2">
-                      <Label>Próxima Interação</Label>
-                      <Popover>
-                          <PopoverTrigger asChild>
-                              <Button
-                                  id="next-interaction-date"
-                                  variant={"outline"}
-                                  className={cn(
-                                      "w-full justify-start text-left font-normal",
-                                      !nextInteractionDate && "text-muted-foreground"
-                                  )}
-                              >
-                                  <CalendarIcon className="mr-2 h-4 w-4" />
-                                  {nextInteractionDate ? format(nextInteractionDate, "PPP, HH:mm") : <span>Escolha data e hora</span>}
-                              </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0">
-                              <Calendar
-                                  mode="single"
-                                  selected={nextInteractionDate}
-                                  onSelect={handleDateTimeChange}
-                                  initialFocus
-                              />
-                              <div className="p-3 border-t border-border flex items-center gap-2">
-                                <Clock className="h-4 w-4 text-muted-foreground" />
-                                <Label htmlFor="hours" className="sr-only">Horas</Label>
-                                <Input 
-                                    id="hours"
-                                    type="number" 
-                                    min="0" 
-                                    max="23" 
-                                    className="w-16"
-                                    value={nextInteractionDate ? getHours(nextInteractionDate).toString().padStart(2, '0') : "00"}
-                                    onChange={(e) => handleTimeChange('hours', e.target.value)}
+                      <Label>Próxima Interação (Google Calendar)</Label>
+                      {!isLeaderAuthorizedForCalendar ? (
+                        <Alert>
+                           <AlertTitle>Conecte seu Calendário</AlertTitle>
+                           <AlertDescription>
+                             Para agendar a próxima interação automaticamente, você precisa autorizar o acesso à sua agenda do Google.
+                           </AlertDescription>
+                           <Button onClick={handleGoogleAuth} disabled={isAuthLoading} className="mt-4 w-full">
+                              {isAuthLoading ? 'Aguarde...' : 'Conectar Google Calendar'}
+                              <ExternalLink className="ml-2 h-4 w-4" />
+                           </Button>
+                        </Alert>
+                      ) : (
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button
+                                    id="next-interaction-date"
+                                    variant={"outline"}
+                                    className={cn(
+                                        "w-full justify-start text-left font-normal",
+                                        !nextInteractionDate && "text-muted-foreground"
+                                    )}
+                                >
+                                    <CalendarIcon className="mr-2 h-4 w-4" />
+                                    {nextInteractionDate ? format(nextInteractionDate, "PPP, HH:mm") : <span>Escolha data e hora</span>}
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0">
+                                <Calendar
+                                    mode="single"
+                                    selected={nextInteractionDate}
+                                    onSelect={handleDateTimeChange}
+                                    initialFocus
                                 />
-                                <span>:</span>
-                                <Label htmlFor="minutes" className="sr-only">Minutos</Label>
-                                <Input 
-                                    id="minutes"
-                                    type="number" 
-                                    min="0" 
-                                    max="59" 
-                                    step="5"
-                                    className="w-16"
-                                    value={nextInteractionDate ? getMinutes(nextInteractionDate).toString().padStart(2, '0') : "00"}
-                                    onChange={(e) => handleTimeChange('minutes', e.target.value)}
-                                />
-                              </div>
-                          </PopoverContent>
-                      </Popover>
+                                <div className="p-3 border-t border-border flex items-center gap-2">
+                                  <Clock className="h-4 w-4 text-muted-foreground" />
+                                  <Label htmlFor="hours" className="sr-only">Horas</Label>
+                                  <Input 
+                                      id="hours"
+                                      type="number" 
+                                      min="0" 
+                                      max="23" 
+                                      className="w-16"
+                                      value={nextInteractionDate ? getHours(nextInteractionDate).toString().padStart(2, '0') : "00"}
+                                      onChange={(e) => handleTimeChange('hours', e.target.value)}
+                                  />
+                                  <span>:</span>
+                                  <Label htmlFor="minutes" className="sr-only">Minutos</Label>
+                                  <Input 
+                                      id="minutes"
+                                      type="number" 
+                                      min="0" 
+                                      max="59" 
+                                      step="5"
+                                      className="w-16"
+                                      value={nextInteractionDate ? getMinutes(nextInteractionDate).toString().padStart(2, '0') : "00"}
+                                      onChange={(e) => handleTimeChange('minutes', e.target.value)}
+                                  />
+                                </div>
+                            </PopoverContent>
+                        </Popover>
+                      )}
                     </div>
                    )}
                 </div>
@@ -674,5 +723,3 @@ export default function IndividualTrackingPage() {
     </div>
   );
 }
-
-    

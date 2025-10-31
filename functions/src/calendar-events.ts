@@ -8,7 +8,7 @@ const db = admin.firestore();
 // --- Configuração do OAuth2 Client ---
 const GOOGLE_CLIENT_ID = functions.config().google?.client_id;
 const GOOGLE_CLIENT_SECRET = functions.config().google?.client_secret;
-const REDIRECT_URL = `https://${process.env.GCLOUD_PROJECT}-uc.a.run.app/googleAuthCallback`;
+const REDIRECT_URL = `https://${process.env.GCLOUD_PROJECT}.firebaseapp.com/googleAuthCallback`;
 
 const oauth2Client = new google.auth.OAuth2(
     GOOGLE_CLIENT_ID,

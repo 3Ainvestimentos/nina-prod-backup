@@ -17,7 +17,7 @@ const GOOGLE_CLIENT_SECRET = functions.config().google?.client_secret;
 
 // O URL para onde o Google redirecionará após a autorização.
 // Deve corresponder exatamente ao URI de redirecionamento autorizado no Google Cloud Console.
-const REDIRECT_URL = `https://${process.env.GCLOUD_PROJECT}-uc.a.run.app/googleAuthCallback`;
+const REDIRECT_URL = `https://southamerica-east1-${process.env.GCLOUD_PROJECT}.cloudfunctions.net/googleAuthCallback`;
 
 const oauth2Client = new google.auth.OAuth2(
     GOOGLE_CLIENT_ID,

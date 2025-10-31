@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { Employee, Role, Interaction, PDIAction } from "@/lib/types";
@@ -598,7 +599,6 @@ export default function AdminPage() {
             const result: any = await googleAuthInit();
             const authUrl = result.data.authUrl;
             if (authUrl) {
-                // Redireciona o usuário para a URL de autorização do Google
                 window.location.href = authUrl;
             } else {
                 throw new Error("URL de autorização não recebida.");
@@ -1018,7 +1018,7 @@ export default function AdminPage() {
                         <div>
                             <p className="font-medium">Conectar com Google Calendar</p>
                             <p className="text-sm text-muted-foreground">
-                                Permita que a aplicação crie eventos para 1:1s e PDIs.
+                                Permita que a aplicação crie eventos para N3 Individuais.
                             </p>
                         </div>
                         <Button onClick={handleGoogleAuth} disabled={isAuthLoading}>
@@ -1230,3 +1230,5 @@ export default function AdminPage() {
     </>
   );
 }
+
+    

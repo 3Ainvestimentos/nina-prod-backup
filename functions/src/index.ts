@@ -1,25 +1,16 @@
 
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
+import { updateLeaderRanking } from './update-ranking';
+import { createCalendarEvent } from './calendar-events';
 
 // Inicializa o SDK do Firebase Admin.
-// As credenciais são gerenciadas automaticamente pelo ambiente do Cloud Functions.
 admin.initializeApp();
 
 /**
  * Função chamável para definir um Custom Claim de administrador em um usuário.
- *
- * @param data - Objeto contendo o `email` do usuário a ser promovido.
- * @param context - Contexto da chamada, incluindo informações de autenticação.
- *
- * @returns Um objeto com uma mensagem de sucesso ou erro.
- * @throws `functions.https.HttpsError` Se o chamador não for um administrador
- * ou se o usuário alvo não for encontrado.
  */
 export const setAdminClaim = functions.https.onCall(async (data, context) => {
-  // 1. Verificação de Segurança: Garante que o chamador já é um administrador.
-  // O primeiro administrador precisa ser definido manualmente via terminal ou
-  // temporariamente comentando este bloco para a primeira execução.
   if (context.auth?.token.isAdmin !== true) {
     throw new functions.https.HttpsError(
       "permission-denied",
@@ -27,7 +18,6 @@ export const setAdminClaim = functions.https.onCall(async (data, context) => {
     );
   }
 
-  // 2. Validação de Entrada: Garante que um e-mail foi fornecido.
   const email = data.email;
   if (typeof email !== "string" || email.length === 0) {
     throw new functions.https.HttpsError(
@@ -37,13 +27,8 @@ export const setAdminClaim = functions.https.onCall(async (data, context) => {
   }
 
   try {
-    // 3. Lógica Principal: Encontra o usuário pelo e-mail.
     const user = await admin.auth().getUserByEmail(email);
-
-    // 4. Define o Custom Claim `{ isAdmin: true }` para o usuário.
     await admin.auth().setCustomUserClaims(user.uid, { isAdmin: true });
-
-    // 5. Retorna uma mensagem de sucesso.
     return {
       message: `Sucesso! O usuário ${email} agora é um administrador.`,
     };
@@ -62,8 +47,39 @@ export const setAdminClaim = functions.https.onCall(async (data, context) => {
   }
 });
 
+/**
+ * Função de gatilho para processar escritas em interações e PDIs.
+ * Aciona a atualização do ranking e a criação de eventos no calendário.
+ */
+export const onInteractionWrite = functions.region("southamerica-east1").firestore
+    .document("/employees/{employeeId}/{collection}/{docId}")
+    .onWrite(async (change, context) => {
+        const { employeeId, collection } = context.params;
 
-// functions/src/index.ts - Adicionar no final
+        // Lista de promessas para as tarefas a serem executadas.
+        const tasks: Promise<any>[] = [];
+
+        // Tarefa 1: Atualizar o ranking do líder.
+        tasks.push(updateLeaderRanking(employeeId));
+
+        // Tarefa 2: Se for uma nova interação, tentar criar um evento no calendário.
+        if (collection === 'interactions' && !change.before.exists && change.after.exists) {
+            const interactionData = change.after.data();
+            tasks.push(createCalendarEvent(interactionData, employeeId));
+        }
+
+        // Executa todas as tarefas em paralelo.
+        try {
+            await Promise.all(tasks);
+            functions.logger.log(`Tarefas concluídas com sucesso para o gatilho em /employees/${employeeId}/${collection}.`);
+        } catch (error) {
+            functions.logger.error("Ocorreu um erro ao processar uma ou mais tarefas do gatilho onInteractionWrite:", error);
+        }
+
+        return null;
+    });
+
+
+// Exporta as outras funções.
 export { setupFirstAdmin } from './setup-admin';
-export { updateLeaderRankingOnWrite } from './update-ranking';
 export { googleAuthInit, googleAuthCallback } from './google-auth';

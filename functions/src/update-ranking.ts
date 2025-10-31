@@ -3,9 +3,6 @@ import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 import { differenceInMonths, getMonth, getYear, parseISO, startOfYear, endOfYear, isWithinInterval } from "date-fns";
 
-if (admin.apps.length === 0) {
-    admin.initializeApp();
-}
 const db = admin.firestore();
 
 
@@ -68,134 +65,130 @@ function getRequiredCountForSchedule(startDate: Date, endDate: Date, schedule: n
 }
 
 
-// --- Main Cloud Function ---
+// --- Main Logic ---
 
 /**
- * Triggered on write to any interaction or PDI action.
- * Recalculates and updates the adherence ranking for the affected leader.
+ * Recalculates and updates the adherence ranking for a leader.
+ * @param {string} employeeId - The ID of the employee whose interaction triggered the update.
  */
-export const updateLeaderRankingOnWrite = functions.region("southamerica-east1").firestore
-    .document("/employees/{employeeId}/{collection}/{docId}")
-    .onWrite(async (change, context) => {
-        const { employeeId } = context.params;
+export async function updateLeaderRanking(employeeId: string) {
+    // 1. Identify the Leader
+    const employeeSnap = await db.collection("employees").doc(employeeId).get();
+    const employee = employeeSnap.data() as Employee | undefined;
+    const leaderId = employee?.leaderId;
 
-        // 1. Identify the Leader
-        const employeeSnap = await db.collection("employees").doc(employeeId).get();
-        const employee = employeeSnap.data() as Employee | undefined;
-        const leaderId = employee?.leaderId;
+    if (!leaderId) {
+        functions.logger.log(`Employee ${employeeId} has no leader. No ranking update needed.`);
+        return;
+    }
+    
+    // 2. Fetch Leader and Team
+    const leaderSnap = await db.collection("employees").doc(leaderId).get();
+    if (!leaderSnap.exists) {
+        functions.logger.warn(`Leader ${leaderId} not found.`);
+        return;
+    }
 
-        if (!leaderId) {
-            functions.logger.log(`Employee ${employeeId} has no leader. No ranking update needed.`);
-            return null;
-        }
-        
-        // 2. Fetch Leader and Team
-        const leaderSnap = await db.collection("employees").doc(leaderId).get();
-        if (!leaderSnap.exists) {
-            functions.logger.warn(`Leader ${leaderId} not found.`);
-            return null;
-        }
+    const teamQuery = db.collection("employees").where("leaderId", "==", leaderId).where("isUnderManagement", "==", true);
+    const teamSnaps = await teamQuery.get();
+    const teamMembers = teamSnaps.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Employee));
 
-        const teamQuery = db.collection("employees").where("leaderId", "==", leaderId).where("isUnderManagement", "==", true);
-        const teamSnaps = await teamQuery.get();
-        const teamMembers = teamSnaps.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Employee));
-
-        if (teamMembers.length === 0) {
-            functions.logger.log(`Leader ${leaderId} has no managed team members. Setting score to 0.`);
-            const leaderRankRef = db.collection("leaderRankings").doc(leaderId);
-            await leaderRankRef.set({
-                leaderId: leaderId,
-                leaderName: leaderSnap.data()?.name || "",
-                leaderPhotoURL: leaderSnap.data()?.photoURL || "",
-                adherenceScore: 0,
-                completedCount: 0,
-                totalCount: 0,
-                lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
-            }, { merge: true });
-            return null;
-        }
-
-        // 3. Calculate Adherence for the current year
-        const now = new Date();
-        const range = { start: startOfYear(now), end: endOfYear(now) };
-        const monthsInYear = differenceInMonths(range.end, range.start) + 1;
-
-        let totalCompleted = 0;
-        let totalRequired = 0;
-
-        for (const member of teamMembers) {
-            const interactionsRef = db.collection("employees").doc(member.id).collection("interactions");
-            const pdiActionsRef = db.collection("employees").doc(member.id).collection("pdiActions");
-
-            const [interactionsSnap, pdiActionsSnap] = await Promise.all([
-                interactionsRef.get(),
-                pdiActionsRef.get(),
-            ]);
-
-            const memberInteractions = interactionsSnap.docs.map((doc) => doc.data() as Interaction);
-            const memberPdiActions = pdiActionsSnap.docs.map((doc) => doc.data() as PDIAction);
-            
-            // N3 Individual
-            const n3Segment = member.segment as keyof typeof n3IndividualSchedule | undefined;
-            if (n3Segment && n3IndividualSchedule[n3Segment]) {
-                const requiredN3 = n3IndividualSchedule[n3Segment] * monthsInYear;
-                const completedN3 = memberInteractions.filter((i) => i.type === "N3 Individual" && isWithinInterval(parseISO(i.date), range)).length;
-                totalRequired += requiredN3;
-                totalCompleted += Math.min(completedN3, requiredN3); // Cap at the required amount
-            }
-
-            // 1:1 and Índice de Risco
-            (["1:1", "Índice de Risco"] as const).forEach((type) => {
-                const schedule = interactionSchedules[type];
-                if (schedule) {
-                    const requiredCount = getRequiredCountForSchedule(range.start, range.end, schedule);
-                    totalRequired += requiredCount;
-
-                    const executedMonths = new Set<number>();
-                    memberInteractions.forEach((i) => {
-                        const intDate = parseISO(i.date);
-                        if (i.type === type && isWithinInterval(intDate, range) && schedule.includes(getMonth(intDate))) {
-                            executedMonths.add(getMonth(intDate));
-                        }
-                    });
-                    totalCompleted += executedMonths.size;
-                }
-            });
-
-            // PDI
-            const pdiSchedule = interactionSchedules["PDI"];
-            if (pdiSchedule) {
-                const requiredPdiCount = getRequiredCountForSchedule(range.start, range.end, pdiSchedule);
-                totalRequired += requiredPdiCount;
-
-                const executedPdiMonths = new Set<number>();
-                memberPdiActions.forEach((action) => {
-                    const actionDate = parseISO(action.startDate);
-                    if (isWithinInterval(actionDate, range) && pdiSchedule.includes(getMonth(actionDate))) {
-                        executedPdiMonths.add(getMonth(actionDate));
-                    }
-                });
-                totalCompleted += executedPdiMonths.size;
-            }
-        }
-        
-        // 4. Update Firestore
-        const adherenceScore = totalRequired > 0 ? (totalCompleted / totalRequired) * 100 : 0;
-        
+    if (teamMembers.length === 0) {
+        functions.logger.log(`Leader ${leaderId} has no managed team members. Setting score to 0.`);
         const leaderRankRef = db.collection("leaderRankings").doc(leaderId);
-        
-        const dataToSave = {
+        await leaderRankRef.set({
             leaderId: leaderId,
             leaderName: leaderSnap.data()?.name || "",
             leaderPhotoURL: leaderSnap.data()?.photoURL || "",
-            adherenceScore: adherenceScore,
-            completedCount: Math.round(totalCompleted),
-            totalCount: Math.round(totalRequired),
+            adherenceScore: 0,
+            completedCount: 0,
+            totalCount: 0,
             lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
-        };
+        }, { merge: true });
+        return;
+    }
 
-        await leaderRankRef.set(dataToSave, { merge: true });
+    // 3. Calculate Adherence for the current year
+    const now = new Date();
+    const range = { start: startOfYear(now), end: endOfYear(now) };
+    const monthsInYear = differenceInMonths(range.end, range.start) + 1;
 
-        functions.logger.log(`Ranking updated for leader ${leaderId}: ${adherenceScore.toFixed(2)}%`);
-        return null;
-    });
+    let totalCompleted = 0;
+    let totalRequired = 0;
+
+    for (const member of teamMembers) {
+        const interactionsRef = db.collection("employees").doc(member.id).collection("interactions");
+        const pdiActionsRef = db.collection("employees").doc(member.id).collection("pdiActions");
+
+        const [interactionsSnap, pdiActionsSnap] = await Promise.all([
+            interactionsRef.get(),
+            pdiActionsRef.get(),
+        ]);
+
+        const memberInteractions = interactionsSnap.docs.map((doc) => doc.data() as Interaction);
+        const memberPdiActions = pdiActionsSnap.docs.map((doc) => doc.data() as PDIAction);
+        
+        // N3 Individual - Cap at the adherence limit for ranking calculation
+        const n3Segment = member.segment as keyof typeof n3IndividualSchedule | undefined;
+        if (n3Segment && n3IndividualSchedule[n3Segment]) {
+            const adherenceLimitPerMonth = n3IndividualSchedule[n3Segment];
+            const requiredN3 = adherenceLimitPerMonth * monthsInYear;
+            const completedN3 = memberInteractions.filter((i) => i.type === "N3 Individual" && isWithinInterval(parseISO(i.date), range)).length;
+            totalRequired += requiredN3;
+            totalCompleted += Math.min(completedN3, requiredN3); // Cap at the required amount for adherence
+        }
+
+        // 1:1 and Índice de Risco
+        (["1:1", "Índice de Risco"] as const).forEach((type) => {
+            const schedule = interactionSchedules[type];
+            if (schedule) {
+                const requiredCount = getRequiredCountForSchedule(range.start, range.end, schedule);
+                totalRequired += requiredCount;
+
+                const executedMonths = new Set<number>();
+                memberInteractions.forEach((i) => {
+                    const intDate = parseISO(i.date);
+                    if (i.type === type && isWithinInterval(intDate, range) && schedule.includes(getMonth(intDate))) {
+                        executedMonths.add(getMonth(intDate));
+                    }
+                });
+                totalCompleted += executedMonths.size;
+            }
+        });
+
+        // PDI
+        const pdiSchedule = interactionSchedules["PDI"];
+        if (pdiSchedule) {
+            const requiredPdiCount = getRequiredCountForSchedule(range.start, range.end, pdiSchedule);
+            totalRequired += requiredPdiCount;
+
+            const executedPdiMonths = new Set<number>();
+            memberPdiActions.forEach((action) => {
+                const actionDate = parseISO(action.startDate);
+                if (isWithinInterval(actionDate, range) && pdiSchedule.includes(getMonth(actionDate))) {
+                    executedPdiMonths.add(getMonth(actionDate));
+                }
+            });
+            totalCompleted += executedPdiMonths.size;
+        }
+    }
+    
+    // 4. Update Firestore
+    const adherenceScore = totalRequired > 0 ? (totalCompleted / totalRequired) * 100 : 0;
+    
+    const leaderRankRef = db.collection("leaderRankings").doc(leaderId);
+    
+    const dataToSave = {
+        leaderId: leaderId,
+        leaderName: leaderSnap.data()?.name || "",
+        leaderPhotoURL: leaderSnap.data()?.photoURL || "",
+        adherenceScore: adherenceScore,
+        completedCount: Math.round(totalCompleted),
+        totalCount: Math.round(totalRequired),
+        lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    await leaderRankRef.set(dataToSave, { merge: true });
+
+    functions.logger.log(`Ranking updated for leader ${leaderId}: ${adherenceScore.toFixed(2)}%`);
+}

@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { MoreHorizontal, PlusCircle, Upload, ArrowUpDown, X, Filter, User, ShieldCheck, FileDown, HelpCircle, Copy, Pen, Trash } from "lucide-react";
+import { MoreHorizontal, PlusCircle, Upload, ArrowUpDown, X, Filter, User, ShieldCheck, FileDown, HelpCircle, Copy, Pen, Trash, ExternalLink } from "lucide-react";
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -96,6 +96,8 @@ export default function AdminPage() {
   const firestore = useFirestore();
   const { user, isUserLoading } = useUser();
   const { toast } = useToast();
+  
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
 
   const initialFilters = {
     name: new Set<string>(),
@@ -583,6 +585,34 @@ export default function AdminPage() {
         setSetupLoading(prev => ({...prev, [email]: false}));
     }
   };
+  
+    const handleGoogleAuth = async () => {
+        if (!firebaseApp) {
+            toast({ variant: "destructive", title: "Erro", description: "Firebase não inicializado."});
+            return;
+        }
+        setIsAuthLoading(true);
+        try {
+            const functions = getFunctions(firebaseApp);
+            const googleAuthInit = httpsCallable(functions, 'googleAuthInit');
+            const result: any = await googleAuthInit();
+            const authUrl = result.data.authUrl;
+            if (authUrl) {
+                // Redireciona o usuário para a URL de autorização do Google
+                window.location.href = authUrl;
+            } else {
+                throw new Error("URL de autorização não recebida.");
+            }
+        } catch (error: any) {
+            console.error("Erro ao iniciar autorização com Google:", error);
+            toast({
+                variant: "destructive",
+                title: "Erro de Autorização",
+                description: error.message || "Não foi possível iniciar a conexão com o Google Calendar.",
+            });
+            setIsAuthLoading(false);
+        }
+    };
 
 
   const isLoading = isUserLoading || areEmployeesLoading || loadingReports;
@@ -671,11 +701,12 @@ export default function AdminPage() {
 
   return (
     <>
-    <Tabs defaultValue="employees">
-      <TabsList className="grid w-full grid-cols-5">
+    <Tabs defaultValue="employees" className="w-full">
+      <TabsList className="grid w-full grid-cols-6">
         <TabsTrigger value="employees">Funcionários</TabsTrigger>
         <TabsTrigger value="teams">Equipes</TabsTrigger>
         <TabsTrigger value="reports">Relatórios</TabsTrigger>
+        <TabsTrigger value="integrations">Integrações</TabsTrigger>
         <TabsTrigger value="settings">Geral</TabsTrigger>
         <TabsTrigger value="backup">Backup & Import</TabsTrigger>
       </TabsList>
@@ -965,6 +996,40 @@ export default function AdminPage() {
                 isLoading={isLoading}
             />
         </div>
+      </TabsContent>
+      <TabsContent value="integrations">
+        <Card>
+          <CardHeader>
+            <CardTitle>Integrações</CardTitle>
+            <CardDescription>
+              Conecte a plataforma com outras ferramentas para automatizar fluxos de trabalho.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Card>
+                <CardHeader>
+                    <CardTitle>Google Calendar</CardTitle>
+                    <CardDescription>
+                        Conecte sua conta Google para criar eventos na agenda para as interações agendadas.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="flex items-center justify-between p-4 border rounded-lg">
+                        <div>
+                            <p className="font-medium">Conectar com Google Calendar</p>
+                            <p className="text-sm text-muted-foreground">
+                                Permita que a aplicação crie eventos para 1:1s e PDIs.
+                            </p>
+                        </div>
+                        <Button onClick={handleGoogleAuth} disabled={isAuthLoading}>
+                           {isAuthLoading ? 'Aguarde...' : 'Conectar'}
+                           <ExternalLink className="ml-2 h-4 w-4" />
+                        </Button>
+                    </div>
+                </CardContent>
+            </Card>
+          </CardContent>
+        </Card>
       </TabsContent>
       <TabsContent value="settings">
         <Card>

@@ -65,3 +65,5 @@ export const setAdminClaim = functions.https.onCall(async (data, context) => {
 
 // functions/src/index.ts - Adicionar no final
 export { setupFirstAdmin } from './setup-admin';
+export { updateLeaderRankingOnWrite } from './update-ranking';
+export { googleAuthInit, googleAuthCallback } from './google-auth';

@@ -1,3 +1,4 @@
+
 /**
  * @file Firestore Security Rules for Nina 1.0
  * @description This ruleset enforces a role-based access control model with ownership for employee data.
@@ -63,50 +64,50 @@ service cloud.firestore {
     
     /**
      * @description Checks if the user is the leader of the employee based on the employee's `leaderId` field.
+     *              Crucially, it first checks if the employee document exists.
      */
     function isLeaderOf(employeeId) {
-      return isSignedIn() && get(/databases/$(database)/documents/employees/$(employeeId)).data.leaderId == request.auth.uid;
+      let employeeDoc = get(/databases/$(database)/documents/employees/$(employeeId));
+      return isSignedIn() && exists(/databases/$(database)/documents/employees/$(employeeId)) && employeeDoc.data.leaderId == request.auth.uid;
+    }
+    
+    /**
+     * @description Checks if the user has read access to the employee's subcollection.
+     */
+    function canReadSubcollection(employeeId) {
+        return isAdmin() || isOwner(employeeId) || isLeaderOf(employeeId);
     }
 
     /**
      * @description Defines access rules for the /employees/{employeeId} collection.
      */
     match /employees/{employeeId} {
-      allow get: if isAdmin() || isOwner(employeeId) || isLeaderOf(employeeId);
+      allow get: if canReadSubcollection(employeeId);
       allow list: if isAdmin();
-      allow create: if isOwner(employeeId) && request.auth.uid == employeeId;
-      allow update: if isAdmin() || (isExistingOwner(employeeId) && request.auth.uid == employeeId) || isLeaderOf(employeeId);
+      allow create: if isOwner(employeeId);
+      allow update: if isAdmin() || isExistingOwner(employeeId) || isLeaderOf(employeeId);
       allow delete: if isAdmin();
-    }
 
-    /**
-     * @description Defines access rules for the /employees/{employeeId}/interactions/{interactionId} subcollection.
-     */
-    match /employees/{employeeId}/interactions/{interactionId} {
-          allow read: if isAdmin() || isOwner(employeeId) || isLeaderOf(employeeId);
-      allow create: if isAdmin() || isOwner(employeeId) || isLeaderOf(employeeId);
-      allow update: if isAdmin() || isOwner(employeeId) || isLeaderOf(employeeId);
-      allow delete: if isAdmin();
-    }
+        /**
+         * @description Defines access rules for the /employees/{employeeId}/interactions/{interactionId} subcollection.
+         */
+        match /interactions/{interactionId} {
+            allow read, write: if canReadSubcollection(employeeId);
+        }
 
-    /**
-     * @description Defines access rules for the /employees/{employeeId}/pdiActions/{pdiActionId} subcollection.
-     */
-    match /employees/{employeeId}/pdiActions/{pdiActionId} {
-          allow read: if isAdmin() || isOwner(employeeId) || isLeaderOf(employeeId);
-      allow create: if isAdmin() || isOwner(employeeId) || isLeaderOf(employeeId);
-      allow update: if isAdmin() || isOwner(employeeId) || isLeaderOf(employeeId);
-      allow delete: if isAdmin();
-    }
+        /**
+         * @description Defines access rules for the /employees/{employeeId}/pdiActions/{pdiActionId} subcollection.
+         */
+        match /pdiActions/{pdiActionId} {
+            allow read, write: if canReadSubcollection(employeeId);
+        }
 
-    /**
-     * @description Defines access rules for the /employees/{employeeId}/meetings/{meetingId} subcollection.
-     */
-    match /employees/{employeeId}/meetings/{meetingId} {
-          allow read: if isAdmin() || isOwner(employeeId) || isLeaderOf(employeeId);
-      allow create: if isAdmin() || isOwner(employeeId) || isLeaderOf(employeeId);
-      allow update: if isAdmin() || isOwner(employeeId) || isLeaderOf(employeeId);
-      allow delete: if isAdmin();
+        /**
+         * @description Defines access rules for the /employees/{employeeId}/meetings/{meetingId} subcollection.
+         */
+        match /meetings/{meetingId} {
+            allow read, write: if canReadSubcollection(employeeId);
+        }
     }
 
     /**

@@ -565,7 +565,7 @@ const getInteractionStatus = useCallback((
         </CardContent>
         <CardFooter>
             <p className="text-xs text-muted-foreground">
-                Lembrete de Limites Mensais: <strong>N3 (Alfa/Beta/Senior):</strong> 4/2/1; <strong>Feedback:</strong> 10; <strong>Índice de Risco:</strong> 1; <strong>1:1:</strong> 1. Para registros adicionais, use a interação 'Feedback'.
+                Lembrete de Limites para Registro Mensal: <strong>N3 Individual:</strong> 10; <strong>Feedback:</strong> 10; <strong>Demais tipos:</strong> 1. Para o cálculo de aderência, os limites do N3 são (Alfa: 4, Beta: 2, Senior: 1).
             </p>
         </CardFooter>
       </Card>

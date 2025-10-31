@@ -62,11 +62,7 @@ const initialN3Notes: N3IndividualNotes = {
 
 const adminEmails = ['matheus@3ainvestimentos.com.br', 'lucas.nogueira@3ainvestimentos.com.br','henrqiue.peixoto@3ainvestimentos.com.br'];
 
-const n3Limits = {
-    'Alfa': 4,
-    'Beta': 2,
-    'Senior': 1
-};
+const n3RegistrationLimit = 10;
 
 const feedbackLimit = 10;
 
@@ -239,9 +235,6 @@ export default function IndividualTrackingPage() {
     const now = new Date();
     
     if (interactionType === 'N3 Individual') {
-        const segment = selectedEmployee.segment as keyof typeof n3Limits | undefined;
-        const limit = segment ? n3Limits[segment] : 0;
-        
         const countThisMonth = interactions.filter(
             (interaction) =>
                 interaction.type === 'N3 Individual' &&
@@ -249,11 +242,11 @@ export default function IndividualTrackingPage() {
                 isSameYear(parseISO(interaction.date), now)
         ).length;
 
-        if (countThisMonth >= limit) {
+        if (countThisMonth >= n3RegistrationLimit) {
             toast({
                 variant: "destructive",
                 title: "Limite Atingido",
-                description: `O limite de ${limit} registro(s) de "N3 Individual" para o segmento "${segment}" já foi atingido este mês.`,
+                description: `O limite de ${n3RegistrationLimit} registro(s) de "N3 Individual" já foi atingido este mês.`,
             });
             return;
         }

@@ -47,7 +47,7 @@ import {
 import { CsvUploadDialog } from "@/components/csv-upload-dialog";
 import { InteractionCsvUploadDialog } from "@/components/interaction-csv-upload-dialog";
 import { useState, useMemo, useEffect } from "react";
-import { useCollection, useFirestore, useMemoFirebase, useUser } from "@/firebase";
+import { useCollection, useFirestore, useMemoFirebase, useUser, useFirebase } from "@/firebase";
 import { collection, doc, deleteDoc, updateDoc } from "firebase/firestore";
 import { setDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 import { Skeleton } from "@/components/ui/skeleton";

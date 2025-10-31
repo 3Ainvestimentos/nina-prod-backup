@@ -33,21 +33,26 @@ const SCOPES = [
  * Agora é uma função onRequest para controle total sobre CORS.
  */
 export const googleAuthInit = functions.https.onRequest((req, res) => {
-    corsHandler(req, res, async () => {
+    corsHandler(req, res, () => {
         const uid = req.query.uid as string;
         if (!uid) {
             res.status(400).json({ error: "O UID do usuário é obrigatório." });
             return;
         }
 
-        const authUrl = oauth2Client.generateAuthUrl({
-            access_type: 'offline',
-            scope: SCOPES,
-            state: uid,
-            prompt: 'consent'
-        });
+        try {
+            const authUrl = oauth2Client.generateAuthUrl({
+                access_type: 'offline',
+                scope: SCOPES,
+                state: uid,
+                prompt: 'consent'
+            });
 
-        res.json({ authUrl });
+            res.status(200).json({ authUrl });
+        } catch (error) {
+            console.error("Erro ao gerar a URL de autenticação:", error);
+            res.status(500).json({ error: "Falha ao gerar URL de autorização." });
+        }
     });
 });
 
@@ -70,9 +75,14 @@ export const googleAuthCallback = functions.https.onRequest(async (req, res) => 
         const refreshToken = tokens.refresh_token;
 
         if (!refreshToken) {
-            throw new Error('Refresh token não recebido do Google. O usuário pode já ter autorizado o app.');
+            // Este cenário pode ocorrer se o usuário já autorizou e o Google não envia um novo refresh token.
+            // A interface do usuário deve idealmente já estar atualizada, mas podemos tratar isso graciosamente.
+            console.log(`Refresh token não recebido para o usuário ${uid}. O usuário pode já ter autorizado o app.`);
+            // Podemos fechar a janela pop-up ou redirecionar com uma mensagem de sucesso, pois a autorização já existe.
+            res.send("<script>window.close();</script>");
+            return;
         }
-
+        
         const employeeRef = db.collection('employees').doc(uid);
         await employeeRef.set({
             googleAuth: {
@@ -84,11 +94,11 @@ export const googleAuthCallback = functions.https.onRequest(async (req, res) => 
             }
         }, { merge: true });
 
-        // Redireciona de volta para a página de acompanhamento individual
-        res.redirect(`/dashboard/individual-tracking?auth=success`);
+        // Em vez de redirecionar, enviamos um script para fechar a janela pop-up
+        res.status(200).send("<script>window.close();</script>");
 
     } catch (error) {
         console.error('Erro no callback de autenticação do Google:', error);
-        res.status(500).send('Ocorreu um erro ao autorizar com o Google Calendar.');
+        res.status(500).send('Ocorreu um erro ao autorizar com o Google Calendar. Por favor, feche esta janela e tente novamente.');
     }
 });

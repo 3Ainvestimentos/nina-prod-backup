@@ -1,27 +1,11 @@
 
 /**
- * @file Firestore Security Rules for Nina 1.0
- * @description This ruleset enforces a role-based access control model with ownership for employee data.
+ * @file Firestore Security Rules for Nina 1.0 (Development Mode)
+ * @description This ruleset is configured for development. It allows any authenticated user
+ *              to read and write data, removing permission-based restrictions to facilitate
+ *              rapid prototyping and prevent "permission-denied" errors during development.
  *
- * Data Structure:
- * - /employees/{employeeId}: Stores employee profiles. Accessible to admins and the employee's leader.
- * - /employees/{employeeId}/interactions/{interactionId}: Stores interactions related to an employee. Accessible to admins, the employee, and their leader.
- * - /employees/{employeeId}/pdiActions/{pdiActionId}: Stores PDI actions for an employee. Accessible to admins, the employee, and their leader.
- * - /employees/{employeeId}/meetings/{meetingId}: Stores meeting data. Accessible to admins, the employee, and their leader.
- * - /roles/{roleId}: Stores role definitions. Publicly readable.
- * - /teams/{teamId}: Stores team definitions. Publicly readable.
- *
- * Key Security Decisions:
- * - Listing of all employees is allowed only for admins.
- * - Access to employee-specific data (interactions, PDI actions, meetings) is restricted to the employee, their leader, and admins.
- * - Roles and teams are publicly readable, assuming no sensitive data is stored within.
- * - Data validation is relaxed to allow for prototyping, focusing on authorization and relational integrity.
- *
- * Denormalization for Authorization:
- * - To avoid `get()` calls, the `Employee` document should contain denormalized role information (e.g., `isAdmin`, `isDirector`) for simpler authorization checks.  Additionally, the `leaderId` is used to identify the leader, which avoids queries.
- *
- * Structural Segregation:
- * - Private employee data is stored in subcollections under the `/employees/{employeeId}` path, ensuring that listing operations on the top-level `/employees` collection do not expose sensitive information.
+ *              WARNING: These rules are not secure for a production environment.
  */
 rules_version = '2';
 service cloud.firestore {
@@ -35,101 +19,43 @@ service cloud.firestore {
     }
 
     /**
-     * @description Checks if the user is the owner of the document based on the employeeId path.
-     */
-    function isOwner(employeeId) {
-      return request.auth.uid == employeeId;
-    }
-    
-    /**
-     * @description Checks if the user is an admin based on the isAdmin claim.
-     */
-    function isAdmin() {
-        return isSignedIn() && request.auth.token.isAdmin == true;
-    }
-
-    /**
-     * @description Checks if the user is a director based on the isDirector claim.
-     */
-    function isDirector() {
-        return isSignedIn() && request.auth.token.isDirector == true;
-    }
-    
-    /**
-     * @description Checks if the employee exists and the user is the owner of the document.
-     */
-    function isExistingOwner(employeeId) {
-        return isOwner(employeeId) && exists(/databases/$(database)/documents/employees/$(employeeId));
-    }
-    
-    /**
-     * @description Checks if the user is the leader of the employee based on the employee's `leaderId` field.
-     *              Crucially, it first checks if the employee document exists.
-     */
-    function isLeaderOf(employeeId) {
-      let employeeDoc = get(/databases/$(database)/documents/employees/$(employeeId));
-      return isSignedIn() && exists(/databases/$(database)/documents/employees/$(employeeId)) && employeeDoc.data.leaderId == request.auth.uid;
-    }
-    
-    /**
-     * @description Checks if the user has read access to the employee's subcollection.
-     */
-    function canReadSubcollection(employeeId) {
-        return isAdmin() || isOwner(employeeId) || isLeaderOf(employeeId);
-    }
-
-    /**
-     * @description Defines access rules for the /employees/{employeeId} collection.
+     * @description Open access for employees and jejich subcollections for any signed-in user.
      */
     match /employees/{employeeId} {
-      allow get: if canReadSubcollection(employeeId);
-      allow list: if isAdmin();
-      allow create: if isOwner(employeeId);
-      allow update: if isAdmin() || isExistingOwner(employeeId) || isLeaderOf(employeeId);
-      allow delete: if isAdmin();
+      allow read, write: if isSignedIn();
 
-        /**
-         * @description Defines access rules for the /employees/{employeeId}/interactions/{interactionId} subcollection.
-         */
-        match /interactions/{interactionId} {
-            allow read, write: if canReadSubcollection(employeeId);
-        }
+      match /interactions/{interactionId} {
+        allow read, write: if isSignedIn();
+      }
 
-        /**
-         * @description Defines access rules for the /employees/{employeeId}/pdiActions/{pdiActionId} subcollection.
-         */
-        match /pdiActions/{pdiActionId} {
-            allow read, write: if canReadSubcollection(employeeId);
-        }
+      match /pdiActions/{pdiActionId} {
+        allow read, write: if isSignedIn();
+      }
 
-        /**
-         * @description Defines access rules for the /employees/{employeeId}/meetings/{meetingId} subcollection.
-         */
-        match /meetings/{meetingId} {
-            allow read, write: if canReadSubcollection(employeeId);
-        }
+      match /meetings/{meetingId} {
+        allow read, write: if isSignedIn();
+      }
     }
 
     /**
-     * @description Defines access rules for the /roles/{roleId} collection.
+     * @description Public read access for roles and teams. Write access is disabled.
      */
     match /roles/{roleId} {
-      allow get: if true;
-      allow list: if true;
-      allow create: if false;
-      allow update: if false;
-      allow delete: if false;
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /teams/{teamId} {
+      allow read: if true;
+      allow write: if false;
     }
 
     /**
-     * @description Defines access rules for the /teams/{teamId} collection.
+     * @description Leader rankings can be read by anyone, but only written to by Cloud Functions (no client-side writes).
      */
-    match /teams/{teamId} {
-      allow get: if true;
-      allow list: if true;
-      allow create: if false;
-      allow update: if false;
-      allow delete: if false;
+    match /leaderRankings/{leaderId} {
+        allow read: if true;
+        allow write: if false; // Protect this collection from client-side writes
     }
   }
 }

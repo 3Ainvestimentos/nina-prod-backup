@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { CalendarIcon, PlusCircle } from "lucide-react";
+import { CalendarIcon, PlusCircle, Clock } from "lucide-react";
 import { Timeline } from "@/components/timeline";
 import {
   Dialog,
@@ -36,7 +36,7 @@ import { addDoc, collection, doc, serverTimestamp, setDoc } from "firebase/fires
 import { useToast } from "@/hooks/use-toast";
 import { RiskAssessmentFormDialog } from "@/components/risk-assessment-form-dialog";
 import { Input } from "@/components/ui/input";
-import { isSameMonth, isSameYear, parseISO, format } from "date-fns";
+import { isSameMonth, isSameYear, parseISO, format, setHours, setMinutes, getHours, getMinutes } from "date-fns";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
@@ -428,6 +428,32 @@ export default function IndividualTrackingPage() {
   const handleN3NotesChange = (field: keyof N3IndividualNotes, value: string) => {
     setN3Notes(prev => ({...prev, [field]: value}));
   }
+  
+  const handleDateTimeChange = (date: Date | undefined) => {
+    if (!date) {
+        setNextInteractionDate(undefined);
+        return;
+    }
+    // Preserve existing time if it exists, otherwise default to 00:00
+    const currentHour = nextInteractionDate ? getHours(nextInteractionDate) : 0;
+    const currentMinutes = nextInteractionDate ? getMinutes(nextInteractionDate) : 0;
+    let newDate = setHours(date, currentHour);
+    newDate = setMinutes(newDate, currentMinutes);
+    setNextInteractionDate(newDate);
+  };
+
+  const handleTimeChange = (type: 'hours' | 'minutes', value: string) => {
+      const numericValue = parseInt(value, 10);
+      if (isNaN(numericValue)) return;
+      
+      let date = nextInteractionDate || new Date();
+      if (type === 'hours') {
+          date = setHours(date, numericValue);
+      } else {
+          date = setMinutes(date, numericValue);
+      }
+      setNextInteractionDate(date);
+  };
 
 
   return (
@@ -569,7 +595,7 @@ export default function IndividualTrackingPage() {
                   )}
                    {interactionType === 'N3 Individual' && (
                     <div className="space-y-2">
-                      <Label htmlFor="next-interaction-date">Próxima Interação</Label>
+                      <Label>Próxima Interação</Label>
                       <Popover>
                           <PopoverTrigger asChild>
                               <Button
@@ -581,16 +607,41 @@ export default function IndividualTrackingPage() {
                                   )}
                               >
                                   <CalendarIcon className="mr-2 h-4 w-4" />
-                                  {nextInteractionDate ? format(nextInteractionDate, "PPP") : <span>Escolha uma data</span>}
+                                  {nextInteractionDate ? format(nextInteractionDate, "PPP, HH:mm") : <span>Escolha data e hora</span>}
                               </Button>
                           </PopoverTrigger>
                           <PopoverContent className="w-auto p-0">
                               <Calendar
                                   mode="single"
                                   selected={nextInteractionDate}
-                                  onSelect={setNextInteractionDate}
+                                  onSelect={handleDateTimeChange}
                                   initialFocus
                               />
+                              <div className="p-3 border-t border-border flex items-center gap-2">
+                                <Clock className="h-4 w-4 text-muted-foreground" />
+                                <Label htmlFor="hours" className="sr-only">Horas</Label>
+                                <Input 
+                                    id="hours"
+                                    type="number" 
+                                    min="0" 
+                                    max="23" 
+                                    className="w-16"
+                                    value={nextInteractionDate ? getHours(nextInteractionDate).toString().padStart(2, '0') : "00"}
+                                    onChange={(e) => handleTimeChange('hours', e.target.value)}
+                                />
+                                <span>:</span>
+                                <Label htmlFor="minutes" className="sr-only">Minutos</Label>
+                                <Input 
+                                    id="minutes"
+                                    type="number" 
+                                    min="0" 
+                                    max="59" 
+                                    step="5"
+                                    className="w-16"
+                                    value={nextInteractionDate ? getMinutes(nextInteractionDate).toString().padStart(2, '0') : "00"}
+                                    onChange={(e) => handleTimeChange('minutes', e.target.value)}
+                                />
+                              </div>
                           </PopoverContent>
                       </Popover>
                     </div>
@@ -623,3 +674,5 @@ export default function IndividualTrackingPage() {
     </div>
   );
 }
+
+    

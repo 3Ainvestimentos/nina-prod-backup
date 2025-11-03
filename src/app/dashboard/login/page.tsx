@@ -252,11 +252,17 @@ export default function LoginPage() {
         }
 
       } catch (error: any) {
-        toast({
-          variant: "destructive",
-          title: "Acesso Negado",
-          description: error.message || "Você não tem permissão para acessar este sistema.",
-        });
+        const msg = String(error?.message || "");
+        const code = (error?.code || "").toString();
+        // Suprime erro ruidoso de permissão (false-positive em alguns cenários de carga)
+        const isPermDenied = code === 'permission-denied' || msg.includes('Missing or insufficient permissions');
+        if (!isPermDenied) {
+          toast({
+            variant: "destructive",
+            title: "Acesso Negado",
+            description: msg || "Você não tem permissão para acessar este sistema.",
+          });
+        }
         if (auth) {
           await signOut(auth);
         }

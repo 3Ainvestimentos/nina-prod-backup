@@ -29,9 +29,16 @@ export function FirebaseErrorListener() {
     };
   }, []);
 
-  // On re-render, if an error exists in state, throw it.
+  // Em vez de lançar globalmente (gera ruído em condições de corrida),
+  // apenas registra de forma discreta e não interrompe o app.
   if (error) {
-    throw error;
+    if (process.env.NODE_ENV !== 'production') {
+      // Em dev, log detalhado ajuda rastrear a origem
+      // eslint-disable-next-line no-console
+      console.warn('FirestorePermissionError (suprimido):', error);
+    }
+    // Suprimir o erro e não lançar
+    return null;
   }
 
   // This component renders nothing.

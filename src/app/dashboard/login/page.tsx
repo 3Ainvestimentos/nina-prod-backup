@@ -167,7 +167,8 @@ export default function LoginPage() {
     if (!auth) return;
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({
-      'hd': '3ainvestimentos.com.br'
+      'hd': '3ainvestimentos.com.br',
+      'prompt': 'select_account'
     });
     try {
       await signInWithPopup(auth, provider);
@@ -199,9 +200,23 @@ export default function LoginPage() {
       }
 
       if (adminEmails.includes(user.email)) {
-        // Evita chamar handleGoogleAuth se já está em progresso
-        if (!authInProgressRef.current && !isAuthLoading) {
-          await handleGoogleAuth();
+        // Admins: checar token no employees por e-mail; só abre o Calendar se faltar
+        try {
+          const employeesRef = collection(firestore!, "employees");
+          const qByEmail = query(employeesRef, where("email", "==", user.email));
+          const snap = await getDocs(qByEmail);
+          const doc = snap.docs[0]?.data() as Employee | undefined;
+          const hasToken = !!(doc as any)?.googleAuth?.refreshToken;
+          if (!hasToken) {
+            if (!authInProgressRef.current && !isAuthLoading) {
+              await handleGoogleAuth();
+            }
+          } else {
+            router.push("/dashboard/v2");
+          }
+        } catch (_e) {
+          // Falhou leitura: tenta seguir para dashboard; usuário poderá autorizar depois nas telas
+          router.push("/dashboard/v2");
         }
         setIsVerifying(false);
         return;

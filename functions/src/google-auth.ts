@@ -1,7 +1,7 @@
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 import { google } from "googleapis";
-import * as cors from "cors";
+import cors from "cors"; // ✅ default import
 
 const REGION = process.env.FUNCTIONS_REGION || "us-central1";
 
@@ -47,7 +47,7 @@ function withCors(handler: (req: any, res: any) => void) {
 export const googleAuthInit = functions
   .region(REGION)
   .https.onRequest(
-    withCors((req, res) => {
+    withCors(async (req, res) => {
       const uid = (req.query.uid as string) || "";
       if (!uid) {
         res.status(400).json({ error: "O UID do usuário é obrigatório." });
@@ -55,11 +55,27 @@ export const googleAuthInit = functions
       }
 
       try {
+        // Tenta obter o e-mail do usuário para melhorar UX (login_hint) e restringir domínio (hd)
+        let loginHint: string | undefined;
+        let hostedDomain: string | undefined;
+        try {
+          const user = await admin.auth().getUser(uid);
+          loginHint = user.email || undefined;
+          if (loginHint && loginHint.includes("@")) {
+            hostedDomain = loginHint.split("@")[1];
+          }
+        } catch (_e) {
+          // ignora
+        }
+
         const authUrl = oauth2Client.generateAuthUrl({
           access_type: "offline",
           scope: SCOPES,
           state: uid,
           prompt: "consent",
+          include_granted_scopes: true as any,
+          login_hint: loginHint,
+          hd: hostedDomain,
         });
         res.status(200).json({ authUrl });
       } catch (error) {
@@ -75,49 +91,139 @@ export const googleAuthInit = functions
  */
 export const googleAuthCallback = functions
   .region(REGION)
-  .https.onRequest(async (req, res) => {
-    const code = req.query.code as string;
-    const uid = req.query.state as string;
+  .https.onRequest(
+    withCors(async (req, res) => {
+      const code = req.query.code as string;
+      const uid = req.query.state as string;
 
-    if (!code || !uid) {
-      res.status(400).send("Parâmetros inválidos (código ou estado ausente).");
-      return;
-    }
-
-    try {
-      const { tokens } = await oauth2Client.getToken(code);
-      const refreshToken = tokens.refresh_token;
-
-      if (!refreshToken) {
-        // Usuário já concedeu antes; Google pode não enviar novamente
-        console.log(`Sem refresh_token para ${uid} (provável consent prévio).`);
-        res.send("<script>window.close();</script>");
+      if (!code || !uid) {
+        const errorHtml = `
+          <!DOCTYPE html>
+          <html>
+            <head><title>Erro</title></head>
+            <body>
+              <p>Parâmetros inválidos (código ou estado ausente).</p>
+              <script>
+                try { window.close(); } catch(e) {}
+                setTimeout(() => { try { window.close(); } catch(e) {} }, 1000);
+              </script>
+            </body>
+          </html>
+        `;
+        res.status(400).send(errorHtml);
         return;
       }
 
-      await db
-        .collection("employees")
-        .doc(uid)
-        .set(
-          {
-            googleAuth: {
-              refreshToken,
-              scope: tokens.scope,
-              tokenType: tokens.token_type,
-              expiryDate: tokens.expiry_date,
-              updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            },
-          },
-          { merge: true }
-        );
+      try {
+        const { tokens } = await oauth2Client.getToken(code);
+        const refreshToken = tokens.refresh_token;
 
-      res.status(200).send("<script>window.close();</script>");
-    } catch (error) {
-      console.error("Erro no callback de autenticação do Google:", error);
-      res
-        .status(500)
-        .send(
-          "Ocorreu um erro ao autorizar com o Google Calendar. Por favor, feche esta janela e tente novamente."
-        );
-    }
-  });
+        const successHtml = `
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <title>Autorização Concluída</title>
+              <meta charset="utf-8">
+            </head>
+            <body>
+              <p>Autorização concluída com sucesso! Esta janela será fechada automaticamente.</p>
+              <script>
+                // Tenta fechar imediatamente
+                if (window.opener) {
+                  try {
+                    window.opener.postMessage({ type: 'GOOGLE_AUTH_SUCCESS' }, '*');
+                  } catch(e) {}
+                }
+                
+                // Fecha a janela
+                setTimeout(() => {
+                  try {
+                    window.close();
+                  } catch(e) {
+                    // Se não conseguir fechar (alguns navegadores bloqueiam), mostra mensagem
+                    document.body.innerHTML = '<p>Você pode fechar esta janela agora.</p>';
+                  }
+                }, 500);
+                
+                // Fallback: tenta fechar novamente após 1 segundo
+                setTimeout(() => {
+                  try { window.close(); } catch(e) {}
+                }, 1000);
+              </script>
+            </body>
+          </html>
+        `;
+
+        if (!refreshToken) {
+          console.log(`Sem refresh_token para ${uid} (provável consent prévio).`);
+          res.send(successHtml);
+          return;
+        }
+
+        // Define o payload a ser salvo
+        const payload = {
+          googleAuth: {
+            refreshToken,
+            scope: tokens.scope,
+            tokenType: tokens.token_type,
+            expiryDate: tokens.expiry_date,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          },
+        } as const;
+
+        // Tenta identificar o funcionário pelo e-mail do Google (mais estável que UID)
+        let updatedAnyDoc = false;
+        try {
+          oauth2Client.setCredentials(tokens);
+          const oauth2 = google.oauth2({ version: "v2", auth: oauth2Client });
+          const { data } = await oauth2.userinfo.get();
+          const email = data?.email;
+
+          if (email) {
+            const snaps = await db
+              .collection("employees")
+              .where("email", "==", email)
+              .get();
+
+            if (!snaps.empty) {
+              await Promise.all(
+                snaps.docs.map((doc) =>
+                  db.collection("employees").doc(doc.id).set(payload, { merge: true })
+                )
+              );
+              updatedAnyDoc = true;
+            }
+          }
+        } catch (e) {
+          console.log("[GoogleAuth] Falha ao obter userinfo para mapear por e-mail:", e);
+        }
+
+        // Fallback: se não encontrou pelo e-mail, grava no doc com o UID
+        if (!updatedAnyDoc) {
+          await db.collection("employees").doc(uid).set(payload, { merge: true });
+        }
+
+        res.status(200).send(successHtml);
+      } catch (error) {
+        console.error("Erro no callback de autenticação do Google:", error);
+        const errorHtml = `
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <title>Erro</title>
+              <meta charset="utf-8">
+            </head>
+            <body>
+              <p>Ocorreu um erro ao autorizar com o Google Calendar. Por favor, feche esta janela e tente novamente.</p>
+              <script>
+                setTimeout(() => {
+                  try { window.close(); } catch(e) {}
+                }, 3000);
+              </script>
+            </body>
+          </html>
+        `;
+        res.status(500).send(errorHtml);
+      }
+    })
+  );

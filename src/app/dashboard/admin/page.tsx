@@ -77,7 +77,19 @@ type SortConfig = {
   direction: "ascending" | "descending";
 } | null;
 
+import { useIsConfigAdmin } from "@/hooks/use-is-config-admin";
+
 export default function AdminPage() {
+  // Guard: somente emails autorizados podem acessar a tela de configuração
+  const { isConfigAdmin } = useIsConfigAdmin();
+  if (!isConfigAdmin) {
+    return (
+      <main className="p-6">
+        <h1 className="text-xl font-semibold">Acesso negado</h1>
+        <p className="text-sm text-muted-foreground">Você não tem permissão para acessar esta área.</p>
+      </main>
+    );
+  }
   const [isCsvDialogOpen, setIsCsvDialogOpen] = useState(false);
   const [isInteractionCsvDialogOpen, setIsInteractionCsvDialogOpen] = useState(false);
   const [isEmployeeFormOpen, setIsEmployeeFormOpen] = useState(false);
@@ -162,17 +174,21 @@ export default function AdminPage() {
     const { leaders, directors, admins, uniqueValues, employeesWithoutDiagnosis } = useMemo(() => {
         if (!employees) return { leaders: [], directors: [], admins: [], uniqueValues: { names: [], positions: [], axes: [], areas: [], segments: [], leaders: [], cities: [], roles: [] }, employeesWithoutDiagnosis: [] };
         
-        const names = [...new Set(employees.map(e => e.name).filter(Boolean))].sort();
-        const positions = [...new Set(employees.map(e => e.position).filter(Boolean))].sort();
-        const axes = [...new Set(employees.map(e => e.axis).filter(Boolean))].sort();
-        const areas = [...new Set(employees.map(e => e.area).filter(Boolean))].sort();
-        const segments = [...new Set(employees.map(e => e.segment).filter(Boolean))].sort();
-        const leaderNames = [...new Set(employees.map(e => e.leader).filter(Boolean))].sort();
-        const cities = [...new Set(employees.map(e => e.city).filter(Boolean))].sort();
+        const names = [...new Set(employees.map(e => e.name).filter(Boolean))].sort() as string[];
+        const positions = [...new Set(employees.map(e => e.position).filter(Boolean))].sort() as string[];
+        const axes = [...new Set(employees.map(e => e.axis).filter(Boolean))].sort() as string[];
+        const areas = [...new Set(employees.map(e => e.area).filter(Boolean))].sort() as string[];
+        const segments = [...new Set(employees.map(e => e.segment).filter(Boolean))].sort() as string[];
+        const leaderNames = [...new Set(employees.map(e => e.leader).filter(Boolean))].sort() as string[];
+        const cities = [...new Set(employees.map(e => e.city).filter(Boolean))].sort() as string[];
         const roleValues = [...new Set(employees.map(e => e.role).filter(Boolean))].sort() as Role[];
 
         const leaders = employees.filter(e => e.role === 'Líder' || e.role === 'Diretor');
-        const directors = employees.filter(e => e.isDirector).sort((a,b) => a.name.localeCompare(b.name));
+        const directors = employees.filter(e => e.isDirector).sort((a,b) => {
+          const nameA = a.name || '';
+          const nameB = b.name || '';
+          return nameA.localeCompare(nameB);
+        });
         
         const adminsFromDb = employees.filter(e => e.isAdmin);
         const adminMap = new Map(adminsFromDb.map(a => [a.email, a]));
@@ -194,7 +210,11 @@ export default function AdminPage() {
             }
         });
         
-        const admins = Array.from(adminMap.values()).sort((a,b) => a.name.localeCompare(b.name));
+        const admins = Array.from(adminMap.values()).sort((a,b) => {
+          const nameA = a.name || '';
+          const nameB = b.name || '';
+          return nameA.localeCompare(nameB);
+        });
 
 
         const employeesWithoutDiagnosis = employees.filter(emp => emp.isUnderManagement && !(emp as any).diagnosis);
@@ -315,7 +335,11 @@ export default function AdminPage() {
   
     const sortedMap = new Map<string, Employee[]>();
     sortedLeaderIds.forEach(leaderId => {
-      const sortedEmployees = groupedByLeader.get(leaderId)?.sort((a, b) => a.name.localeCompare(b.name));
+      const sortedEmployees = groupedByLeader.get(leaderId)?.sort((a, b) => {
+        const nameA = a.name || '';
+        const nameB = b.name || '';
+        return nameA.localeCompare(nameB);
+      });
       if (sortedEmployees) {
         sortedMap.set(leaderId, sortedEmployees);
       }

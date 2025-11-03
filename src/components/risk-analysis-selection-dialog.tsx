@@ -74,7 +74,11 @@ export function RiskAnalysisSelectionDialog({
             (filters.position.size === 0 || (employee.position && filters.position.has(employee.position))) &&
             (filters.leader.size === 0 || (employee.leader && filters.leader.has(employee.leader)))
         );
-    }).sort((a,b) => a.name.localeCompare(b.name));
+    }).sort((a,b) => {
+      const nameA = a.name || '';
+      const nameB = b.name || '';
+      return nameA.localeCompare(nameB);
+    });
   }, [allEmployees, filters]);
 
   const handleSelect = (id: string) => {

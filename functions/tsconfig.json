@@ -1,16 +1,17 @@
 {
   "compilerOptions": {
-    "module": "commonjs",
+    "target": "ES2022",
+    "module": "CommonJS",
+    "outDir": "lib",
+    "rootDir": "src",
+    "strict": true,
     "noImplicitReturns": true,
     "noUnusedLocals": true,
-    "outDir": "lib",
+    "esModuleInterop": true,
     "sourceMap": true,
-    "strict": true,
-    "target": "es2017",
-    "esModuleInterop": true
+    "skipLibCheck": true,
+    "noEmitOnError": false
   },
-  "compileOnSave": true,
-  "include": [
-    "src"
-  ]
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules", "lib"]
 }

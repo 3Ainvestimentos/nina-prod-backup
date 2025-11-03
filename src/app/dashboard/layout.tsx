@@ -19,11 +19,12 @@ import Link from "next/link";
 import { LogoutButton } from "@/components/logout-button";
 import { useUser, useCollection, useFirestore, useMemoFirebase } from "@/firebase";
 import { useMemo } from 'react';
+import { useIsConfigAdmin } from "@/hooks/use-is-config-admin";
 import type { Employee } from "@/lib/types";
 import { collection } from "firebase/firestore";
 import { UsageGuideDialog } from "@/components/usage-guide-dialog";
 
-const adminEmails = ['matheus@3ainvestimentos.com.br', 'lucas.nogueira@3ainvestimentos.com.br'];
+// Emails autorizados para a tela de configuração são tratados via useIsConfigAdmin
 
 export default function DashboardLayout({
   children,
@@ -41,32 +42,8 @@ export default function DashboardLayout({
 
   const currentUserEmployee = useMemo(() => {
     if (!user || !employees) return null;
-
-    if (user.email && adminEmails.includes(user.email)) {
-        const employeeData = employees.find(e => e.email === user.email) || {};
-        return {
-            ...employeeData,
-            name: user.displayName || 'Admin',
-            email: user.email,
-            isAdmin: true,
-            isDirector: true,
-            role: 'Líder',
-        } as Employee;
-    }
-
     const employeeData = employees.find(e => e.email === user.email);
-
     if (!employeeData) return null;
-
-    // Enhance permissions for other admins
-    if (employeeData.isAdmin) {
-      return {
-        ...employeeData,
-        role: 'Líder',
-        isDirector: true,
-      };
-    }
-
     return employeeData;
   }, [user, employees]);
 
@@ -80,7 +57,7 @@ export default function DashboardLayout({
         </SidebarContent>
         <SidebarFooter>
             <SidebarMenu>
-                {currentUserEmployee?.isAdmin && (
+                {useIsConfigAdmin().isConfigAdmin && (
                   <SidebarMenuItem>
                       <Link href="/dashboard/admin" className="w-full">
                         <SidebarMenuButton tooltip="Configurações">

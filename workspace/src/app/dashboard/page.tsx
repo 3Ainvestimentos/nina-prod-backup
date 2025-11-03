@@ -288,7 +288,11 @@ export default function LeadershipDashboard() {
 
     // Sort employees within each group by name
     for (const area in grouped) {
-        grouped[area].sort((a, b) => a.name.localeCompare(b.name));
+        grouped[area].sort((a, b) => {
+          const nameA = a.name || '';
+          const nameB = b.name || '';
+          return nameA.localeCompare(nameB);
+        });
     }
     
     // Sort the groups (areas) alphabetically, keeping "Sem Área" last
@@ -305,7 +309,11 @@ export default function LeadershipDashboard() {
     
     return employees
       .filter(e => e.role === 'Líder')
-      .sort((a, b) => a!.name.localeCompare(b!.name));
+      .sort((a, b) => {
+        const nameA = a.name || '';
+        const nameB = b.name || '';
+        return nameA.localeCompare(nameB);
+      });
       
   }, [employees]);
 

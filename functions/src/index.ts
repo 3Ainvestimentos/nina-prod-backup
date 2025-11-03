@@ -1,16 +1,14 @@
+// functions/src/index.ts
 import * as functions from "firebase-functions";
-import * as admin from "firebase-admin";
+import { admin } from "./admin-app"; // ✅ inicialização centralizada
 import { updateLeaderRanking } from "./update-ranking";
 import { createCalendarEvent } from "./calendar-events";
 import { googleAuthInit, googleAuthCallback } from "./google-auth";
+import { migrateGoogleAuthTokens } from "./migrations";
 import { setupFirstAdmin } from "./setup-admin";
 
-// ✅ Região única: usar a já existente no projeto (us-central1)
+// Região única do projeto
 const REGION = process.env.FUNCTIONS_REGION || "us-central1";
-
-if (!admin.apps.length) {
-  admin.initializeApp();
-}
 
 /**
  * Callable: promover admin
@@ -25,8 +23,8 @@ export const setAdminClaim = functions
       );
     }
 
-    const email = data.email;
-    if (typeof email !== "string" || email.length === 0) {
+    const email = data?.email as string;
+    if (typeof email !== "string" || email.trim().length === 0) {
       throw new functions.https.HttpsError("invalid-argument", "O e-mail é obrigatório.");
     }
 
@@ -53,18 +51,24 @@ export const onInteractionCreate = functions
     const { employeeId } = context.params;
     const interactionData = snap.data();
 
+    functions.logger.log("[Interactions] onInteractionCreate disparado", {
+      employeeId,
+      interactionId: context.params.interactionId,
+      hasData: !!interactionData,
+      type: interactionData?.type,
+      nextInteractionDate: interactionData?.nextInteractionDate,
+      authorId: interactionData?.authorId,
+    });
+
     const tasks: Promise<any>[] = [updateLeaderRanking(employeeId)];
-    if (interactionData) {
-      tasks.push(createCalendarEvent(interactionData, employeeId));
-    }
+    if (interactionData) tasks.push(createCalendarEvent(interactionData, employeeId));
 
     try {
       await Promise.all(tasks);
-      functions.logger.log(`Tarefas concluídas para o funcionário ${employeeId}.`);
+      functions.logger.log(`[Interactions] Tarefas concluídas para o funcionário ${employeeId}.`);
     } catch (error) {
-      functions.logger.error(`Erro ao processar tarefas (${employeeId}):`, error);
+      functions.logger.error(`[Interactions] Erro ao processar tarefas (${employeeId}):`, error);
     }
-
     return null;
   });
 
@@ -85,5 +89,5 @@ export const onPdiWrite = functions
     return null;
   });
 
-// Reexporta HTTPs já ajustadas no google-auth.ts
-export { setupFirstAdmin, googleAuthInit, googleAuthCallback };
+// Reexporta as HTTPs
+export { setupFirstAdmin, googleAuthInit, googleAuthCallback, migrateGoogleAuthTokens };

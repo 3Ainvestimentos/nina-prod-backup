@@ -79,7 +79,6 @@ const n3IndividualSchedule = {
     'Senior': 1, // 1 por mês
 };
 
-const adminEmails = ['matheus@3ainvestimentos.com.br', 'lucas.nogueira@3ainvestimentos.com.br'];
 
 
 export default function LeadershipDashboardV2() {
@@ -110,31 +109,8 @@ export default function LeadershipDashboardV2() {
 
   const currentUserEmployee = useMemo(() => {
     if (!user || !employees) return null;
-
-    if (user.email && adminEmails.includes(user.email)) {
-        const employeeData = employees.find(e => e.email === user.email) || {};
-        return {
-            ...employeeData,
-            name: user.displayName || 'Admin',
-            email: user.email,
-            isAdmin: true,
-            isDirector: true,
-            role: 'Líder',
-        } as Employee;
-    }
-
     const employeeData = employees.find(e => e.email === user.email);
-
     if (!employeeData) return null;
-
-    if (employeeData.isAdmin) {
-      return {
-        ...employeeData,
-        role: 'Líder',
-        isDirector: true,
-      };
-    }
-
     return employeeData;
   }, [user, employees]);
 
@@ -426,7 +402,11 @@ const getInteractionStatus = useCallback((
     // Do not sort employees within group if a global sort is active
     if (!sortConfig || (sortConfig.key !== 'name' && sortConfig.key !== 'leader' && sortConfig.key !== 'interactionStatus')) {
       for (const area in grouped) {
-          grouped[area].sort((a, b) => a.name.localeCompare(b.name));
+          grouped[area].sort((a, b) => {
+            const nameA = a.name || '';
+            const nameB = b.name || '';
+            return nameA.localeCompare(nameB);
+          });
       }
     }
     
@@ -457,9 +437,18 @@ const getInteractionStatus = useCallback((
     
     const leaders = employees
       .filter(e => e.role === 'Líder' && (axisFilter === 'all' || e.axis === axisFilter || (axisFilter === 'Comercial' && e.axis === 'Comercial')))
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .sort((a, b) => {
+        const nameA = a.name || '';
+        const nameB = b.name || '';
+        return nameA.localeCompare(nameB);
+      });
     
-    const axes = [...new Set(employees.filter(e => e.role === 'Líder').map(e => e.axis).filter(Boolean))].sort();
+    const axes = [...new Set(
+      employees
+        .filter(e => e.role === 'Líder')
+        .map(e => e.axis)
+        .filter((a): a is string => !!a)
+    )].sort();
       
     return { leadersWithTeams: leaders, uniqueAxes: axes };
   }, [employees, axisFilter]);

@@ -6,21 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Icons } from "@/components/icons";
 import { useRouter } from "next/navigation";
 import { GoogleAuthProvider, signInWithPopup, signOut } from "firebase/auth";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import type { Employee } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
-import { 
-    AlertDialog, 
-    AlertDialogContent, 
-    AlertDialogHeader, 
-    AlertDialogTitle, 
-    AlertDialogDescription, 
-    AlertDialogFooter,
-    AlertDialogAction,
-    AlertDialogCancel
-} from "@/components/ui/alert-dialog";
-import { ExternalLink } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -36,14 +25,31 @@ export default function LoginPage() {
   const { user, isUserLoading } = useUser();
   const { toast } = useToast();
   const [isVerifying, setIsVerifying] = useState(false);
-  const [showAuthModal, setShowAuthModal] = useState(false);
   const [isAuthLoading, setIsAuthLoading] = useState(false);
+  const popupRef = useRef<Window | null>(null);
+  const authInProgressRef = useRef(false);
 
-  const handleGoogleAuth = async () => {
+  const handleGoogleAuth = useCallback(async () => {
+    // Previne múltiplas chamadas simultâneas
+    if (authInProgressRef.current || isAuthLoading) {
+        console.log("Autenticação Google já em progresso, ignorando chamada duplicada.");
+        return;
+    }
+
+    // Se já existe popup aberto, apenas foca nele
+    if (popupRef.current && !popupRef.current.closed) {
+        popupRef.current.focus();
+        return;
+    }
+
+    authInProgressRef.current = true;
+
     if (!user) {
+        authInProgressRef.current = false;
         toast({ variant: "destructive", title: "Erro", description: "Usuário não autenticado." });
         return;
     }
+    
     setIsAuthLoading(true);
     try {
         const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
@@ -61,23 +67,82 @@ export default function LoginPage() {
 
         if (authUrl) {
             const popup = window.open(authUrl, 'google-auth', 'width=520,height=650');
+            popupRef.current = popup;
             
-            if (!popup || popup.closed || typeof popup.closed == 'undefined') {
-                 toast({
+            // Se popup é null imediatamente, está bloqueado
+            if (!popup) {
+                authInProgressRef.current = false;
+                setIsAuthLoading(false);
+                popupRef.current = null;
+                toast({
                     variant: "destructive",
                     title: "Pop-up Bloqueado",
                     description: "Por favor, habilite pop-ups para este site e tente novamente.",
                 });
-                setIsAuthLoading(false);
                 return;
             }
             
-            const timer = setInterval(() => {
-                if (popup.closed) {
+            // Verifica se popup foi fechado imediatamente após abrir (indica bloqueio)
+            setTimeout(() => {
+                try {
+                    if (popup.closed) {
+                        authInProgressRef.current = false;
+                        setIsAuthLoading(false);
+                        popupRef.current = null;
+                        toast({
+                            variant: "destructive",
+                            title: "Pop-up Bloqueado",
+                            description: "Por favor, habilite pop-ups para este site e tente novamente.",
+                        });
+                    }
+                } catch (e) {
+                    // Se não conseguir acessar popup.closed, pode ser problema de cross-origin, mas não é bloqueio
+                    console.log("Não foi possível verificar status do popup (isso é normal)");
+                }
+            }, 500);
+            
+            let timer: NodeJS.Timeout | null = null;
+            let messageHandler: ((event: MessageEvent) => void) | null = null;
+            let cleanedUp = false;
+            
+            const cleanup = () => {
+                if (cleanedUp) return;
+                cleanedUp = true;
+                
+                if (timer) {
                     clearInterval(timer);
-                    setIsAuthLoading(false);
-                    setShowAuthModal(false);
-                    router.push("/dashboard/v2");
+                    timer = null;
+                }
+                if (messageHandler) {
+                    window.removeEventListener('message', messageHandler);
+                    messageHandler = null;
+                }
+                authInProgressRef.current = false;
+                setIsAuthLoading(false);
+                popupRef.current = null;
+            };
+            
+            // Escuta mensagem do popup
+            messageHandler = (event: MessageEvent) => {
+                if (event.data?.type === 'GOOGLE_AUTH_SUCCESS') {
+                    cleanup();
+                    // Aguarda um pouco para garantir que o token foi salvo
+                    setTimeout(() => {
+                        router.push("/dashboard/v2");
+                    }, 1000);
+                }
+            };
+            window.addEventListener('message', messageHandler);
+            
+            // Poll para verificar se o popup foi fechado
+            timer = setInterval(() => {
+                try {
+                    if (popup.closed) {
+                        cleanup();
+                        // Não redireciona automaticamente - apenas limpa
+                    }
+                } catch (e) {
+                    // Ignora erros de cross-origin
                 }
             }, 500);
 
@@ -86,14 +151,16 @@ export default function LoginPage() {
         }
     } catch (error: any) {
         console.error("Erro ao iniciar autorização com Google:", error);
+        authInProgressRef.current = false;
+        setIsAuthLoading(false);
+        popupRef.current = null;
         toast({
             variant: "destructive",
             title: "Erro de Autorização",
             description: error.message || "Não foi possível iniciar a conexão com o Google Calendar.",
         });
-        setIsAuthLoading(false);
     }
-  };
+  }, [user, toast, router, isAuthLoading]);
 
 
   const handleLogin = async () => {
@@ -132,7 +199,10 @@ export default function LoginPage() {
       }
 
       if (adminEmails.includes(user.email)) {
-        setShowAuthModal(true);
+        // Evita chamar handleGoogleAuth se já está em progresso
+        if (!authInProgressRef.current && !isAuthLoading) {
+          await handleGoogleAuth();
+        }
         setIsVerifying(false);
         return;
       }
@@ -155,7 +225,10 @@ export default function LoginPage() {
 
         if (hasAccess) {
             if (needsCalendarAuth) {
-                setShowAuthModal(true);
+                // Evita chamar handleGoogleAuth se já está em progresso
+                if (!authInProgressRef.current && !isAuthLoading) {
+                  await handleGoogleAuth(); // Redirect directly to Google OAuth
+                }
             } else {
                 router.push("/dashboard/v2");
             }
@@ -180,7 +253,7 @@ export default function LoginPage() {
     if (user) {
         verifyAccess();
     }
-  }, [user, isUserLoading, firestore, router, auth, toast, isVerifying]);
+  }, [user, isUserLoading, firestore, router, auth, toast, isVerifying, handleGoogleAuth]);
 
   const isLoading = isUserLoading || isVerifying;
 
@@ -212,32 +285,6 @@ export default function LoginPage() {
               </>
           )}
           </Button>
-          <AlertDialog open={showAuthModal}>
-              <AlertDialogContent>
-                  <AlertDialogHeader>
-                      <AlertDialogTitle>Conectar ao Google Calendar?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                          Para uma melhor experiência e para automatizar o agendamento de interações (como o N3 Individual), a plataforma Nina precisa de permissão para criar eventos na sua agenda do Google. Seus dados não serão compartilhados.
-                      </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                      <AlertDialogCancel onClick={() => {
-                          setShowAuthModal(false);
-                          router.push("/dashboard/v2");
-                      }} disabled={isAuthLoading}>
-                          Pular por agora
-                      </AlertDialogCancel>
-                      <AlertDialogAction onClick={handleGoogleAuth} disabled={isAuthLoading}>
-                          {isAuthLoading ? 'Aguardando autorização...' : (
-                              <>
-                                  <ExternalLink className="mr-2 h-4 w-4" />
-                                  Conectar e Autorizar
-                              </>
-                          )}
-                      </AlertDialogAction>
-                  </AlertDialogFooter>
-              </AlertDialogContent>
-          </AlertDialog>
         </CardContent>
       </Card>
     </main>

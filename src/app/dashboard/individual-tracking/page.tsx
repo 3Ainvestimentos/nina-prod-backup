@@ -145,7 +145,11 @@ export default function IndividualTrackingPage() {
 
   const sortedEmployees = useMemo(() => {
     if (!managedEmployees) return [];
-    return [...managedEmployees].sort((a, b) => a.name.localeCompare(b.name));
+    return [...managedEmployees].sort((a, b) => {
+      const nameA = a.name || '';
+      const nameB = b.name || '';
+      return nameA.localeCompare(nameB);
+    });
   }, [managedEmployees]);
 
   const selectedEmployee = useMemo(() => {

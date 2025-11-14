@@ -5,11 +5,12 @@ import { useAuth, useFirestore, useUser } from "@/firebase";
 import { Button } from "@/components/ui/button";
 import { Icons } from "@/components/icons";
 import { useRouter } from "next/navigation";
-import { GoogleAuthProvider, signInWithPopup, signOut } from "firebase/auth";
+import { signOut } from "firebase/auth";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import type { Employee } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
+import { loginWithGoogle } from "@/firebase/google-login";
 
 const adminEmails = ['matheus@3ainvestimentos.com.br', 'lucas.nogueira@3ainvestimentos.com.br'];
 
@@ -21,8 +22,10 @@ export function LoginButton() {
   const { toast } = useToast();
   const [isVerifying, setIsVerifying] = useState(false);
   const [isAuthLoading, setIsAuthLoading] = useState(false);
+  const [isSigningIn, setIsSigningIn] = useState(false);
   const popupRef = useRef<Window | null>(null);
   const authInProgressRef = useRef(false);
+  const signInInProgressRef = useRef(false);
 
   const handleGoogleAuth = useCallback(async () => {
     // Previne múltiplas chamadas simultâneas
@@ -161,21 +164,24 @@ export function LoginButton() {
 
   const handleLogin = async () => {
     if (!auth) return;
-    const provider = new GoogleAuthProvider();
-    provider.setCustomParameters({
-      'hd': '3ainvestimentos.com.br',
-      'prompt': 'select_account'
-    });
+    if (signInInProgressRef.current) return;
+    signInInProgressRef.current = true;
+    setIsSigningIn(true);
     try {
-      await signInWithPopup(auth, provider);
-      // O useEffect cuidará do redirecionamento após a verificação
-    } catch (error) {
+      const result = await loginWithGoogle(auth, { domain: '3ainvestimentos.com.br' });
+      if (result.status === 'redirect' || result.status === 'cancelled' || result.status === 'ok') {
+        // Sem ação adicional necessária aqui; fluxos tratados externamente
+      }
+    } catch (error: any) {
       console.error("Google sign-in failed", error);
       toast({
         variant: "destructive",
         title: "Erro de Login",
         description: "Falha ao autenticar com o Google.",
       });
+    } finally {
+      signInInProgressRef.current = false;
+      setIsSigningIn(false);
     }
   };
 
@@ -256,7 +262,7 @@ export function LoginButton() {
     }
   }, [user, isUserLoading, firestore, router, auth, toast, isVerifying, handleGoogleAuth]);
 
-  const isLoading = isUserLoading || isVerifying;
+  const isLoading = isUserLoading || isVerifying || isSigningIn;
 
   return (
     <>
@@ -265,6 +271,7 @@ export function LoginButton() {
         variant="outline"
         className="w-full bg-white text-slate-800 hover:bg-white/90"
         disabled={isLoading}
+        aria-busy={isSigningIn}
         >
         {isLoading ? (
             "Verificando..."

@@ -37,6 +37,11 @@
     --sidebar-accent-foreground: 220 10% 10%;
     --sidebar-border: 220 12% 90%;
     --sidebar-ring: 170 60% 50%;
+    --dropdown-bg: #ffffff;
+    --dropdown-border: #e2e8f0;
+    --dropdown-hover: #f8fafc;
+    --dropdown-active: #e2e8f0;
+    --dropdown-text-muted: #64748b;
   }
   .dark {
     --background: 220 20% 5%;
@@ -71,14 +76,86 @@
     --sidebar-accent-foreground: 220 10% 95%;
     --sidebar-border: 220 20% 12%;
     --sidebar-ring: 170 60% 50%;
+    --dropdown-bg: #1e2533;
+    --dropdown-border: #2d3748;
+    --dropdown-hover: #2f3a4d;
+    --dropdown-active: #3f4a63;
+    --dropdown-text-muted: #cbd5f5;
   }
 }
 
 @layer base {
   * {
     @apply border-border;
+    transition-property: background-color, color, border-color;
+    transition-duration: 200ms;
+    transition-timing-function: ease;
   }
   body {
     @apply bg-background text-foreground;
+  }
+
+  .settings-menu {
+    position: absolute;
+    right: 0;
+    top: auto;
+    bottom: calc(100% + 0.5rem);
+    width: 14rem;
+    border-radius: 0.75rem;
+    border: 1px solid var(--dropdown-border);
+    background: var(--dropdown-bg);
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.15);
+    z-index: 50;
+    padding: 0.5rem 0;
+  }
+
+  .settings-menu__header {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--dropdown-text-muted);
+    padding: 0.25rem 1rem 0.5rem;
+    letter-spacing: 0.08em;
+  }
+
+  .settings-menu__group {
+    display: flex;
+    flex-direction: column;
+    padding: 0 0.25rem;
+  }
+
+  .settings-menu__item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font-size: 0.9rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  .settings-menu__item svg {
+    flex-shrink: 0;
+  }
+
+  .settings-menu__item:hover {
+    background: var(--dropdown-hover);
+  }
+
+  .settings-menu__item--active {
+    background: var(--dropdown-active);
+    font-weight: 600;
+  }
+
+  .settings-menu__divider {
+    height: 1px;
+    width: 100%;
+    background: var(--dropdown-border);
+    margin: 0.5rem 0;
   }
 }

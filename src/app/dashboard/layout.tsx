@@ -11,18 +11,16 @@ import {
   SidebarInset,
   SidebarMenu,
   SidebarMenuItem,
-  SidebarMenuButton,
 } from "@/components/ui/sidebar";
 import { PageHeaderController } from "@/components/page-header-controller";
-import { Settings, BookOpen } from "lucide-react";
-import Link from "next/link";
+import { BookOpen } from "lucide-react";
 import { LogoutButton } from "@/components/logout-button";
 import { useUser, useCollection, useFirestore, useMemoFirebase } from "@/firebase";
-import { useMemo } from 'react';
-import { useIsConfigAdmin } from "@/hooks/use-is-config-admin";
+import { useMemo } from "react";
 import type { Employee } from "@/lib/types";
 import { collection } from "firebase/firestore";
 import { UsageGuideDialog } from "@/components/usage-guide-dialog";
+import { SettingsDropdown } from "@/components/settings-dropdown";
 
 // Emails autorizados para a tela de configuração são tratados via useIsConfigAdmin
 
@@ -57,16 +55,9 @@ export default function DashboardLayout({
         </SidebarContent>
         <SidebarFooter>
             <SidebarMenu>
-                {useIsConfigAdmin().isConfigAdmin && (
-                  <SidebarMenuItem>
-                      <Link href="/dashboard/admin" className="w-full">
-                        <SidebarMenuButton tooltip="Configurações">
-                            <Settings />
-                            <span>Configurações</span>
-                        </SidebarMenuButton>
-                      </Link>
-                  </SidebarMenuItem>
-                )}
+                <SidebarMenuItem>
+                  <SettingsDropdown />
+                </SidebarMenuItem>
                 <SidebarMenuItem>
                   <UsageGuideDialog />
                 </SidebarMenuItem>

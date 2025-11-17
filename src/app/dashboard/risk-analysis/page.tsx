@@ -147,27 +147,39 @@ export default function RiskAnalysisPage() {
 
 
   const lineChartData = useMemo(() => {
-    const dateMap = new Map<string, any>();
-    
-    selectedEmployeeIds.forEach(id => {
+    type Latest = { ts: number; score: number };
+    type MonthRow = { key: string; date: string; __latest: Record<string, Latest> };
+
+    const byMonth: Record<string, MonthRow> = {};
+
+    selectedEmployeeIds.forEach((id) => {
       const employeeInteractions = interactions[id] || [];
       employeeInteractions
-        .filter(int => int.type === 'Índice de Risco' && typeof int.riskScore === 'number')
-        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-        .forEach(int => {
-          const date = new Date(int.date).toLocaleDateString('pt-BR');
-          if (!dateMap.has(date)) {
-            dateMap.set(date, { date });
+        .filter((int) => int.type === "Índice de Risco" && typeof int.riskScore === "number")
+        .forEach((int) => {
+          const dt = new Date(int.date);
+          const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`; // yyyy-MM para ordenação
+          const monthAbbr = dt.toLocaleString("pt-BR", { month: "short" }).replace(".", "");
+          const label = `${monthAbbr}/${String(dt.getFullYear()).slice(-2)}`; // MMM/yy
+          if (!byMonth[key]) byMonth[key] = { key, date: label, __latest: {} };
+          const ts = dt.getTime();
+          const prev = byMonth[key].__latest[id];
+          if (!prev || ts > prev.ts) {
+            byMonth[key].__latest[id] = { ts, score: Number(int.riskScore) };
           }
-          dateMap.get(date)[id] = int.riskScore;
         });
     });
 
-    return Array.from(dateMap.values()).sort((a,b) => {
-        const dateA = a.date.split('/').reverse().join('-');
-        const dateB = b.date.split('/').reverse().join('-');
-        return new Date(dateA).getTime() - new Date(dateB).getTime();
-    });
+    return Object.values(byMonth)
+      .sort((a, b) => a.key.localeCompare(b.key))
+      .map((row) => {
+        const out: Record<string, number | string> = { date: row.date };
+        for (const id of selectedEmployeeIds) {
+          const rec = row.__latest[id];
+          if (rec) out[id] = rec.score;
+        }
+        return out;
+      });
   }, [interactions, selectedEmployeeIds]);
 
   const lineChartConfig = useMemo(() => {
@@ -291,9 +303,9 @@ export default function RiskAnalysisPage() {
             <CardContent className="flex-1 pb-0">
               {isLoading ? ( <Skeleton className="h-full w-full" /> ) : selectedEmployees.length > 0 ? (
                   <ChartContainer config={lineChartConfig} className="w-full h-full min-h-[250px]">
-                    <LineChart data={lineChartData} margin={{ top: 5, right: 20, left: -10, bottom: 5 }}>
+                    <LineChart data={lineChartData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <XAxis dataKey="date" tickMargin={10} />
+                        <XAxis dataKey="date" tickMargin={10} padding={{ left: 12, right: 12 }} />
                         <YAxis />
                         <ChartTooltip content={<ChartTooltipContent />} />
                         <Legend />
@@ -305,7 +317,8 @@ export default function RiskAnalysisPage() {
                                 stroke={lineChartConfig[id]?.color || chartColors[index % chartColors.length]} 
                                 name={employees?.find(e => e.id === id)?.name}
                                 strokeWidth={2}
-                                dot={{ r: 4 }}
+                                dot={false}
+                                activeDot={{ r: 4 }}
                                 connectNulls
                             />
                         ))}

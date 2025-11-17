@@ -6,6 +6,7 @@ import {
   Users,
   Calendar,
   ShieldAlert,
+  ChevronDown,
 } from "lucide-react";
 import { formatDate, cn } from "@/lib/utils";
 import { Skeleton } from "./ui/skeleton";
@@ -16,6 +17,7 @@ import {
     AccordionTrigger,
   } from "@/components/ui/accordion"
 import { Separator } from "./ui/separator";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
 const interactionIcons: Record<Interaction["type"], React.ReactNode> = {
   "1:1": <Calendar className="h-4 w-4" />,
@@ -90,6 +92,73 @@ const OneOnOneDetails = ({ notes }: { notes: OneOnOneNotes }) => (
     return notes && (typeof notes.captacao !== 'undefined' || typeof notes.esforcos !== 'undefined');
   }
   
+  // Função para agrupar interações por mês
+  function groupByMonth(interactions: Interaction[]) {
+    const groups = new Map<string, { key: string; label: string; interactions: Interaction[] }>();
+    
+    interactions.forEach(interaction => {
+      if (!interaction.date) return;
+      const date = new Date(interaction.date);
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const monthName = date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+      const capitalizedMonth = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+      
+      if (!groups.has(key)) {
+        groups.set(key, { key, label: capitalizedMonth, interactions: [] });
+      }
+      groups.get(key)!.interactions.push(interaction);
+    });
+    
+    return Array.from(groups.values())
+      .sort((a, b) => b.key.localeCompare(a.key))
+      .map(group => ({
+        ...group,
+        interactions: group.interactions.sort((a, b) => 
+          (b.date ? new Date(b.date).getTime() : 0) - (a.date ? new Date(a.date).getTime() : 0)
+        )
+      }));
+  }
+
+  // Componente para renderizar uma interação individual
+  const InteractionItem = ({ item }: { item: Interaction }) => (
+    <div className="relative flex items-start gap-4">
+      <div className="flex h-6 w-6 items-center justify-center rounded-full bg-secondary z-10">
+        <span className={cn("flex h-6 w-6 items-center justify-center rounded-full bg-muted text-foreground", item.type === 'Índice de Risco' && "text-destructive")}>
+            {item.type ? interactionIcons[item.type] : null}
+        </span>
+      </div>
+      <div className="flex-1 pt-0.5">
+        <div className="flex justify-between items-center">
+          <p className="text-sm font-medium">{item.type}</p>
+          {item.type === 'Índice de Risco' && typeof item.riskScore === 'number' && (
+            <p className="text-sm font-bold">
+              Pontuação: {item.riskScore}
+            </p>
+          )}
+        </div>
+        <div className="flex items-center text-xs text-muted-foreground gap-2">
+            <span>{item.date ? formatDate(item.date) : 'Data indisponível'}</span>
+            {item.source && (
+                <>
+                    <span className="text-muted-foreground/50">|</span>
+                    <span>Origem: {item.source}</span>
+                </>
+            )}
+        </div>
+        <div className="mt-2 text-sm">
+            {typeof item.notes === 'string' && item.type === 'Feedback' ? (
+                 <p className="whitespace-pre-wrap">{item.notes}</p>
+            ) : typeof item.notes === 'string' && item.type === 'Índice de Risco' ? (
+                <RiskAssessmentDetails notes={item.notes} />
+            ) : item.type === '1:1' && item.notes ? (
+                <OneOnOneDetails notes={item.notes as OneOnOneNotes} />
+            ) : item.type === 'N3 Individual' && isN3IndividualNotes(item.notes) ? (
+                <N3IndividualDetails notes={item.notes as N3IndividualNotes} />
+            ) : null}
+        </div>
+      </div>
+    </div>
+  );
 
 export function Timeline({ interactions, isLoading }: { interactions: Interaction[]; isLoading: boolean }) {
   if (isLoading) {
@@ -113,54 +182,47 @@ export function Timeline({ interactions, isLoading }: { interactions: Interactio
     return <p className="text-center text-sm text-muted-foreground py-8">Nenhuma interação registrada para este colaborador.</p>
   }
 
-  const sortedInteractions = [...interactions].sort((a,b) => {
-    const dateA = a.date ? new Date(a.date).getTime() : 0;
-    const dateB = b.date ? new Date(b.date).getTime() : 0;
-    return dateB - dateA;
-  });
+  const monthGroups = groupByMonth(interactions);
+  
+  // Determinar o mês mais recente (primeiro grupo) para expandir por padrão
+  const defaultOpenMonth = monthGroups.length > 0 ? [monthGroups[0].key] : [];
   
   return (
-    <div className="relative space-y-6">
-      <div className="absolute left-3 top-3 h-full w-0.5 bg-border" aria-hidden="true" />
-      {sortedInteractions.map((item) => (
-        <div key={item.id} className="relative flex items-start gap-4">
-          <div className="flex h-6 w-6 items-center justify-center rounded-full bg-secondary z-10">
-            <span className={cn("flex h-6 w-6 items-center justify-center rounded-full bg-muted text-foreground", item.type === 'Índice de Risco' && "text-destructive")}>
-                {item.type ? interactionIcons[item.type] : null}
-            </span>
-          </div>
-          <div className="flex-1 pt-0.5">
-            <div className="flex justify-between items-center">
-              <p className="text-sm font-medium">{item.type}</p>
-              {item.type === 'Índice de Risco' && typeof item.riskScore === 'number' && (
-                <p className="text-sm font-bold">
-                  Pontuação: {item.riskScore}
-                </p>
-              )}
-            </div>
-            <div className="flex items-center text-xs text-muted-foreground gap-2">
-                <span>{item.date ? formatDate(item.date) : 'Data indisponível'}</span>
-                {item.source && (
-                    <>
-                        <span className="text-muted-foreground/50">|</span>
-                        <span>Origem: {item.source}</span>
-                    </>
-                )}
-            </div>
-            <div className="mt-2 text-sm">
-                {typeof item.notes === 'string' && item.type === 'Feedback' ? (
-                     <p className="whitespace-pre-wrap">{item.notes}</p>
-                ) : typeof item.notes === 'string' && item.type === 'Índice de Risco' ? (
-                    <RiskAssessmentDetails notes={item.notes} />
-                ) : item.type === '1:1' && item.notes ? (
-                    <OneOnOneDetails notes={item.notes as OneOnOneNotes} />
-                ) : item.type === 'N3 Individual' && isN3IndividualNotes(item.notes) ? (
-                    <N3IndividualDetails notes={item.notes as N3IndividualNotes} />
-                ) : null}
-            </div>
-          </div>
-        </div>
-      ))}
+    <div className="space-y-4">
+      <Accordion type="multiple" defaultValue={defaultOpenMonth} className="w-full space-y-4">
+        {monthGroups.map((group) => (
+          <AccordionItem key={group.key} value={group.key} className="border rounded-lg">
+            <Card>
+              <CardHeader className="p-0">
+                <AccordionTrigger className="px-4 py-3 hover:no-underline [&[data-state=open]>div>svg]:rotate-180">
+                  <div className="flex items-center justify-between w-full pr-4">
+                    <div className="flex items-center gap-3">
+                      <Calendar className="h-5 w-5 text-muted-foreground" />
+                      <span className="font-semibold text-base">{group.label}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-muted-foreground font-normal">
+                        {group.interactions.length} {group.interactions.length === 1 ? 'interação' : 'interações'}
+                      </span>
+                      <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
+                    </div>
+                  </div>
+                </AccordionTrigger>
+              </CardHeader>
+              <AccordionContent className="px-4 pb-4 pt-2">
+                <CardContent className="p-0">
+                  <div className="relative space-y-6">
+                    <div className="absolute left-3 top-3 h-[calc(100%-1.5rem)] w-0.5 bg-border" aria-hidden="true" />
+                    {group.interactions.map((item) => (
+                      <InteractionItem key={item.id} item={item} />
+                    ))}
+                  </div>
+                </CardContent>
+              </AccordionContent>
+            </Card>
+          </AccordionItem>
+        ))}
+      </Accordion>
     </div>
   );
 }

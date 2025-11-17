@@ -43,6 +43,24 @@ const OneOnOneDetails = ({ notes }: { notes: OneOnOneNotes }) => (
     </Accordion>
   );
 
+  const formatCurrency = (value: string | number | undefined) => {
+    if (!value && value !== 0) return "-";
+    const num = typeof value === "string" ? parseFloat(value.replace(/[^\d,.-]/g, '').replace(',', '.')) : value;
+    if (Number.isNaN(num)) return "-";
+    return num.toLocaleString("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+      minimumFractionDigits: 2,
+    });
+  };
+  
+  const formatPercentage = (value: string | number | undefined) => {
+    if (!value && value !== 0) return "-";
+    const num = typeof value === "string" ? parseFloat(value.replace(',', '.')) : value;
+    if (Number.isNaN(num)) return "-";
+    return `${num.toFixed(2).replace(".", ",")}%`;
+  };
+
   const N3IndividualDetails = ({ notes }: { notes: N3IndividualNotes }) => (
     <Accordion type="single" collapsible className="w-full">
       <AccordionItem value="item-1">
@@ -51,18 +69,18 @@ const OneOnOneDetails = ({ notes }: { notes: OneOnOneNotes }) => (
             <div className="space-y-4 text-sm text-foreground/90 p-2">
                 <div>
                     <h4 className="font-semibold mb-2">Indicadores Principais</h4>
-                    <div className="grid grid-cols-3 gap-4 text-center">
-                        <div>
-                            <p className="text-xs text-muted-foreground">Captação</p>
-                            <p className="font-mono">{notes.captacao || '-'}</p>
+                    <div className="flex flex-wrap gap-x-6 gap-y-2">
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">Captação:</span>
+                            <span className="font-mono font-medium">{formatCurrency(notes.captacao)}</span>
                         </div>
-                        <div>
-                            <p className="text-xs text-muted-foreground">Churn PF</p>
-                            <p className="font-mono">{notes.churnPF || '-'}</p>
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">Churn PF:</span>
+                            <span className="font-mono font-medium">{formatPercentage(notes.churnPF)}</span>
                         </div>
-                        <div>
-                            <p className="text-xs text-muted-foreground">ROA</p>
-                            <p className="font-mono">{notes.roa || '-'}</p>
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">ROA:</span>
+                            <span className="font-mono font-medium">{formatPercentage(notes.roa)}</span>
                         </div>
                     </div>
                 </div>
@@ -128,13 +146,8 @@ const OneOnOneDetails = ({ notes }: { notes: OneOnOneNotes }) => (
         </span>
       </div>
       <div className="flex-1 pt-0.5">
-        <div className="flex justify-between items-center">
+        <div className="flex items-center gap-3">
           <p className="text-sm font-medium">{item.type}</p>
-          {item.type === 'Índice de Risco' && typeof item.riskScore === 'number' && (
-            <p className="text-sm font-bold">
-              Pontuação: {item.riskScore}
-            </p>
-          )}
         </div>
         <div className="flex items-center text-xs text-muted-foreground gap-2">
             <span>{item.date ? formatDate(item.date) : 'Data indisponível'}</span>
@@ -145,6 +158,11 @@ const OneOnOneDetails = ({ notes }: { notes: OneOnOneNotes }) => (
                 </>
             )}
         </div>
+        {item.type === 'Índice de Risco' && typeof item.riskScore === 'number' && (
+            <div className="text-xs font-bold text-foreground mt-2">
+              Pontuação: {item.riskScore}
+            </div>
+        )}
         <div className="mt-2 text-sm">
             {typeof item.notes === 'string' && item.type === 'Feedback' ? (
                  <p className="whitespace-pre-wrap">{item.notes}</p>

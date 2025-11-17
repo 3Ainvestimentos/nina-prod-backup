@@ -87,9 +87,6 @@
 @layer base {
   * {
     @apply border-border;
-    transition-property: background-color, color, border-color;
-    transition-duration: 200ms;
-    transition-timing-function: ease;
   }
   body {
     @apply bg-background text-foreground;

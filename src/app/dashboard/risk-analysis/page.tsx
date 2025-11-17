@@ -251,16 +251,17 @@ export default function RiskAnalysisPage() {
                         accessibilityLayer
                         data={barChartData}
                         layout="vertical"
-                        margin={{ left: 10, right: 30 }}
+                        margin={{ left: 30, right: 30, bottom: 30 }}
                     >
                       <CartesianGrid horizontal={false} />
                       <YAxis
                         dataKey="name"
                         type="category"
                         tickLine={false}
-                        tickMargin={10}
+                        tickMargin={5}
                         axisLine={false}
-                        tick={{ fill: "hsl(var(--foreground))" }}
+                        tick={{ fill: "hsl(var(--foreground))", fontSize: 10 }}
+                        width={70}
                       />
                        <XAxis dataKey="risk" type="number" domain={[-10, 10]} />
                       <ChartTooltip
@@ -277,10 +278,10 @@ export default function RiskAnalysisPage() {
                           strokeDasharray="3 3" 
                           label={{ 
                             value: "Risco Alto", 
-                            position: "insideTop", 
+                            position: "bottom", 
                             fill: "hsl(var(--muted-foreground))",
                             fontSize: 10,
-                            dy: -5,
+                            offset: 20,
                           }}
                         />
                       <Bar dataKey="risk" name="Índice de Risco" radius={4} />

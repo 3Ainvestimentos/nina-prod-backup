@@ -203,6 +203,42 @@ export default function RiskAnalysisPage() {
   
   const isLoading = areEmployeesLoading || loadingInteractions;
 
+  // State para controlar qual linha está em hover
+  const [hoveredLineId, setHoveredLineId] = React.useState<string | null>(null);
+
+  // Tooltip customizado para mostrar apenas a linha sob o cursor
+  const CustomLineTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload || !payload.length) return null;
+    
+    // Filtra apenas itens com valor (remove undefined/null)
+    let validPayload = payload.filter((item: any) => item.value != null);
+    
+    // Se há uma linha específica em hover, mostra apenas ela
+    if (hoveredLineId) {
+      validPayload = validPayload.filter((item: any) => item.dataKey === hoveredLineId);
+    }
+    
+    if (validPayload.length === 0) return null;
+    
+    return (
+      <div className="rounded-lg border bg-background px-2 py-1.5 shadow-md text-xs">
+        <p className="text-[10px] text-muted-foreground mb-0.5">{label}</p>
+        <div className="space-y-0.5">
+          {validPayload.map((item: any, index: number) => (
+            <div key={index} className="flex items-center gap-1.5">
+              <div 
+                className="w-1.5 h-1.5 rounded-full" 
+                style={{ backgroundColor: item.stroke || item.color }}
+              />
+              <span className="text-xs font-medium truncate max-w-[120px]">{item.name}</span>
+              <span className="text-xs font-bold ml-auto">{item.value}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col h-full space-y-6">
         <Card>
@@ -308,7 +344,7 @@ export default function RiskAnalysisPage() {
                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
                         <XAxis dataKey="date" tickMargin={10} padding={{ left: 12, right: 12 }} />
                         <YAxis />
-                        <ChartTooltip content={<ChartTooltipContent />} />
+                        <ChartTooltip content={<CustomLineTooltip />} />
                         <Legend />
                         {selectedEmployeeIds.map((id, index) => (
                             <Line 
@@ -319,8 +355,10 @@ export default function RiskAnalysisPage() {
                                 name={employees?.find(e => e.id === id)?.name}
                                 strokeWidth={2}
                                 dot={false}
-                                activeDot={{ r: 4 }}
+                                activeDot={{ r: 6 }}
                                 connectNulls
+                                onMouseEnter={() => setHoveredLineId(id)}
+                                onMouseLeave={() => setHoveredLineId(null)}
                             />
                         ))}
                     </LineChart>

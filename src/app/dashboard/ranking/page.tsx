@@ -20,7 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
-import { Crown, Medal, Trophy, RefreshCw } from "lucide-react";
+import { Crown, Medal, Trophy, RefreshCw, Info } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -29,12 +29,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 
 interface LeaderRanking extends Employee {
   adherenceScore: number;
   completedCount: number;
   totalCount: number;
+  bonusPercentage: number;
+  totalScore: number;
 }
 
 const n3IndividualSchedule = {
@@ -245,23 +248,48 @@ export default function RankingPage() {
   
       const adherenceScore = totalRequired > 0 ? (totalCompleted / totalRequired) * 100 : 0;
       
+      // 🎯 BÔNUS: A cada 10 interações completadas = +3%
+      const bonusPercentage = Math.floor(totalCompleted / 10) * 3;
+      const totalScore = adherenceScore + bonusPercentage;
+      
+      console.log(`📊 [RANKING] ${leader.name}: ${adherenceScore.toFixed(0)}% + ${bonusPercentage}% = ${totalScore.toFixed(0)}%`);
+      
       return {
         ...leader,
-        adherenceScore,
+        adherenceScore: Number(adherenceScore.toFixed(2)),
+        bonusPercentage: Number(bonusPercentage),
+        totalScore: Number(totalScore.toFixed(2)),
         completedCount: Math.round(totalCompleted),
         totalCount: Math.round(totalRequired),
       };
-    }).sort((a, b) => b.adherenceScore - a.adherenceScore);
+    }).sort((a, b) => {
+      // Ordenar por score total (com bônus), depois por aderência como desempate
+      if (Math.abs(b.totalScore - a.totalScore) < 0.01) {
+        return b.adherenceScore - a.adherenceScore;
+      }
+      return b.totalScore - a.totalScore;
+    });
   
     return { leaderRankings: rankings, uniqueAxes: axes };
   
   }, [employees, interactions, pdiActionsMap, dateRange, loadingData]);
   
   const filteredLeaderRankings = useMemo(() => {
-    if (axisFilter === "all") {
-        return leaderRankings;
-    }
-    return leaderRankings.filter(leader => leader.axis === axisFilter);
+    const filtered = axisFilter === "all" 
+      ? leaderRankings 
+      : leaderRankings.filter(leader => leader.axis === axisFilter);
+    
+    // Garantir que está ordenado por totalScore
+    const sorted = [...filtered].sort((a, b) => {
+      if (Math.abs(b.totalScore - a.totalScore) < 0.01) {
+        return b.adherenceScore - a.adherenceScore;
+      }
+      return b.totalScore - a.totalScore;
+    });
+    
+    console.log('🏆 [RANKING] Top 3:', sorted.slice(0, 3).map(l => `${l.name}: ${l.totalScore.toFixed(0)}%`));
+    
+    return sorted;
   }, [leaderRankings, axisFilter]);
 
 
@@ -288,9 +316,30 @@ export default function RankingPage() {
       <CardHeader>
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <CardTitle>Índice de Aderência</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              Índice de Aderência
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    <p className="font-semibold mb-1">Como funciona:</p>
+                    <p className="text-xs mb-2">
+                      • <span className="text-green-600">Verde</span>: Aderência às interações obrigatórias
+                    </p>
+                    <p className="text-xs mb-2">
+                      • <span className="text-red-600">Vermelho</span>: Bônus (+3% a cada 10 interações)
+                    </p>
+                    <p className="text-xs">
+                      O ranking é ordenado pelo score total (aderência + bônus)
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </CardTitle>
             <CardDescription>
-              Percentual de interações anuais realizadas por cada líder com sua equipe.
+              Percentual de interações realizadas + bônus por volume. A cada 10 interações completadas, o líder ganha +3% extra.
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
@@ -346,13 +395,38 @@ export default function RankingPage() {
                             <AvatarFallback>{getInitials(leader.name)}</AvatarFallback>
                         </Avatar>
                         <div className="flex-1">
-                            <div className="flex justify-between items-baseline mb-1">
+                            <div className="flex justify-between items-baseline mb-2">
                                 <span className="font-medium">{leader.name}</span>
                                 <span className="text-sm font-semibold text-foreground">
                                     {leader.adherenceScore.toFixed(0)}%
+                                    {leader.bonusPercentage > 0 && (
+                                        <>
+                                            <span className="text-red-600"> + {leader.bonusPercentage}%</span>
+                                            <span className="text-muted-foreground"> = {leader.totalScore.toFixed(0)}%</span>
+                                        </>
+                                    )}
                                 </span>
                             </div>
-                            <Progress value={leader.adherenceScore} className="h-3"/>
+                            
+                            {/* Barras de Progresso Empilhadas */}
+                            <div className="relative h-3 bg-secondary rounded-full overflow-hidden">
+                                {/* Barra Verde (Aderência) */}
+                                <div
+                                    className="absolute top-0 left-0 h-full bg-green-600 transition-all"
+                                    style={{ width: `${Math.min(leader.adherenceScore, 100)}%` }}
+                                />
+                                {/* Barra Vermelha (Bônus) */}
+                                {leader.bonusPercentage > 0 && (
+                                    <div
+                                        className="absolute top-0 h-full bg-red-600 transition-all"
+                                        style={{ 
+                                            left: `${Math.min(leader.adherenceScore, 100)}%`,
+                                            width: `${Math.min(leader.bonusPercentage, 100 - leader.adherenceScore)}%` 
+                                        }}
+                                    />
+                                )}
+                            </div>
+                            
                             <div className="text-right text-xs text-muted-foreground mt-1">
                                 {leader.completedCount} de {leader.totalCount} interações
                             </div>

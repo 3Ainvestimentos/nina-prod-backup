@@ -21,6 +21,7 @@ import type { Employee } from "@/lib/types";
 import { collection } from "firebase/firestore";
 import { UsageGuideDialog } from "@/components/usage-guide-dialog";
 import { SettingsDropdown } from "@/components/settings-dropdown";
+import { usePreloadRanking } from "@/hooks/use-preload-ranking";
 
 // Emails autorizados para a tela de configuração são tratados via useIsConfigAdmin
 
@@ -44,6 +45,9 @@ export default function DashboardLayout({
     if (!employeeData) return null;
     return employeeData;
   }, [user, employees]);
+
+  // 🚀 Pré-carregar dados de ranking em background
+  usePreloadRanking(employees);
 
   return (
     <SidebarProvider>

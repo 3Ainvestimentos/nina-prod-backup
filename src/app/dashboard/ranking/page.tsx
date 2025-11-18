@@ -7,6 +7,7 @@ import { useCollection, useFirestore, useMemoFirebase } from "@/firebase";
 import { collection, getDocs, query } from "firebase/firestore";
 import { isWithinInterval, differenceInMonths, startOfMonth, endOfMonth, getMonth, getYear, parseISO } from "date-fns";
 import { DateRange } from "react-day-picker";
+import { useRankingCache } from "@/hooks/use-ranking-cache";
 
 import {
   Card,
@@ -15,10 +16,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
-import { Crown, Medal, Trophy } from "lucide-react";
+import { Crown, Medal, Trophy, RefreshCw } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -56,6 +58,16 @@ export default function RankingPage() {
     to: endOfMonth(new Date()),
   });
 
+  const { cachedData, saveCache, hasFreshCache, clearCache } = useRankingCache();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  
+  const handleRefreshCache = async () => {
+    console.log('🔄 [RANKING] Forçando atualização de dados...');
+    setIsRefreshing(true);
+    clearCache();
+    // O useEffect vai recarregar automaticamente
+    setTimeout(() => setIsRefreshing(false), 1000);
+  };
 
   const employeesCollection = useMemoFirebase(
     () => (firestore ? collection(firestore, "employees") : null),
@@ -66,42 +78,83 @@ export default function RankingPage() {
   const [interactions, setInteractions] = useState<Map<string, Interaction[]>>(new Map());
   const [pdiActionsMap, setPdiActionsMap] = useState<Map<string, PDIAction[]>>(new Map());
   const [loadingData, setLoadingData] = useState(true);
+  
+  // Usar cache se disponível
+  useEffect(() => {
+    if (cachedData && hasFreshCache) {
+      console.log('⚡ [RANKING] Usando dados do cache');
+      setInteractions(cachedData.interactions);
+      setPdiActionsMap(cachedData.pdiActions);
+      setLoadingData(false);
+    }
+  }, [cachedData, hasFreshCache]);
 
   useEffect(() => {
     const fetchAllData = async () => {
       if (!firestore || !employees) return;
+      
+      // Se já tem cache válido E não está forçando refresh, não recarregar
+      if (hasFreshCache && !isRefreshing) {
+        console.log('⚡ [RANKING] Usando cache, pulando fetch');
+        return;
+      }
 
+      console.time('⚡ [RANKING] Carregamento de dados');
       setLoadingData(true);
+      
       const allManagedEmployeeIds = employees
         .filter(e => e.isUnderManagement)
         .map(e => e.id);
 
-      const interactionsMap = new Map<string, Interaction[]>();
-      const pdiMap = new Map<string, PDIAction[]>();
+      console.log(`📊 [RANKING] Carregando dados de ${allManagedEmployeeIds.length} colaboradores em paralelo...`);
 
-      for (const id of allManagedEmployeeIds) {
-        const interactionsQuery = query(collection(firestore, "employees", id, "interactions"));
-        const pdiActionsQuery = query(collection(firestore, "employees", id, "pdiActions"));
+      try {
+        // 🚀 OTIMIZAÇÃO: Fazer TODAS as requisições em PARALELO
+        const allPromises = allManagedEmployeeIds.map(async (id) => {
+          const interactionsQuery = query(collection(firestore, "employees", id, "interactions"));
+          const pdiActionsQuery = query(collection(firestore, "employees", id, "pdiActions"));
+          
+          const [interactionsSnapshot, pdiActionsSnapshot] = await Promise.all([
+            getDocs(interactionsQuery),
+            getDocs(pdiActionsQuery)
+          ]);
+
+          return {
+            id,
+            interactions: interactionsSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }) as Interaction),
+            pdiActions: pdiActionsSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }) as PDIAction),
+          };
+        });
+
+        // Aguarda TODAS as requisições em paralelo
+        const results = await Promise.all(allPromises);
+
+        // Constrói os mapas
+        const interactionsMap = new Map<string, Interaction[]>();
+        const pdiMap = new Map<string, PDIAction[]>();
+
+        results.forEach(({ id, interactions, pdiActions }) => {
+          interactionsMap.set(id, interactions);
+          pdiMap.set(id, pdiActions);
+        });
         
-        const [interactionsSnapshot, pdiActionsSnapshot] = await Promise.all([
-          getDocs(interactionsQuery),
-          getDocs(pdiActionsQuery)
-        ]);
-
-        const employeeInteractions = interactionsSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }) as Interaction);
-        interactionsMap.set(id, employeeInteractions);
-
-        const employeePdiActions = pdiActionsSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }) as PDIAction);
-        pdiMap.set(id, employeePdiActions);
+        setInteractions(interactionsMap);
+        setPdiActionsMap(pdiMap);
+        
+        // 💾 Salvar no cache
+        saveCache(interactionsMap, pdiMap, allManagedEmployeeIds);
+        
+        console.timeEnd('⚡ [RANKING] Carregamento de dados');
+        console.log(`✅ [RANKING] ${results.length} colaboradores carregados com sucesso e salvos em cache`);
+      } catch (error) {
+        console.error('❌ [RANKING] Erro ao carregar dados:', error);
+      } finally {
+        setLoadingData(false);
       }
-      
-      setInteractions(interactionsMap);
-      setPdiActionsMap(pdiMap);
-      setLoadingData(false);
     };
 
     fetchAllData();
-  }, [employees, firestore]);
+  }, [employees, firestore, hasFreshCache, isRefreshing, saveCache]);
   
   const { leaderRankings, uniqueAxes } = useMemo(() => {
     if (!employees || loadingData || !dateRange?.from || !dateRange?.to) {
@@ -241,6 +294,15 @@ export default function RankingPage() {
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRefreshCache}
+              disabled={isRefreshing || isLoading}
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+              {hasFreshCache ? 'Atualizar' : 'Recarregar'}
+            </Button>
             <DateRangePicker date={dateRange} onDateChange={setDateRange} />
              <Select onValueChange={setAxisFilter} value={axisFilter} disabled>
               <SelectTrigger className="w-[180px]">

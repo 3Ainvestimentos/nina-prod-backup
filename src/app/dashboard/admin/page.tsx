@@ -1,7 +1,7 @@
 
 "use client";
 
-import type { Employee, Role, Interaction, PDIAction } from "@/lib/types";
+import type { Employee, Role, Interaction, PDIAction, Project } from "@/lib/types";
 import {
   Card,
   CardContent,
@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { MoreHorizontal, PlusCircle, Upload, ArrowUpDown, X, Filter, User, ShieldCheck, FileDown, HelpCircle, Copy, Pen, Trash } from "lucide-react";
+import { MoreHorizontal, PlusCircle, Upload, ArrowUpDown, X, Filter, User, ShieldCheck, FileDown, HelpCircle, Copy, Pen, Trash, Briefcase } from "lucide-react";
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -53,7 +53,9 @@ import { setDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { EmployeeFormDialog } from "@/components/employee-form-dialog";
+import { ProjectFormDialog } from "@/components/project-form-dialog";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -80,16 +82,15 @@ type SortConfig = {
 import { useIsConfigAdmin } from "@/hooks/use-is-config-admin";
 
 export default function AdminPage() {
-  // Guard: somente emails autorizados podem acessar a tela de configuração
+  // ========================================
+  // TODOS OS HOOKS DEVEM VIR ANTES DE QUALQUER RETURN CONDICIONAL!
+  // ========================================
   const { isConfigAdmin } = useIsConfigAdmin();
-  if (!isConfigAdmin) {
-    return (
-      <main className="p-6">
-        <h1 className="text-xl font-semibold">Acesso negado</h1>
-        <p className="text-sm text-muted-foreground">Você não tem permissão para acessar esta área.</p>
-      </main>
-    );
-  }
+  const { firebaseApp } = useFirebase();
+  const firestore = useFirestore();
+  const { user, isUserLoading } = useUser();
+  const { toast } = useToast();
+  
   const [isCsvDialogOpen, setIsCsvDialogOpen] = useState(false);
   const [isInteractionCsvDialogOpen, setIsInteractionCsvDialogOpen] = useState(false);
   const [isEmployeeFormOpen, setIsEmployeeFormOpen] = useState(false);
@@ -99,15 +100,14 @@ export default function AdminPage() {
   const [selectedForBackup, setSelectedForBackup] = useState<string[]>([]);
   const [isExporting, setIsExporting] = useState(false);
   const [setupLoading, setSetupLoading] = useState<{[key: string]: boolean}>({});
-
   const [loadingReports, setLoadingReports] = useState(true);
-
-  const { firebaseApp } = useFirebase();
-  const firestore = useFirestore();
-  const { user, isUserLoading } = useUser();
-  const { toast } = useToast();
   
-  const initialFilters = {
+  // Estados para Projetos
+  const [isProjectFormOpen, setIsProjectFormOpen] = useState(false);
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  
+  // Filtros e ordenação
+  const initialFilters = useMemo(() => ({
     name: new Set<string>(),
     position: new Set<string>(),
     axis: new Set<string>(),
@@ -116,7 +116,25 @@ export default function AdminPage() {
     leader: new Set<string>(),
     city: new Set<string>(),
     role: new Set<string>(),
-  };
+  }), []);
+
+  const [filters, setFilters] = useState(initialFilters);
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'name', direction: 'ascending' });
+
+  const employeesCollection = useMemoFirebase(
+    () => (firestore && user ? collection(firestore, "employees") : null),
+    [firestore, user]
+  );
+  
+  const { data: employees, isLoading: areEmployeesLoading } = useCollection<Employee>(employeesCollection);
+
+  // Collection de Projetos
+  const projectsCollection = useMemoFirebase(
+    () => (firestore && user ? collection(firestore, "projects") : null),
+    [firestore, user]
+  );
+  
+  const { data: projects, isLoading: areProjectsLoading } = useCollection<Project>(projectsCollection);
 
   const checkCustomClaim = async()=>{
     if (!user) {
@@ -138,16 +156,6 @@ export default function AdminPage() {
       console.error('Erro ao verificar claim:', error);
     }
   };
-
-  const [filters, setFilters] = useState(initialFilters);
-  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'name', direction: 'ascending' });
-
-  const employeesCollection = useMemoFirebase(
-    () => (firestore && user ? collection(firestore, "employees") : null),
-    [firestore, user]
-  );
-  
-  const { data: employees, isLoading: areEmployeesLoading } = useCollection<Employee>(employeesCollection);
 
   const handleRoleChange = async (employeeId: string, newRole: Role) => {
     if (!firestore) return;
@@ -673,12 +681,23 @@ export default function AdminPage() {
     </Card>
   );
 
+  // Guard: renderização condicional em vez de early return
+  if (!isConfigAdmin) {
+    return (
+      <main className="p-6">
+        <h1 className="text-xl font-semibold">Acesso negado</h1>
+        <p className="text-sm text-muted-foreground">Você não tem permissão para acessar esta área.</p>
+      </main>
+    );
+  }
+
   return (
     <>
     <Tabs defaultValue="employees" className="w-full">
-      <TabsList className="grid w-full grid-cols-5">
+      <TabsList className="grid w-full grid-cols-6">
         <TabsTrigger value="employees">Funcionários</TabsTrigger>
         <TabsTrigger value="teams">Equipes</TabsTrigger>
+        <TabsTrigger value="projects">Projetos</TabsTrigger>
         <TabsTrigger value="reports">Relatórios</TabsTrigger>
         <TabsTrigger value="settings">Geral</TabsTrigger>
         <TabsTrigger value="backup">Backup & Import</TabsTrigger>
@@ -960,6 +979,108 @@ export default function AdminPage() {
             </Card>
         </div>
       </TabsContent>
+      
+      {/* TAB DE PROJETOS */}
+      <TabsContent value="projects">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Gerenciar Projetos</CardTitle>
+                <CardDescription>
+                  Crie, edite e configure projetos independentes com seus líderes e membros.
+                </CardDescription>
+              </div>
+              <Button size="sm" onClick={() => { setSelectedProject(null); setIsProjectFormOpen(true); }}>
+                <PlusCircle className="mr-2 h-4 w-4" />
+                Criar Projeto
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {areProjectsLoading ? (
+              <div className="space-y-3">
+                <Skeleton className="h-20 w-full" />
+                <Skeleton className="h-20 w-full" />
+                <Skeleton className="h-20 w-full" />
+              </div>
+            ) : !projects || projects.length === 0 ? (
+              <div className="text-center py-12">
+                <Briefcase className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+                <p className="text-sm text-muted-foreground">
+                  Nenhum projeto criado ainda
+                </p>
+                <Button className="mt-4" onClick={() => { setSelectedProject(null); setIsProjectFormOpen(true); }}>
+                  <PlusCircle className="mr-2 h-4 w-4" />
+                  Criar Primeiro Projeto
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {projects.filter(p => !p.isArchived).map((project) => (
+                  <Card key={project.id} className="overflow-hidden">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <CardTitle className="text-base">{project.name}</CardTitle>
+                            {project.isArchived && (
+                              <Badge variant="secondary">Arquivado</Badge>
+                            )}
+                          </div>
+                          <CardDescription className="mt-1">
+                            {project.description}
+                          </CardDescription>
+                        </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => { setSelectedProject(project); setIsProjectFormOpen(true); }}>
+                              <Pen className="mr-2 h-4 w-4" />
+                              Editar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={async () => {
+                                if (!firestore) return;
+                                const projectRef = doc(firestore, "projects", project.id);
+                                await updateDoc(projectRef, { isArchived: true, updatedAt: new Date().toISOString() });
+                                toast({ title: "Projeto Arquivado", description: `"${project.name}" foi arquivado.` });
+                              }}
+                            >
+                              <Trash className="mr-2 h-4 w-4" />
+                              Arquivar
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="pb-4">
+                      <div className="grid gap-4 text-sm">
+                        <div className="flex items-center gap-2">
+                          <User className="h-4 w-4 text-muted-foreground" />
+                          <span className="font-medium">Líder:</span>
+                          <span>{project.leaderName}</span>
+                          <span className="text-muted-foreground">({project.leaderEmail})</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Briefcase className="h-4 w-4 text-muted-foreground" />
+                          <span className="font-medium">Membros:</span>
+                          <span>{project.memberIds?.length || 0} colaborador(es)</span>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </TabsContent>
+      
       <TabsContent value="reports">
         <div className="space-y-6">
             <ReportTable
@@ -1149,6 +1270,19 @@ export default function AdminPage() {
         leaders={leaders}
         roles={roles}
     />
+    
+    {/* Dialog de Projeto (Admin) */}
+    {isProjectFormOpen && employees && (
+      <ProjectFormDialog
+        open={isProjectFormOpen}
+        onOpenChange={setIsProjectFormOpen}
+        project={selectedProject}
+        employees={employees}
+        currentUser={employees.find(e => e.email === user?.email) || employees[0]}
+        isAdminMode={true}
+      />
+    )}
+    
     <AlertDialog open={isConfirmDeleteDialogOpen} onOpenChange={setIsConfirmDeleteDialogOpen}>
       <AlertDialogContent>
         <AlertDialogHeader>

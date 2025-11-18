@@ -9,6 +9,7 @@ import {
   ClipboardList,
   ClipboardCheck,
   Trophy,
+  Briefcase,
 } from "lucide-react";
 import type { Employee } from "@/lib/types";
 import {
@@ -23,6 +24,7 @@ const navItems = [
   { href: "/dashboard/pdi", label: "Plano de Desenvolvimento", icon: ClipboardCheck, requiresAuth: (user: Employee) => user.role === "Líder" || user.isDirector || user.isAdmin },
   { href: "/dashboard/risk-analysis", label: "Análise de Risco", icon: ShieldAlert, requiresAuth: (user: Employee) => user.role === "Líder" || user.isDirector || user.isAdmin },
   { href: "/dashboard/ranking", label: "Ranking", icon: Trophy, requiresAuth: (user: Employee) => user.role === "Líder" || user.isDirector || user.isAdmin },
+  { href: "/dashboard/projects", label: "Projetos", icon: Briefcase, requiresAuth: (user: Employee) => user.role === "Líder" || user.isDirector || user.isAdmin },
 ];
 
 export function MainNav({ user }: { user: Employee }) {

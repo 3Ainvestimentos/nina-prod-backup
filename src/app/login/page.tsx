@@ -172,7 +172,8 @@ export default function LoginPage() {
     signInInProgressRef.current = true;
     setIsSigningIn(true);
     try {
-      const result = await loginWithGoogle(auth, { domain: '3ainvestimentos.com.br' });
+      // Aceita tanto 3ainvestimentos.com.br quanto 3ariva.com.br
+      const result = await loginWithGoogle(auth);
       if (result.status === 'redirect' || result.status === 'cancelled' || result.status === 'ok') {
         // Sem ação adicional necessária aqui; fluxos tratados externamente
       }
@@ -195,18 +196,21 @@ export default function LoginPage() {
 
       setIsVerifying(true);
       
-      if (!user.email?.endsWith('@3ainvestimentos.com.br')) {
+      // Aceita emails de ambos os domínios: @3ainvestimentos.com.br e @3ariva.com.br
+      const isValidDomain = user.email?.endsWith('@3ainvestimentos.com.br') || user.email?.endsWith('@3ariva.com.br');
+      
+      if (!isValidDomain) {
           toast({
               variant: "destructive",
               title: "Acesso Negado",
-              description: "Por favor, use uma conta de e-mail da 3A Investimentos.",
+              description: "Por favor, use uma conta de e-mail da 3A Investimentos ou 3A Riva.",
           });
           if (auth) await signOut(auth);
           setIsVerifying(false);
           return;
       }
 
-      if (adminEmails.includes(user.email)) {
+      if (user.email && adminEmails.includes(user.email)) {
         // Admins: checar token no employees por e-mail; só abre o Calendar se faltar
         try {
           const employeesRef = collection(firestore!, "employees");

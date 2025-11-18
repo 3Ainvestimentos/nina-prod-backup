@@ -1,0 +1,296 @@
+"use client";
+
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+  FormDescription,
+} from "@/components/ui/form";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Button } from "./ui/button";
+import { Textarea } from "./ui/textarea";
+import { Input } from "./ui/input";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import { useFirestore, useUser } from "@/firebase";
+import { collection, addDoc } from "firebase/firestore";
+import { useToast } from "@/hooks/use-toast";
+import type { Employee, Project, ProjectInteractionNotes } from "@/lib/types";
+import { ProjectErrors, mapFirestoreError, logValidationError, logProjectSuccess } from "@/lib/project-errors";
+import { isProjectLeader } from "@/hooks/use-user-projects";
+
+const formSchema = z.object({
+  type: z.enum(["1:1"]),
+  targetMemberId: z.string().min(1, "Selecione um membro."),
+  content: z.string().min(5, "As anotações devem ter pelo menos 5 caracteres."),
+  score: z.string().optional(),
+});
+
+type InteractionFormData = z.infer<typeof formSchema>;
+
+interface ProjectInteractionDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  project: Project;
+  projectMembers: Employee[];
+  currentUser: Employee;
+}
+
+export function ProjectInteractionDialog({
+  open,
+  onOpenChange,
+  project,
+  projectMembers,
+  currentUser,
+}: ProjectInteractionDialogProps) {
+  const firestore = useFirestore();
+  const { user } = useUser();
+  const { toast } = useToast();
+  const [isSaving, setIsSaving] = useState(false);
+
+  const form = useForm<InteractionFormData>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      type: "1:1",
+      targetMemberId: "",
+      content: "",
+      score: "",
+    },
+  });
+
+  const hasScoring = project.interactionConfig?.hasScoring;
+
+  const handleSubmit = async (data: InteractionFormData) => {
+    console.log('🚀 [PROJECT_INTERACTION] Iniciando criação de interação', {
+      projectId: project.id,
+      type: data.type,
+    });
+
+    // Validação de permissão
+    if (!isProjectLeader(project, currentUser)) {
+      logValidationError('projectLeader', currentUser.email, project.leaderEmail);
+      toast({
+        variant: "destructive",
+        title: ProjectErrors.PERMISSION_CANNOT_ADD_INTERACTION.title,
+        description: ProjectErrors.PERMISSION_CANNOT_ADD_INTERACTION.message,
+      });
+      return;
+    }
+
+    // Validação de membro
+    if (!data.targetMemberId) {
+      logValidationError('targetMemberId', data.targetMemberId, 'ID de membro válido');
+      toast({
+        variant: "destructive",
+        title: ProjectErrors.VALIDATION_INTERACTION_NO_MEMBER.title,
+        description: ProjectErrors.VALIDATION_INTERACTION_NO_MEMBER.message,
+      });
+      return;
+    }
+
+    // Validar conteúdo
+    if (!data.content || data.content.trim().length < 5) {
+      logValidationError('content', data.content, 'String com pelo menos 5 caracteres');
+      toast({
+        variant: "destructive",
+        title: ProjectErrors.VALIDATION_INTERACTION_EMPTY_NOTES.title,
+        description: ProjectErrors.VALIDATION_INTERACTION_EMPTY_NOTES.message,
+      });
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      const interactionsRef = collection(firestore!, "projects", project.id, "interactions");
+      
+      // Buscar membro selecionado
+      const targetMember = projectMembers.find(m => m.id === data.targetMemberId);
+      if (!targetMember) {
+        throw new Error("Membro selecionado não encontrado");
+      }
+
+      // Construir notas da interação
+      const notes: ProjectInteractionNotes = {
+        content: data.content,
+      };
+
+      // Adicionar pontuação se configurado
+      if (hasScoring && data.score) {
+        const scoreNum = parseFloat(data.score);
+        if (!isNaN(scoreNum)) {
+          notes.score = scoreNum;
+        }
+      }
+
+      const interactionData = {
+        projectId: project.id,
+        type: "1:1" as const,
+        date: new Date().toISOString(),
+        authorId: currentUser.id,
+        authorEmail: currentUser.email,
+        targetMemberId: targetMember.id,
+        targetMemberName: targetMember.name,
+        targetMemberEmail: targetMember.email,
+        notes,
+      };
+
+      console.log('💾 [PROJECT_INTERACTION] Salvando interação 1:1 no Firestore');
+      const docRef = await addDoc(interactionsRef, interactionData);
+
+      logProjectSuccess('Interação 1:1 criada', {
+        projectId: project.id,
+        interactionId: docRef.id,
+        targetMember: targetMember.name,
+      });
+
+      toast({
+        title: "✅ Interação Registrada!",
+        description: `Interação com ${targetMember.name} registrada com sucesso.`,
+      });
+
+      form.reset();
+      
+      // Pequeno delay para garantir que o useCollection capture a mudança
+      setTimeout(() => {
+        onOpenChange(false);
+      }, 500);
+    } catch (error: any) {
+      const errorDetails = mapFirestoreError(error, 'Registrar Interação de Projeto');
+
+      toast({
+        variant: "destructive",
+        title: errorDetails.title,
+        description: errorDetails.message,
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCancel = () => {
+    form.reset();
+    onOpenChange(false);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>Registrar Interação</DialogTitle>
+          <DialogDescription>
+            Registre uma interação para o projeto &quot;{project.name}&quot;
+          </DialogDescription>
+        </DialogHeader>
+
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+            {/* Seleção de Membro */}
+            <FormField
+              control={form.control}
+              name="targetMemberId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Membro *</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione o membro" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {projectMembers.map((member) => (
+                        <SelectItem key={member.id} value={member.id}>
+                          {member.name} - {member.position || member.email}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormDescription>
+                    Selecione o membro com quem a interação foi realizada
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Anotações */}
+            <FormField
+              control={form.control}
+              name="content"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Anotações *</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="Descreva os principais pontos da interação..."
+                      rows={6}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Pontuação (se configurado) */}
+            {hasScoring && (
+              <FormField
+                control={form.control}
+                name="score"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Pontuação (opcional)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="10"
+                        placeholder="Ex: 8.5"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Atribua uma pontuação de 0 a 10 para esta interação
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={handleCancel} disabled={isSaving}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={isSaving}>
+                {isSaving ? "Salvando..." : "Registrar Interação"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+

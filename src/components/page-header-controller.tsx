@@ -33,12 +33,22 @@ const titles: { [key: string]: { title: string; description?: string } } = {
     title: "Configurações",
     description: "Configure os ajustes gerais do sistema.",
   },
+  "/dashboard/projects": {
+    title: "Projetos",
+    description: "Gerencie seus projetos independentes e acompanhe interações.",
+  },
 };
 
 function getPageDetails(pathname: string): { title: string; description?: string } {
     if (pathname === '/dashboard' || pathname === '/dashboard/lideranca') {
         return titles['/dashboard/v2'];
     }
+    
+    // Se for qualquer rota de projetos (incluindo detalhes e timeline)
+    if (pathname.startsWith('/dashboard/projects')) {
+        return { title: "Projetos", description: "Gerencie seus projetos independentes e acompanhe interações." };
+    }
+    
     return titles[pathname] || { title: "Nina 1.0" };
 }
 

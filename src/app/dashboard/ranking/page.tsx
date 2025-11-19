@@ -8,6 +8,7 @@ import { collection, getDocs, query } from "firebase/firestore";
 import { isWithinInterval, differenceInMonths, startOfMonth, endOfMonth, getMonth, getYear, parseISO } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { useRankingCache } from "@/hooks/use-ranking-cache";
+import { useAppConfig } from "@/hooks/use-app-config";
 
 import {
   Card,
@@ -55,13 +56,14 @@ const interactionSchedules: { [key in "1:1" | "PDI" | "Índice de Risco"]?: numb
 
 export default function RankingPage() {
   const firestore = useFirestore();
+  const { rankingBonusEnabled } = useAppConfig();
   const [axisFilter, setAxisFilter] = useState("Comercial");
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: startOfMonth(new Date()),
     to: endOfMonth(new Date()),
   });
 
-  const { cachedData, saveCache, hasFreshCache, clearCache } = useRankingCache();
+  const { cachedData, saveCache, hasFreshCache, clearCache } = useRankingCache(rankingBonusEnabled);
   const [isRefreshing, setIsRefreshing] = useState(false);
   
   const handleRefreshCache = async () => {
@@ -144,8 +146,8 @@ export default function RankingPage() {
         setInteractions(interactionsMap);
         setPdiActionsMap(pdiMap);
         
-        // 💾 Salvar no cache
-        saveCache(interactionsMap, pdiMap, allManagedEmployeeIds);
+        // 💾 Salvar no cache com o estado atual do bônus
+        saveCache(interactionsMap, pdiMap, allManagedEmployeeIds, rankingBonusEnabled);
         
         console.timeEnd('⚡ [RANKING] Carregamento de dados');
         console.log(`✅ [RANKING] ${results.length} colaboradores carregados com sucesso e salvos em cache`);
@@ -157,7 +159,7 @@ export default function RankingPage() {
     };
 
     fetchAllData();
-  }, [employees, firestore, hasFreshCache, isRefreshing, saveCache]);
+  }, [employees, firestore, hasFreshCache, isRefreshing, saveCache, rankingBonusEnabled]);
   
   const { leaderRankings, uniqueAxes } = useMemo(() => {
     if (!employees || loadingData || !dateRange?.from || !dateRange?.to) {
@@ -255,11 +257,11 @@ export default function RankingPage() {
   
       const adherenceScore = totalRequired > 0 ? (totalCompleted / totalRequired) * 100 : 0;
       
-      // 🎯 BÔNUS: A cada 10 interações completadas = +3%
-      const bonusPercentage = Math.floor(totalCompleted / 10) * 3;
+      // 🎯 BÔNUS: A cada 10 interações completadas = +3% (se habilitado)
+      const bonusPercentage = rankingBonusEnabled ? Math.floor(totalCompleted / 10) * 3 : 0;
       const totalScore = adherenceScore + bonusPercentage;
       
-      console.log(`📊 [RANKING] ${leader.name}: ${adherenceScore.toFixed(0)}% + ${bonusPercentage}% = ${totalScore.toFixed(0)}%`);
+      console.log(`📊 [RANKING] ${leader.name}: ${adherenceScore.toFixed(0)}% + ${bonusPercentage}% (bonus ${rankingBonusEnabled ? 'ON' : 'OFF'}) = ${totalScore.toFixed(0)}%`);
       
       return {
         ...leader,
@@ -279,7 +281,7 @@ export default function RankingPage() {
   
     return { leaderRankings: rankings, uniqueAxes: axes };
   
-  }, [employees, interactions, pdiActionsMap, dateRange, loadingData]);
+  }, [employees, interactions, pdiActionsMap, dateRange, loadingData, rankingBonusEnabled]);
   
   const filteredLeaderRankings: LeaderRanking[] = useMemo(() => {
     const filtered = axisFilter === "all" 
@@ -335,12 +337,21 @@ export default function RankingPage() {
                     <p className="text-xs mb-2">
                       • <span className="text-green-400">Verde Claro</span>: Aderência às interações obrigatórias
                     </p>
-                    <p className="text-xs mb-2">
-                      • <span className="text-green-700">Verde Escuro</span>: Bônus (+3% a cada 10 interações)
-                    </p>
-                    <p className="text-xs">
-                      O ranking é ordenado pelo score total (aderência + bônus)
-                    </p>
+                    {rankingBonusEnabled && (
+                      <>
+                        <p className="text-xs mb-2">
+                          • <span className="text-green-700">Verde Escuro</span>: Bônus (+3% a cada 10 interações)
+                        </p>
+                        <p className="text-xs">
+                          O ranking é ordenado pelo score total (aderência + bônus)
+                        </p>
+                      </>
+                    )}
+                    {!rankingBonusEnabled && (
+                      <p className="text-xs">
+                        O ranking é ordenado pela % de aderência
+                      </p>
+                    )}
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -404,13 +415,19 @@ export default function RankingPage() {
                         <div className="flex-1">
                             <div className="flex justify-between items-baseline mb-2">
                                 <span className="font-medium">{leader.name}</span>
-                                <span className="text-sm font-semibold">
-                                    <span className="text-muted-foreground">{leader.adherenceScore.toFixed(0)}%</span>
-                                    <span className="text-muted-foreground"> + </span>
-                                    <span className="text-muted-foreground">{leader.bonusPercentage}% bônus</span>
-                                    <span className="text-foreground"> = </span>
-                                    <span className="text-foreground">{leader.totalScore.toFixed(0)}%</span>
-                                </span>
+                                {rankingBonusEnabled ? (
+                                  <span className="text-sm font-semibold">
+                                      <span className="text-muted-foreground">{leader.adherenceScore.toFixed(0)}%</span>
+                                      <span className="text-muted-foreground"> + </span>
+                                      <span className="text-muted-foreground">{leader.bonusPercentage}% bônus</span>
+                                      <span className="text-foreground"> = </span>
+                                      <span className="text-foreground">{leader.totalScore.toFixed(0)}%</span>
+                                  </span>
+                                ) : (
+                                  <span className="text-sm font-semibold text-foreground">
+                                      {leader.adherenceScore.toFixed(0)}%
+                                  </span>
+                                )}
                             </div>
                             
                             {/* Barras de Progresso Empilhadas */}
@@ -420,8 +437,8 @@ export default function RankingPage() {
                                     className="absolute top-0 left-0 h-full bg-green-400 transition-all"
                                     style={{ width: `${Math.min(leader.adherenceScore, 100)}%` }}
                                 />
-                                {/* Barra Verde Escuro (Bônus) */}
-                                {leader.bonusPercentage > 0 && (
+                                {/* Barra Verde Escuro (Bônus) - apenas se habilitado */}
+                                {rankingBonusEnabled && leader.bonusPercentage > 0 && (
                                     <div
                                         className="absolute top-0 h-full bg-green-700 transition-all"
                                         style={{ 

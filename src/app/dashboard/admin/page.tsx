@@ -48,7 +48,7 @@ import { CsvUploadDialog } from "@/components/csv-upload-dialog";
 import { InteractionCsvUploadDialog } from "@/components/interaction-csv-upload-dialog";
 import { useState, useMemo, useEffect } from "react";
 import { useCollection, useFirestore, useMemoFirebase, useUser, useFirebase } from "@/firebase";
-import { collection, doc, deleteDoc, updateDoc } from "firebase/firestore";
+import { collection, doc, deleteDoc, updateDoc, setDoc } from "firebase/firestore";
 import { setDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -80,6 +80,7 @@ type SortConfig = {
 } | null;
 
 import { useIsConfigAdmin } from "@/hooks/use-is-config-admin";
+import { useAppConfig } from "@/hooks/use-app-config";
 
 export default function AdminPage() {
   // ========================================
@@ -90,6 +91,7 @@ export default function AdminPage() {
   const firestore = useFirestore();
   const { user, isUserLoading } = useUser();
   const { toast } = useToast();
+  const { rankingBonusEnabled, maintenanceMode, isLoading: isConfigLoading } = useAppConfig();
   
   const [isCsvDialogOpen, setIsCsvDialogOpen] = useState(false);
   const [isInteractionCsvDialogOpen, setIsInteractionCsvDialogOpen] = useState(false);
@@ -601,6 +603,26 @@ export default function AdminPage() {
     }
   };
 
+  const handleConfigToggle = async (field: 'maintenanceMode' | 'rankingBonusEnabled', value: boolean) => {
+    if (!firestore) return;
+    const configRef = doc(firestore, "configs", "general");
+    try {
+        // Usar setDoc com merge para criar o documento se não existir
+        await setDoc(configRef, { [field]: value }, { merge: true });
+        toast({
+            title: "Configuração Atualizada",
+            description: `${field === 'maintenanceMode' ? 'Modo de Manutenção' : 'Bônus do Ranking'} ${value ? 'ativado' : 'desativado'}.`,
+        });
+    } catch (error) {
+        console.error("Erro ao atualizar configuração:", error);
+        toast({
+            variant: "destructive",
+            title: "Erro ao Atualizar",
+            description: "Não foi possível atualizar a configuração.",
+        });
+    }
+  };
+
   const isLoading = isUserLoading || areEmployeesLoading || loadingReports;
 
   const FilterComponent = ({ title, filterKey, options }: { title: string, filterKey: keyof typeof filters, options: string[]}) => (
@@ -1107,7 +1129,27 @@ export default function AdminPage() {
                         Ative para desabilitar o acesso ao aplicativo para todos, exceto administradores.
                     </p>
                 </div>
-                <Switch id="maintenance-mode" />
+                <Switch 
+                  id="maintenance-mode" 
+                  checked={maintenanceMode}
+                  onCheckedChange={(checked) => handleConfigToggle('maintenanceMode', checked)}
+                  disabled={isConfigLoading}
+                />
+            </div>
+            
+            <div className="flex items-center justify-between rounded-lg border p-4">
+                <div>
+                    <h3 className="text-base font-medium">Sistema de Bônus do Ranking</h3>
+                    <p className="text-sm text-muted-foreground">
+                        Ative para habilitar o sistema de bônus (+3% a cada 10 interações) no ranking de líderes.
+                    </p>
+                </div>
+                <Switch 
+                  id="ranking-bonus" 
+                  checked={rankingBonusEnabled}
+                  onCheckedChange={(checked) => handleConfigToggle('rankingBonusEnabled', checked)}
+                  disabled={isConfigLoading}
+                />
             </div>
             <Card>
                 <CardHeader>

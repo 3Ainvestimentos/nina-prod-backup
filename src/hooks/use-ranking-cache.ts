@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import type { Interaction, PDIAction } from '@/lib/types';
 
 const CACHE_KEY = 'ranking-data-cache';
+const CACHE_CONFIG_KEY = 'ranking-bonus-config'; // Guarda o estado da config quando o cache foi criado
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutos
 
 interface RankingCacheData {
@@ -9,13 +10,15 @@ interface RankingCacheData {
   pdiActions: Map<string, PDIAction[]>;
   timestamp: number;
   employeeIds: string[];
+  bonusEnabled?: boolean; // Estado do bônus quando o cache foi criado
 }
 
 /**
  * Hook para gerenciar cache de dados do ranking
  * Guarda em localStorage para persistir entre sessões
+ * @param currentBonusEnabled - Estado atual da flag de bônus (para invalidar cache se mudar)
  */
-export function useRankingCache() {
+export function useRankingCache(currentBonusEnabled?: boolean) {
   const [cachedData, setCachedData] = useState<RankingCacheData | null>(null);
 
   // Carregar cache do localStorage ao montar
@@ -27,10 +30,22 @@ export function useRankingCache() {
         const now = Date.now();
         
         // Verificar se cache ainda é válido (não expirou)
-        if (parsed.timestamp && (now - parsed.timestamp < CACHE_DURATION)) {
+        const isExpired = parsed.timestamp && (now - parsed.timestamp >= CACHE_DURATION);
+        
+        // Verificar se a configuração de bônus mudou desde que o cache foi criado
+        const bonusConfigChanged = currentBonusEnabled !== undefined && parsed.bonusEnabled !== currentBonusEnabled;
+        
+        if (isExpired) {
+          console.log('⚠️ [RANKING_CACHE] Cache expirado, removendo');
+          localStorage.removeItem(CACHE_KEY);
+        } else if (bonusConfigChanged) {
+          console.log('⚠️ [RANKING_CACHE] Configuração de bônus mudou, invalidando cache');
+          localStorage.removeItem(CACHE_KEY);
+        } else if (parsed.timestamp && (now - parsed.timestamp < CACHE_DURATION)) {
           console.log('✅ [RANKING_CACHE] Cache válido encontrado', {
             age: Math.round((now - parsed.timestamp) / 1000) + 's',
             employees: parsed.employeeIds?.length || 0,
+            bonusEnabled: parsed.bonusEnabled,
           });
           
           // Reconverter arrays para Maps
@@ -39,12 +54,10 @@ export function useRankingCache() {
             pdiActions: new Map(Object.entries(parsed.pdiActions || {})),
             timestamp: parsed.timestamp,
             employeeIds: parsed.employeeIds || [],
+            bonusEnabled: parsed.bonusEnabled,
           };
           
           setCachedData(data);
-        } else {
-          console.log('⚠️ [RANKING_CACHE] Cache expirado, removendo');
-          localStorage.removeItem(CACHE_KEY);
         }
       } else {
         console.log('ℹ️ [RANKING_CACHE] Nenhum cache encontrado');
@@ -53,12 +66,13 @@ export function useRankingCache() {
       console.error('❌ [RANKING_CACHE] Erro ao carregar cache:', error);
       localStorage.removeItem(CACHE_KEY);
     }
-  }, []);
+  }, [currentBonusEnabled]);
 
   const saveCache = (
     interactions: Map<string, Interaction[]>,
     pdiActions: Map<string, PDIAction[]>,
-    employeeIds: string[]
+    employeeIds: string[],
+    bonusEnabled?: boolean
   ) => {
     try {
       const data = {
@@ -66,6 +80,7 @@ export function useRankingCache() {
         pdiActions: Object.fromEntries(pdiActions),
         timestamp: Date.now(),
         employeeIds,
+        bonusEnabled,
       };
       
       localStorage.setItem(CACHE_KEY, JSON.stringify(data));
@@ -73,6 +88,7 @@ export function useRankingCache() {
       console.log('💾 [RANKING_CACHE] Cache salvo com sucesso', {
         employees: employeeIds.length,
         size: new Blob([JSON.stringify(data)]).size + ' bytes',
+        bonusEnabled,
       });
       
       setCachedData({
@@ -80,6 +96,7 @@ export function useRankingCache() {
         pdiActions,
         timestamp: data.timestamp,
         employeeIds,
+        bonusEnabled,
       });
     } catch (error) {
       console.error('❌ [RANKING_CACHE] Erro ao salvar cache:', error);

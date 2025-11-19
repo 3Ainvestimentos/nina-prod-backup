@@ -57,5 +57,25 @@ service cloud.firestore {
         allow read: if true;
         allow write: if false; // Protect this collection from client-side writes
     }
+
+    /**
+     * @description Projects - accessible to authenticated users
+     */
+    match /projects/{projectId} {
+      allow read, write: if isSignedIn();
+      
+      match /interactions/{interactionId} {
+        allow read, write: if isSignedIn();
+      }
+    }
+
+    /**
+     * @description Configs - readable by all authenticated users, writable by authenticated users
+     * Note: Access control is handled at the application level (only admins can access the admin panel)
+     */
+    match /configs/{configId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
   }
 }

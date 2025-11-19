@@ -142,6 +142,7 @@ export default function RiskAnalysisPage() {
   const barChartConfig = {
     risk: {
       label: "Índice de Risco",
+      color: "hsl(var(--chart-1))",
     },
   } satisfies ChartConfig
 
@@ -205,6 +206,9 @@ export default function RiskAnalysisPage() {
 
   // State para controlar qual linha está em hover
   const [hoveredLineId, setHoveredLineId] = React.useState<string | null>(null);
+  
+  // State para controlar qual linha está selecionada (clicada na legenda)
+  const [selectedLineId, setSelectedLineId] = React.useState<string | null>(null);
 
   // Tooltip customizado para mostrar apenas a linha sob o cursor
   const CustomLineTooltip = ({ active, payload, label }: any) => {
@@ -213,9 +217,12 @@ export default function RiskAnalysisPage() {
     // Filtra apenas itens com valor (remove undefined/null)
     let validPayload = payload.filter((item: any) => item.value != null);
     
-    // Se há uma linha específica em hover, mostra apenas ela
     if (hoveredLineId) {
+      // Se há uma linha específica em hover, mostra apenas ela
       validPayload = validPayload.filter((item: any) => item.dataKey === hoveredLineId);
+    } else {
+      // Caso contrário, ordena por valor (maior risco no topo)
+      validPayload = [...validPayload].sort((a: any, b: any) => (b.value ?? 0) - (a.value ?? 0));
     }
     
     if (validPayload.length === 0) return null;
@@ -345,22 +352,61 @@ export default function RiskAnalysisPage() {
                         <XAxis dataKey="date" tickMargin={10} padding={{ left: 12, right: 12 }} />
                         <YAxis />
                         <ChartTooltip content={<CustomLineTooltip />} />
-                        <Legend />
-                        {selectedEmployeeIds.map((id, index) => (
+                        <Legend 
+                          content={({ payload }) => {
+                            if (!payload) return null;
+                            return (
+                              <div className="flex flex-wrap gap-4 justify-center mt-4">
+                                {payload.map((entry: any, index: number) => {
+                                  const employeeId = selectedEmployeeIds[index];
+                                  const isSelected = selectedLineId === employeeId;
+                                  return (
+                                    <div
+                                      key={entry.value}
+                                      onClick={() => setSelectedLineId(isSelected ? null : employeeId)}
+                                      className={`flex items-center gap-2 cursor-pointer transition-opacity ${
+                                        selectedLineId && !isSelected ? 'opacity-30' : 'opacity-100'
+                                      } hover:opacity-100`}
+                                      style={{ cursor: 'pointer' }}
+                                    >
+                                      <span
+                                        style={{
+                                          display: 'inline-block',
+                                          width: '12px',
+                                          height: '12px',
+                                          backgroundColor: entry.color,
+                                          borderRadius: '2px',
+                                          transform: 'rotate(45deg)',
+                                        }}
+                                      />
+                                      <span className="text-xs">{entry.value}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          }}
+                        />
+                        {selectedEmployeeIds.map((id, index) => {
+                          const isSelected = selectedLineId === id;
+                          const isDimmed = selectedLineId !== null && !isSelected;
+                          return (
                             <Line 
-                                key={id} 
-                                type="monotone" 
-                                dataKey={id} 
-                                stroke={lineChartConfig[id]?.color || chartColors[index % chartColors.length]} 
-                                name={employees?.find(e => e.id === id)?.name}
-                                strokeWidth={2}
-                                dot={false}
-                                activeDot={{ r: 6 }}
-                                connectNulls
-                                onMouseEnter={() => setHoveredLineId(id)}
-                                onMouseLeave={() => setHoveredLineId(null)}
+                              key={id} 
+                              type="monotone" 
+                              dataKey={id} 
+                              stroke={lineChartConfig[id]?.color || chartColors[index % chartColors.length]} 
+                              name={employees?.find(e => e.id === id)?.name}
+                              strokeWidth={isSelected ? 3 : 2}
+                              strokeOpacity={isDimmed ? 0.3 : 1}
+                              dot={false}
+                              activeDot={{ r: 6 }}
+                              connectNulls
+                              onMouseEnter={() => setHoveredLineId(id)}
+                              onMouseLeave={() => setHoveredLineId(null)}
                             />
-                        ))}
+                          );
+                        })}
                     </LineChart>
                   </ChartContainer>
               ) : (

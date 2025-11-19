@@ -2,9 +2,9 @@
 "use client";
 
 import React, { useState, useMemo, useEffect, useCallback } from "react";
-import type { Employee, Interaction, InteractionStatus, PDIAction } from "@/lib/types";
+import type { Employee, Interaction, InteractionStatus, PDIAction, Project } from "@/lib/types";
 import { useCollection, useFirestore, useMemoFirebase, useUser } from "@/firebase";
-import { collection, getDocs, query } from "firebase/firestore";
+import { collection, getDocs, query, where } from "firebase/firestore";
 import { isWithinInterval, startOfMonth, endOfMonth, getMonth, getYear, parseISO, differenceInMonths } from "date-fns";
 import { DateRange } from "react-day-picker";
 
@@ -67,10 +67,11 @@ const interactionTypes: { value: InteractionFilterType, label: string, descripti
 
 
 // Definição dos meses obrigatórios para cada tipo de interação (0-indexed: Janeiro=0)
-const interactionSchedules: { [key in "1:1" | "PDI" | "Índice de Risco"]?: number[] } = {
+const interactionSchedules: { [key in "1:1" | "PDI" | "Índice de Risco" | "Feedback"]?: number[] } = {
     'PDI': [0, 6], // Janeiro e Julho
     '1:1': [2, 5, 8, 11], // Março, Junho, Setembro, Dezembro
     'Índice de Risco': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], // Todos os meses
+    'Feedback': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], // Todos os meses (para Líder de Projeto)
 };
 
 const n3IndividualSchedule = {
@@ -100,6 +101,7 @@ export default function LeadershipDashboardV2() {
   const [statusFilter, setStatusFilter] = useState<"all" | InteractionStatus>("all");
   const [interactionTypeFilter, setInteractionTypeFilter] = useState<InteractionFilterType>("all");
   const [axisFilter, setAxisFilter] = useState("Comercial");
+  const [personFilter, setPersonFilter] = useState("all"); // Filtro de pessoa para Líder de Projeto
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'name', direction: 'ascending' });
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: startOfMonth(new Date()),
@@ -114,12 +116,41 @@ export default function LeadershipDashboardV2() {
     return employeeData;
   }, [user, employees]);
 
+  // Buscar projetos onde o usuário é líder (para Líder de Projeto)
+  const projectsCollection = useMemoFirebase(
+    () => (firestore && user ? collection(firestore, "projects") : null),
+    [firestore, user]
+  );
+  const { data: allProjects } = useCollection<Project>(projectsCollection);
+
+  const userProjects = useMemo(() => {
+    if (!allProjects || !currentUserEmployee || currentUserEmployee.role !== 'Líder de Projeto') {
+      return [];
+    }
+    return allProjects.filter(project => 
+      project.leaderEmail === currentUserEmployee.email && !project.isArchived
+    );
+  }, [allProjects, currentUserEmployee]);
+
+  const projectMemberIds = useMemo(() => {
+    if (currentUserEmployee?.role !== 'Líder de Projeto') return new Set<string>();
+    const ids = new Set<string>();
+    userProjects.forEach(project => {
+      project.memberIds?.forEach(id => ids.add(id));
+    });
+    return ids;
+  }, [userProjects, currentUserEmployee]);
+
   useEffect(() => {
     if (currentUserEmployee?.role === 'Líder' && !currentUserEmployee.isDirector && !currentUserEmployee.isAdmin) {
       setLeaderFilter(currentUserEmployee.id);
       fetchDataForLeader(currentUserEmployee.id);
     }
-  }, [currentUserEmployee]);
+    // Para Líder de Projeto, buscar dados dos membros dos projetos
+    if (currentUserEmployee?.role === 'Líder de Projeto' && projectMemberIds.size > 0) {
+      fetchDataForProjectMembers(Array.from(projectMemberIds));
+    }
+  }, [currentUserEmployee, projectMemberIds]);
 
 
   const fetchDataForLeader = useCallback(async (leaderId: string) => {
@@ -166,6 +197,36 @@ export default function LeadershipDashboardV2() {
     setLoadingData(false);
   }, [employees, firestore, currentUserEmployee, axisFilter]);
 
+  const fetchDataForProjectMembers = useCallback(async (memberIds: string[]) => {
+    if (!firestore || !employees) return;
+
+    setLoadingData(true);
+    setHasSearched(true);
+
+    const interactionsMap = new Map<string, Interaction[]>();
+    const pdiActionsMap = new Map<string, PDIAction[]>();
+
+    for (const id of memberIds) {
+      const interactionsQuery = query(collection(firestore, "employees", id, "interactions"));
+      const pdiActionsQuery = query(collection(firestore, "employees", id, "pdiActions"));
+
+      const [interactionsSnapshot, pdiActionsSnapshot] = await Promise.all([
+        getDocs(interactionsQuery),
+        getDocs(pdiActionsQuery)
+      ]);
+
+      const employeeInteractions = interactionsSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Interaction));
+      interactionsMap.set(id, employeeInteractions);
+
+      const employeePdiActions = pdiActionsSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as PDIAction));
+      pdiActionsMap.set(id, employeePdiActions);
+    }
+    
+    setInteractions(interactionsMap);
+    setPdiActionsMap(pdiActionsMap);
+    setLoadingData(false);
+  }, [employees, firestore]);
+
   const handleLeaderFilterChange = (leaderId: string) => {
     setLeaderFilter(leaderId);
     if (leaderId) {
@@ -209,6 +270,38 @@ const getInteractionStatus = useCallback((
         if (executedCount >= totalRequired) return "Executada";
         if (executedCount > 0) return `Realizado ${executedCount}/${totalRequired}`;
         return "Realizado 0/" + totalRequired;
+    }
+
+    // Tratamento especial para Feedback (mostra total de feedbacks / mínimo mensal)
+    if (type === 'Feedback' && schedule) {
+        const fromMonth = getMonth(range.start);
+        const fromYear = getYear(range.start);
+        const toMonth = getMonth(range.end);
+        const toYear = getYear(range.end);
+
+        let requiredMonthsInPeriod: number[] = [];
+        for (let y = fromYear; y <= toYear; y++) {
+            const startMonth = (y === fromYear) ? fromMonth : 0;
+            const endMonth = (y === toYear) ? toMonth : 11;
+            schedule.forEach(month => {
+                if(month >= startMonth && month <= endMonth) {
+                    requiredMonthsInPeriod.push(month);
+                }
+            });
+        }
+        
+        const requiredCountInPeriod = requiredMonthsInPeriod.length; // Meses no período
+        if (requiredCountInPeriod === 0) return "N/A";
+
+        // Contar total de feedbacks (não apenas meses únicos)
+        const totalFeedbacks = employeeInteractions.filter(int =>
+            int.type === 'Feedback' && isWithinInterval(parseISO(int.date), range)
+        ).length;
+
+        // Para status, mostramos "Realizado X/Y" onde X = total de feedbacks, Y = meses obrigatórios
+        if (totalFeedbacks >= requiredCountInPeriod) return "Executada";
+        if (totalFeedbacks > 0) return `Realizado ${totalFeedbacks}/${requiredCountInPeriod}`;
+        return "Realizado 0/" + requiredCountInPeriod;
     }
 
     if (schedule) {
@@ -257,7 +350,7 @@ const getInteractionStatus = useCallback((
         return "Realizado 0/" + requiredCountInPeriod;
     }
 
-    // Fallback for types without a fixed schedule (e.g., Feedback)
+    // Fallback for types without a fixed schedule
     const wasExecuted = employeeInteractions.some(int =>
         int.type === type && isWithinInterval(parseISO(int.date), range)
     );
@@ -272,6 +365,17 @@ const getInteractionStatus = useCallback((
   
     return employees
       .filter(e => {
+        // Para Líder de Projeto, filtrar apenas membros dos projetos
+        if (currentUserEmployee.role === 'Líder de Projeto') {
+          if (!projectMemberIds.has(e.id)) return false;
+          
+          // Aplicar filtro de pessoa
+          if (personFilter !== 'all' && e.id !== personFilter) return false;
+          
+          return true;
+        }
+        
+        // Lógica existente para outros roles
         if (!e.isUnderManagement) return false;
         const axisMatches = axisFilter === 'all' || e.axis === axisFilter;
         if (!axisMatches) return false;
@@ -286,7 +390,10 @@ const getInteractionStatus = useCallback((
             let totalRequired = 0;
             let totalExecuted = 0;
 
-            const allInteractionTypes: InteractionFilterType[] = ["N3 Individual", "Índice de Risco", "1:1", "PDI"];
+            // Para Líder de Projeto, incluir apenas Feedback no cálculo de aderência
+            const allInteractionTypes: InteractionFilterType[] = currentUserEmployee.role === 'Líder de Projeto' 
+              ? ["Feedback"]
+              : ["N3 Individual", "Índice de Risco", "1:1", "PDI"];
 
             allInteractionTypes.forEach(type => {
                 const status = getInteractionStatus(employee, type, range, employeeInteractions, employeePdiActions);
@@ -305,7 +412,7 @@ const getInteractionStatus = useCallback((
                         const requiredCountPerMonth = segment ? n3IndividualSchedule[segment] : 0;
                         const monthsInRange = differenceInMonths(range.end, range.start) + 1;
                         required = requiredCountPerMonth * monthsInRange;
-                    } else if (type === '1:1' || type === 'PDI' || type === 'Índice de Risco') {
+                    } else if (type === '1:1' || type === 'PDI' || type === 'Índice de Risco' || type === 'Feedback') {
                         const schedule = interactionSchedules[type];
                         if(schedule) {
                             const fromMonth = getMonth(range.start);
@@ -435,6 +542,11 @@ const getInteractionStatus = useCallback((
   const { leadersWithTeams, uniqueAxes } = useMemo(() => {
     if (!employees) return { leadersWithTeams: [], uniqueAxes: [] };
     
+    // Líder de Projeto não usa filtro de Axis ou Líder
+    if (currentUserEmployee?.role === 'Líder de Projeto') {
+      return { leadersWithTeams: [], uniqueAxes: [] };
+    }
+    
     const leaders = employees
       .filter(e => e.role === 'Líder' && (axisFilter === 'all' || e.axis === axisFilter || (axisFilter === 'Comercial' && e.axis === 'Comercial')))
       .sort((a, b) => {
@@ -451,7 +563,31 @@ const getInteractionStatus = useCallback((
     )].sort();
       
     return { leadersWithTeams: leaders, uniqueAxes: axes };
-  }, [employees, axisFilter]);
+  }, [employees, axisFilter, currentUserEmployee]);
+
+  // Para Líder de Projeto: obter membros únicos dos projetos
+  const projectMembers = useMemo(() => {
+    if (!employees || !currentUserEmployee || currentUserEmployee.role !== 'Líder de Projeto') {
+      return [];
+    }
+
+    const members = employees.filter(e => projectMemberIds.has(e.id));
+
+    const sortedMembers = members.sort((a, b) => {
+      const nameA = a.name || '';
+      const nameB = b.name || '';
+      return nameA.localeCompare(nameB);
+    });
+
+    return sortedMembers;
+  }, [employees, projectMemberIds, currentUserEmployee]);
+
+  // Auto-selecionar Feedback como tipo de interação para Líder de Projeto
+  useEffect(() => {
+    if (currentUserEmployee?.role === 'Líder de Projeto' && interactionTypeFilter !== 'Feedback') {
+      setInteractionTypeFilter('Feedback');
+    }
+  }, [currentUserEmployee, interactionTypeFilter]);
 
 
   const getBadgeVariant = (status: InteractionStatus) => {
@@ -481,6 +617,7 @@ const getInteractionStatus = useCallback((
   
   const isLoading = areEmployeesLoading || loadingData;
   const isLeaderOnly = currentUserEmployee?.role === 'Líder' && !currentUserEmployee.isDirector && !currentUserEmployee.isAdmin;
+  const isProjectLeader = currentUserEmployee?.role === 'Líder de Projeto';
 
   return (
     <div className="space-y-6">
@@ -488,38 +625,60 @@ const getInteractionStatus = useCallback((
         <CardHeader>
           <CardTitle>Filtros</CardTitle>
           <CardDescription>
-            Filtre as interações por equipe, tipo, status e período.
+            {isProjectLeader 
+              ? "Filtre as interações dos membros dos seus projetos por tipo, status e período."
+              : "Filtre as interações por equipe, tipo, status e período."
+            }
           </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-            <Select onValueChange={handleAxisFilterChange} value={axisFilter} disabled>
-              <SelectTrigger className="text-xs">
-                <SelectValue placeholder="Todos os Eixos" />
-              </SelectTrigger>
-              <SelectContent>
-                 <SelectItem value="Comercial">Comercial</SelectItem>
-                 {uniqueAxes.filter(axis => axis !== 'Comercial').map(axis => (
-                    <SelectItem key={axis} value={axis} disabled>
-                        {axis}
+            {!isProjectLeader && (
+              <Select onValueChange={handleAxisFilterChange} value={axisFilter} disabled>
+                <SelectTrigger className="text-xs">
+                  <SelectValue placeholder="Todos os Eixos" />
+                </SelectTrigger>
+                <SelectContent>
+                   <SelectItem value="Comercial">Comercial</SelectItem>
+                   {uniqueAxes.filter(axis => axis !== 'Comercial').map(axis => (
+                      <SelectItem key={axis} value={axis} disabled>
+                          {axis}
+                      </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {!isProjectLeader && (
+              <Select onValueChange={handleLeaderFilterChange} value={leaderFilter} disabled={isLoading || isLeaderOnly}>
+                <SelectTrigger className="text-xs">
+                  <SelectValue placeholder="Selecione uma equipe" />
+                </SelectTrigger>
+                <SelectContent>
+                  {!isLeaderOnly && <SelectItem value="all">Todas as Equipes</SelectItem>}
+                  {leadersWithTeams.map((leader) => (
+                    <SelectItem key={leader.id} value={leader.id}>
+                      {leader.name}
                     </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select onValueChange={handleLeaderFilterChange} value={leaderFilter} disabled={isLoading || isLeaderOnly}>
-              <SelectTrigger className="text-xs">
-                <SelectValue placeholder="Selecione uma equipe" />
-              </SelectTrigger>
-              <SelectContent>
-                {!isLeaderOnly && <SelectItem value="all">Todas as Equipes</SelectItem>}
-                {leadersWithTeams.map((leader) => (
-                  <SelectItem key={leader.id} value={leader.id}>
-                    {leader.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select onValueChange={value => setInteractionTypeFilter(value as any)} value={interactionTypeFilter} disabled={isLoading}>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {isProjectLeader && (
+              <Select onValueChange={setPersonFilter} value={personFilter} disabled={isLoading}>
+                <SelectTrigger className="text-xs">
+                  <SelectValue placeholder="Todas as Pessoas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as Pessoas</SelectItem>
+                  {projectMembers.map((member) => (
+                    <SelectItem key={member.id} value={member.id}>
+                      {member.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <Select onValueChange={value => setInteractionTypeFilter(value as any)} value={interactionTypeFilter} disabled={isLoading || isProjectLeader}>
                 <SelectTrigger className="text-xs">
                     <SelectValue>
                       <div className="flex items-center gap-2">
@@ -529,7 +688,7 @@ const getInteractionStatus = useCallback((
                     </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                    {interactionTypes.map(type => (
+                    {(isProjectLeader ? interactionTypes.filter(type => type.value === 'Feedback') : interactionTypes).map(type => (
                         <SelectItem key={type.value} value={type.value}>
                             <div className="flex items-center gap-2">
                                 <span>{type.label}</span>
@@ -554,7 +713,10 @@ const getInteractionStatus = useCallback((
         </CardContent>
         <CardFooter>
             <p className="text-xs text-muted-foreground">
-                Lembrete de Limites para Registro Mensal: <strong>N3 Individual:</strong> 10; <strong>Feedback:</strong> 10; <strong>Demais tipos:</strong> 1. Para o cálculo de aderência, os limites do N3 são (Alfa: 4, Beta: 2, Senior: 1).
+                {isProjectLeader 
+                  ? "Lembrete: Mínimo de 1 Feedback por mês para cada membro. Limite de registro: 10 Feedbacks por mês."
+                  : "Lembrete de Limites para Registro Mensal: N3 Individual: 10; Feedback: 10; Demais tipos: 1. Para o cálculo de aderência, os limites do N3 são (Alfa: 4, Beta: 2, Senior: 1)."
+                }
             </p>
         </CardFooter>
       </Card>

@@ -294,7 +294,7 @@ export function ProjectFormDialog({
                       </FormControl>
                       <SelectContent>
                         {employees
-                          .filter(emp => emp.role === "Líder" || emp.isDirector || emp.isAdmin)
+                          .filter(emp => emp.role === "Líder" || emp.role === "Líder de Projeto" || emp.isDirector || emp.isAdmin)
                           .map((leader) => (
                             <SelectItem key={leader.id} value={leader.id}>
                               {leader.name} - {leader.email}

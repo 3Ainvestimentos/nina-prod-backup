@@ -24,9 +24,11 @@ export function useUserProjects(projects: Project[] | null, currentUser: Employe
     }
 
     const isAdminOrDirector = currentUser.isAdmin || currentUser.isDirector;
+    const isProjectLeader = currentUser.role === 'Líder de Projeto';
     
     console.log('🔐 [USE_USER_PROJECTS] Permissões do usuário:', {
       isAdminOrDirector,
+      isProjectLeader,
       email: currentUser.email,
     });
 
@@ -41,6 +43,20 @@ export function useUserProjects(projects: Project[] | null, currentUser: Employe
         ...project,
         isOwner: project.leaderEmail === currentUser.email,
         canEdit: project.leaderEmail === currentUser.email,
+        canView: true,
+      }));
+    }
+
+    // Líder de Projeto vê apenas projetos onde é líder (não pode editar configurações)
+    if (isProjectLeader) {
+      const leaderProjects = activeProjects.filter(
+        project => project.leaderEmail === currentUser.email
+      );
+      console.log(`✅ [USE_USER_PROJECTS] Líder de Projeto - Retornando ${leaderProjects.length} projeto(s)`);
+      return leaderProjects.map(project => ({
+        ...project,
+        isOwner: true,
+        canEdit: false, // Não pode editar configurações do projeto
         canView: true,
       }));
     }

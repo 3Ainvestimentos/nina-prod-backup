@@ -1,7 +1,7 @@
 
 
 // This is a type definition file.
-export type Role = "Colaborador" | "Líder" | "Diretor";
+export type Role = "Colaborador" | "Líder" | "Líder de Projeto" | "Diretor";
 
 export type InteractionStatus = string;
 // PDI is not a direct interaction type, it has its own table.

@@ -70,7 +70,7 @@ const emailsToPromote = [
     'matheus@3ainvestimentos.com.br'
 ];
 
-const roles: Role[] = ["Colaborador", "Líder", "Diretor"];
+const roles: Role[] = ["Colaborador", "Líder", "Líder de Projeto", "Diretor"];
 const adminEmails = ['matheus@3ainvestimentos.com.br', 'lucas.nogueira@3ainvestimentos.com.br', 'henrique.peixoto@3ainvestimentos.com.br'];
 
 

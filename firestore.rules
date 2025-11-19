@@ -1,29 +1,31 @@
-
 /**
- * @file Firestore Security Rules for Nina 1.0 (Development Mode)
- * @description This ruleset is configured for development. It allows any authenticated user
- *              to read and write data, removing permission-based restrictions to facilitate
- *              rapid prototyping and prevent "permission-denied" errors during development.
- *
- *              WARNING: These rules are not secure for a production environment.
+ * @description This ruleset enforces a role-based access control model, with special considerations for employee data and related subcollections.
+ * Nesta versão, as subcoleções de employees foram deixadas permissivas para qualquer usuário autenticado,
+ * para facilitar testes de UI (selecionar usuário e registrar interação).
  */
+
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-
     /**
-     * @description Checks if the request is authenticated.
-     */
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    /**
-     * @description Open access for employees and jejich subcollections for any signed-in user.
+     * /employees/{employeeId}
+     * - leitura pública
+     * - criação/edição: qualquer logado
+     * - exclusão: apenas admin
      */
     match /employees/{employeeId} {
-      allow read, write: if isSignedIn();
+      // qualquer um pode listar/ver employees
+      allow read: if true;
+      // criar e atualizar: qualquer usuário autenticado
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      // apagar: só admin
+      allow delete: if isAdmin();
 
+      // ============================
+      // SUBCOLEÇÕES PERMISSIVAS
+      // ============================
       match /interactions/{interactionId} {
         allow read, write: if isSignedIn();
       }
@@ -38,44 +40,61 @@ service cloud.firestore {
     }
 
     /**
-     * @description Public read access for roles and teams. Write access is disabled.
+     * /roles e /teams continuam públicos
      */
     match /roles/{roleId} {
       allow read: if true;
-      allow write: if false;
     }
 
     match /teams/{teamId} {
       allow read: if true;
-      allow write: if false;
     }
 
     /**
-     * @description Leader rankings can be read by anyone, but only written to by Cloud Functions (no client-side writes).
+     * /leaderRankings - apenas leitura pública, escrita por Cloud Functions
      */
     match /leaderRankings/{leaderId} {
-        allow read: if true;
-        allow write: if false; // Protect this collection from client-side writes
+      allow read: if true;
+      allow write: if false; // Protege contra escrita client-side
     }
 
     /**
-     * @description Projects - accessible to authenticated users
+     * /projects - Projetos Independentes
+     * - Permissivo para usuários autenticados
+     * - Validações de permissão acontecem no frontend
+     * - Criador automaticamente se torna líder do projeto
      */
     match /projects/{projectId} {
-      allow read, write: if isSignedIn();
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn();
       
+      // Subcoleção de interações do projeto
       match /interactions/{interactionId} {
         allow read, write: if isSignedIn();
       }
     }
 
     /**
-     * @description Configs - readable by all authenticated users, writable by authenticated users
-     * Note: Access control is handled at the application level (only admins can access the admin panel)
+     * /configs - Configurações Gerais do Sistema
+     * - Leitura: qualquer usuário autenticado
+     * - Escrita: qualquer usuário autenticado (controle de acesso via frontend)
      */
     match /configs/{configId} {
       allow read: if isSignedIn();
       allow write: if isSignedIn();
     }
+  }
+
+  // ============================
+  // Helper functions
+  // ============================
+  function isSignedIn() {
+    return request.auth != null;
+  }
+
+  function isAdmin() {
+    return isSignedIn() && request.auth.token.isAdmin == true;
   }
 }

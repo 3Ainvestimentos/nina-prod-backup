@@ -227,7 +227,7 @@ export function LoginButton() {
         const employeeDoc = querySnapshot.docs[0];
         const employeeData = employeeDoc.data() as Employee;
 
-        const hasAccess = employeeData.role === 'Líder' || employeeData.isDirector === true || employeeData.isAdmin === true;
+        const hasAccess = employeeData.role === 'Líder' || employeeData.role === 'Líder de Projeto' || employeeData.isDirector === true || employeeData.isAdmin === true;
         const needsCalendarAuth = hasAccess && !(employeeData as any).googleAuth?.refreshToken;
 
         if (hasAccess) {

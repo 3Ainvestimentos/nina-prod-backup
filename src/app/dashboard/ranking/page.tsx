@@ -174,11 +174,18 @@ export default function RankingPage() {
     const toYear = getYear(range.end);
     const monthsInRange = differenceInMonths(range.end, range.start) + 1;
 
-    const rankings = leaders.map(leader => {
+    const rankings: LeaderRanking[] = leaders.map(leader => {
       const teamMembers = employees.filter(e => e.leaderId === leader.id && e.isUnderManagement);
       
       if (teamMembers.length === 0) {
-        return { ...leader, adherenceScore: 0, completedCount: 0, totalCount: 0 };
+        return { 
+          ...leader, 
+          adherenceScore: 0, 
+          bonusPercentage: 0,
+          totalScore: 0,
+          completedCount: 0, 
+          totalCount: 0 
+        };
       }
   
       let totalCompleted = 0;
@@ -274,7 +281,7 @@ export default function RankingPage() {
   
   }, [employees, interactions, pdiActionsMap, dateRange, loadingData]);
   
-  const filteredLeaderRankings = useMemo(() => {
+  const filteredLeaderRankings: LeaderRanking[] = useMemo(() => {
     const filtered = axisFilter === "all" 
       ? leaderRankings 
       : leaderRankings.filter(leader => leader.axis === axisFilter);
@@ -326,10 +333,10 @@ export default function RankingPage() {
                   <TooltipContent className="max-w-xs">
                     <p className="font-semibold mb-1">Como funciona:</p>
                     <p className="text-xs mb-2">
-                      • <span className="text-green-600">Verde</span>: Aderência às interações obrigatórias
+                      • <span className="text-green-400">Verde Claro</span>: Aderência às interações obrigatórias
                     </p>
                     <p className="text-xs mb-2">
-                      • <span className="text-red-600">Vermelho</span>: Bônus (+3% a cada 10 interações)
+                      • <span className="text-green-700">Verde Escuro</span>: Bônus (+3% a cada 10 interações)
                     </p>
                     <p className="text-xs">
                       O ranking é ordenado pelo score total (aderência + bônus)
@@ -339,7 +346,7 @@ export default function RankingPage() {
               </TooltipProvider>
             </CardTitle>
             <CardDescription>
-              Percentual de interações realizadas + bônus por volume. A cada 10 interações completadas, o líder ganha +3% extra.
+              Percentual de interações realizadas por cada líder com sua equipe.
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
@@ -359,8 +366,8 @@ export default function RankingPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="Comercial">Comercial</SelectItem>
-                {uniqueAxes.filter(axis => axis !== 'Comercial').map((axis) => (
-                  <SelectItem key={axis} value={axis} disabled>
+                {uniqueAxes.filter(axis => axis && axis !== 'Comercial').map((axis) => (
+                  <SelectItem key={axis} value={axis!} disabled>
                     {axis}
                   </SelectItem>
                 ))}
@@ -397,28 +404,26 @@ export default function RankingPage() {
                         <div className="flex-1">
                             <div className="flex justify-between items-baseline mb-2">
                                 <span className="font-medium">{leader.name}</span>
-                                <span className="text-sm font-semibold text-foreground">
-                                    {leader.adherenceScore.toFixed(0)}%
-                                    {leader.bonusPercentage > 0 && (
-                                        <>
-                                            <span className="text-red-600"> + {leader.bonusPercentage}%</span>
-                                            <span className="text-muted-foreground"> = {leader.totalScore.toFixed(0)}%</span>
-                                        </>
-                                    )}
+                                <span className="text-sm font-semibold">
+                                    <span className="text-muted-foreground">{leader.adherenceScore.toFixed(0)}%</span>
+                                    <span className="text-muted-foreground"> + </span>
+                                    <span className="text-muted-foreground">{leader.bonusPercentage}% bônus</span>
+                                    <span className="text-foreground"> = </span>
+                                    <span className="text-foreground">{leader.totalScore.toFixed(0)}%</span>
                                 </span>
                             </div>
                             
                             {/* Barras de Progresso Empilhadas */}
                             <div className="relative h-3 bg-secondary rounded-full overflow-hidden">
-                                {/* Barra Verde (Aderência) */}
+                                {/* Barra Verde Claro (Aderência) */}
                                 <div
-                                    className="absolute top-0 left-0 h-full bg-green-600 transition-all"
+                                    className="absolute top-0 left-0 h-full bg-green-400 transition-all"
                                     style={{ width: `${Math.min(leader.adherenceScore, 100)}%` }}
                                 />
-                                {/* Barra Vermelha (Bônus) */}
+                                {/* Barra Verde Escuro (Bônus) */}
                                 {leader.bonusPercentage > 0 && (
                                     <div
-                                        className="absolute top-0 h-full bg-red-600 transition-all"
+                                        className="absolute top-0 h-full bg-green-700 transition-all"
                                         style={{ 
                                             left: `${Math.min(leader.adherenceScore, 100)}%`,
                                             width: `${Math.min(leader.bonusPercentage, 100 - leader.adherenceScore)}%` 

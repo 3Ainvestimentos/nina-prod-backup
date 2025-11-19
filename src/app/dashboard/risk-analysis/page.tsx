@@ -21,7 +21,7 @@ import { collection } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Users, AlertTriangle } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { RiskAnalysisSelectionDialog } from "@/components/risk-analysis-selection-dialog";
+import { EmployeeSelectionDialog } from "@/components/employee-selection-dialog";
 
 const chartColors = [
   "hsl(var(--chart-1))",
@@ -371,13 +371,14 @@ export default function RiskAnalysisPage() {
             </CardContent>
           </Card>
         </div>
-        <RiskAnalysisSelectionDialog 
+        <EmployeeSelectionDialog 
             open={isSelectionDialogOpen}
             onOpenChange={setIsSelectionDialogOpen}
             allEmployees={managedEmployees}
             selectedIds={selectedEmployeeIds}
             onSelectionChange={setSelectedEmployeeIds}
             isLoading={areEmployeesLoading}
+            title="Selecionar Colaboradores para Análise"
         />
     </div>
   );

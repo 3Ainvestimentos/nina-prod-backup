@@ -383,15 +383,17 @@ export default function ProjectDetailsPage() {
                           </p>
                         </div>
                       </div>
-                      {interaction.notes.score !== undefined && (
-                        <Badge variant="secondary">
-                          Pontuação: {interaction.notes.score}
-                        </Badge>
-                      )}
                     </div>
                   </AccordionTrigger>
                   <AccordionContent>
                     <div className="pt-2 pb-4 space-y-2">
+                      {interaction.notes.indicator && (
+                        <div>
+                          <p className="text-sm font-bold text-foreground">
+                            Indicador: {interaction.notes.indicator}
+                          </p>
+                        </div>
+                      )}
                       <div>
                         <h4 className="text-sm font-semibold mb-1">Anotações</h4>
                         <p className="text-sm text-muted-foreground whitespace-pre-wrap">

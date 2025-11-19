@@ -25,23 +25,25 @@ import { Skeleton } from "./ui/skeleton";
 import { X, Filter } from "lucide-react";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuCheckboxItem } from "@/components/ui/dropdown-menu";
 
-interface RiskAnalysisSelectionDialogProps {
+interface EmployeeSelectionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   allEmployees: Employee[];
   selectedIds: string[];
   onSelectionChange: (ids: string[]) => void;
   isLoading: boolean;
+  title?: string;
 }
 
-export function RiskAnalysisSelectionDialog({
+export function EmployeeSelectionDialog({
   open,
   onOpenChange,
   allEmployees,
   selectedIds,
   onSelectionChange,
   isLoading,
-}: RiskAnalysisSelectionDialogProps) {
+  title = "Selecionar Colaboradores",
+}: EmployeeSelectionDialogProps) {
     const initialFilters = {
         name: new Set<string>(),
         area: new Set<string>(),
@@ -146,7 +148,7 @@ export function RiskAnalysisSelectionDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
         <DialogHeader>
-          <DialogTitle>Selecionar Colaboradores para Análise</DialogTitle>
+          <DialogTitle>{title}</DialogTitle>
            <div className="flex justify-between items-center">
              <DialogDescription>
                 Use os filtros no cabeçalho da tabela para encontrar e selecionar os colaboradores.

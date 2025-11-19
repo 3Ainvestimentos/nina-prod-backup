@@ -290,38 +290,23 @@ export default function MemberTimelinePage() {
                           </div>
                         </div>
                       </div>
-                      {interaction.notes.score !== undefined && (
-                        <Badge variant="secondary">
-                          Pontuação: {interaction.notes.score}
-                        </Badge>
-                      )}
                     </div>
                   </AccordionTrigger>
                   <AccordionContent>
                     <div className="pt-3 pb-4 space-y-3">
+                      {interaction.notes.indicator && (
+                        <div>
+                          <p className="text-sm font-bold text-foreground">
+                            Indicador: {interaction.notes.indicator}
+                          </p>
+                        </div>
+                      )}
                       <div>
                         <h4 className="text-sm font-semibold mb-2">Anotações</h4>
                         <p className="text-sm text-muted-foreground whitespace-pre-wrap">
                           {interaction.notes.content}
                         </p>
                       </div>
-
-                      {interaction.notes.score !== undefined && (
-                        <div className="pt-2 border-t">
-                          <h4 className="text-sm font-semibold mb-1">Pontuação</h4>
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1 bg-secondary rounded-full h-2">
-                              <div
-                                className="bg-primary h-2 rounded-full"
-                                style={{ width: `${(interaction.notes.score / 10) * 100}%` }}
-                              />
-                            </div>
-                            <span className="text-sm font-medium">
-                              {interaction.notes.score}/10
-                            </span>
-                          </div>
-                        </div>
-                      )}
 
                       <div className="text-xs text-muted-foreground pt-2 border-t">
                         Registrado por: {interaction.authorEmail}

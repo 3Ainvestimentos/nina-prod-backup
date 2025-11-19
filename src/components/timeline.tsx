@@ -24,7 +24,6 @@ const interactionIcons: Record<Interaction["type"], React.ReactNode> = {
   "Feedback": <MessageSquare className="h-4 w-4" />,
   "N3 Individual": <Users className="h-4 w-4" />,
   "Índice de Risco": <ShieldAlert className="h-4 w-4" />,
-  "Projeto": <MessageSquare className="h-4 w-4" />,
 };
 
 const OneOnOneDetails = ({ notes }: { notes: OneOnOneNotes }) => (
@@ -164,16 +163,16 @@ const OneOnOneDetails = ({ notes }: { notes: OneOnOneNotes }) => (
               Pontuação: {item.riskScore}
             </div>
         )}
-        {item.type === 'Projeto' && typeof item.riskScore === 'number' && (
-            <div className="text-xs font-bold text-foreground mt-2">
-              Pontuação: {item.riskScore}
+        {item.type === 'Feedback' && typeof item.notes === 'object' && item.notes && 'indicator' in item.notes && item.notes.indicator && (
+            <div className="text-sm font-bold text-foreground mt-2">
+              Indicador: {item.notes.indicator}
             </div>
         )}
         <div className="mt-2 text-sm">
             {typeof item.notes === 'string' && item.type === 'Feedback' ? (
                  <p className="whitespace-pre-wrap">{item.notes}</p>
-            ) : typeof item.notes === 'string' && item.type === 'Projeto' ? (
-                 <p className="whitespace-pre-wrap">{item.notes}</p>
+            ) : typeof item.notes === 'object' && item.type === 'Feedback' && item.notes && 'content' in item.notes ? (
+                 <p className="whitespace-pre-wrap">{item.notes.content}</p>
             ) : typeof item.notes === 'string' && item.type === 'Índice de Risco' ? (
                 <RiskAssessmentDetails notes={item.notes} />
             ) : item.type === '1:1' && item.notes ? (

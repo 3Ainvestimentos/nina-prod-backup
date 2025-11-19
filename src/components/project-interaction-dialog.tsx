@@ -42,7 +42,7 @@ const formSchema = z.object({
   type: z.enum(["1:1"]),
   targetMemberId: z.string().min(1, "Selecione um membro."),
   content: z.string().min(5, "As anotações devem ter pelo menos 5 caracteres."),
-  score: z.string().optional(),
+  indicator: z.string().optional(),
 });
 
 type InteractionFormData = z.infer<typeof formSchema>;
@@ -53,6 +53,7 @@ interface ProjectInteractionDialogProps {
   project: Project;
   projectMembers: Employee[];
   currentUser: Employee;
+  preSelectedMemberId?: string; // ID do membro já selecionado (opcional)
 }
 
 export function ProjectInteractionDialog({
@@ -61,6 +62,7 @@ export function ProjectInteractionDialog({
   project,
   projectMembers,
   currentUser,
+  preSelectedMemberId,
 }: ProjectInteractionDialogProps) {
   const firestore = useFirestore();
   const { user } = useUser();
@@ -71,13 +73,11 @@ export function ProjectInteractionDialog({
     resolver: zodResolver(formSchema),
     defaultValues: {
       type: "1:1",
-      targetMemberId: "",
+      targetMemberId: preSelectedMemberId || "",
       content: "",
-      score: "",
+      indicator: "",
     },
   });
-
-  const hasScoring = project.interactionConfig?.hasScoring;
 
   const handleSubmit = async (data: InteractionFormData) => {
     console.log('🚀 [PROJECT_INTERACTION] Iniciando criação de interação', {
@@ -132,15 +132,8 @@ export function ProjectInteractionDialog({
       // Construir notas da interação
       const notes: ProjectInteractionNotes = {
         content: data.content,
+        indicator: data.indicator || undefined,
       };
-
-      // Adicionar pontuação se configurado
-      if (hasScoring && data.score) {
-        const scoreNum = parseFloat(data.score);
-        if (!isNaN(scoreNum)) {
-          notes.score = scoreNum;
-        }
-      }
 
       const interactionData = {
         projectId: project.id,
@@ -168,7 +161,12 @@ export function ProjectInteractionDialog({
         description: `Interação com ${targetMember.name} registrada com sucesso.`,
       });
 
-      form.reset();
+      form.reset({
+        type: "1:1",
+        targetMemberId: preSelectedMemberId || "",
+        content: "",
+        indicator: "",
+      });
       
       // Pequeno delay para garantir que o useCollection capture a mudança
       setTimeout(() => {
@@ -188,7 +186,12 @@ export function ProjectInteractionDialog({
   };
 
   const handleCancel = () => {
-    form.reset();
+    form.reset({
+      type: "1:1",
+      targetMemberId: preSelectedMemberId || "",
+      content: "",
+      indicator: "",
+    });
     onOpenChange(false);
   };
 
@@ -204,29 +207,52 @@ export function ProjectInteractionDialog({
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
-            {/* Seleção de Membro */}
+            {/* Seleção de Membro (oculto se pré-selecionado) */}
+            {!preSelectedMemberId && (
+              <FormField
+                control={form.control}
+                name="targetMemberId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Membro *</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione o membro" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {projectMembers.map((member) => (
+                          <SelectItem key={member.id} value={member.id}>
+                            {member.name} - {member.position || member.email}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormDescription>
+                      Selecione o membro com quem a interação foi realizada
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
+            {/* Campo Indicador */}
             <FormField
               control={form.control}
-              name="targetMemberId"
+              name="indicator"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Membro *</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione o membro" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {projectMembers.map((member) => (
-                        <SelectItem key={member.id} value={member.id}>
-                          {member.name} - {member.position || member.email}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <FormLabel>Indicador (opcional)</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="Ex: 1º lugar, MVP do mês, Destaque..."
+                      {...field}
+                    />
+                  </FormControl>
                   <FormDescription>
-                    Selecione o membro com quem a interação foi realizada
+                    Indique a posição, classificação ou destaque do membro nesta interação
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -251,33 +277,6 @@ export function ProjectInteractionDialog({
                 </FormItem>
               )}
             />
-
-            {/* Pontuação (se configurado) */}
-            {hasScoring && (
-              <FormField
-                control={form.control}
-                name="score"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Pontuação (opcional)</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        step="0.1"
-                        min="0"
-                        max="10"
-                        placeholder="Ex: 8.5"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      Atribua uma pontuação de 0 a 10 para esta interação
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={handleCancel} disabled={isSaving}>

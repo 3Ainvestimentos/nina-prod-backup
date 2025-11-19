@@ -27,8 +27,6 @@ import {
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Textarea } from "./ui/textarea";
-import { Checkbox } from "./ui/checkbox";
-import { ScrollArea } from "./ui/scroll-area";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -39,6 +37,8 @@ import { useToast } from "@/hooks/use-toast";
 import type { Employee, Project } from "@/lib/types";
 import { ProjectErrors, mapFirestoreError, logValidationError, logProjectSuccess } from "@/lib/project-errors";
 import { canUserCreateProjects } from "@/hooks/use-user-projects";
+import { EmployeeSelectionDialog } from "@/components/employee-selection-dialog";
+import { Users } from "lucide-react";
 
 const formSchema = z.object({
   name: z.string().min(3, "O nome deve ter pelo menos 3 caracteres."),
@@ -70,7 +70,7 @@ export function ProjectFormDialog({
   const { user } = useUser();
   const { toast } = useToast();
   const [isSaving, setIsSaving] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [isSelectionDialogOpen, setIsSelectionDialogOpen] = useState(false);
   
   const isEditMode = !!project?.id;
 
@@ -85,12 +85,6 @@ export function ProjectFormDialog({
   });
 
   const selectedMemberIds = form.watch("memberIds");
-
-  // Filtrar employees para busca
-  const filteredEmployees = employees.filter(emp =>
-    emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    emp.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   const handleSubmit = async (data: ProjectFormData) => {
     console.log('🚀 [CREATE_PROJECT] Iniciando criação/edição de projeto', { name: data.name, isEditMode, isAdminMode });
@@ -197,7 +191,7 @@ export function ProjectFormDialog({
         memberEmails,
         updatedAt: new Date().toISOString(),
         interactionConfig: {
-          hasScoring: true, // Sempre ativo
+          hasScoring: false, // Pontuação removida
           hasRanking: false, // Não usado mais
         },
       };
@@ -347,49 +341,19 @@ export function ProjectFormDialog({
                     Selecione os colaboradores que farão parte deste projeto
                   </FormDescription>
 
-                  {/* Busca */}
-                  <Input
-                    placeholder="Buscar por nome ou email..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="mb-2"
-                  />
-
-                  {/* Lista de Membros */}
-                  <ScrollArea className="h-64 border rounded-md p-4">
-                    <div className="space-y-2">
-                      {filteredEmployees.length === 0 ? (
-                        <p className="text-sm text-muted-foreground text-center py-4">
-                          Nenhum colaborador encontrado
-                        </p>
-                      ) : (
-                        filteredEmployees.map((employee) => (
-                          <div key={employee.id} className="flex items-start space-x-2">
-                            <Checkbox
-                              checked={field.value.includes(employee.id)}
-                              onCheckedChange={(checked) => {
-                                const newValue = checked
-                                  ? [...field.value, employee.id]
-                                  : field.value.filter((id) => id !== employee.id);
-                                field.onChange(newValue);
-                              }}
-                            />
-                            <div className="flex-1">
-                              <p className="text-sm font-medium">{employee.name}</p>
-                              <p className="text-xs text-muted-foreground">{employee.email}</p>
-                              {employee.position && (
-                                <p className="text-xs text-muted-foreground">{employee.position}</p>
-                              )}
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </ScrollArea>
-
-                  <p className="text-sm text-muted-foreground mt-2">
-                    {field.value.length} membro(s) selecionado(s)
-                  </p>
+                  <div className="mt-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setIsSelectionDialogOpen(true)}
+                      className="w-full sm:w-auto"
+                    >
+                      <Users className="mr-2 h-4 w-4" />
+                      {field.value.length > 0
+                        ? `${field.value.length} membro(s) selecionado(s)`
+                        : "Selecionar Membros"}
+                    </Button>
+                  </div>
 
                   <FormMessage />
                 </FormItem>
@@ -413,6 +377,15 @@ export function ProjectFormDialog({
           </form>
         </Form>
       </DialogContent>
+      <EmployeeSelectionDialog
+        open={isSelectionDialogOpen}
+        onOpenChange={setIsSelectionDialogOpen}
+        allEmployees={employees}
+        selectedIds={form.watch("memberIds")}
+        onSelectionChange={(ids) => form.setValue("memberIds", ids)}
+        isLoading={false}
+        title="Selecionar Membros do Projeto"
+      />
     </Dialog>
   );
 }

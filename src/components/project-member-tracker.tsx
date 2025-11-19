@@ -54,11 +54,10 @@ export function ProjectMemberTracker({
       .filter((i) => i.type === "1:1" && i.targetMemberId === selectedMemberId)
       .map(interaction => ({
         id: interaction.id,
-        type: "Projeto" as const,
+        type: "Feedback" as const,
         date: interaction.date,
-        notes: interaction.notes.content,
+        notes: interaction.notes, // Passa o objeto completo com content e indicator
         authorId: interaction.authorId,
-        riskScore: interaction.notes.score,
       }))
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [selectedMemberId, allInteractions]);
@@ -130,6 +129,7 @@ export function ProjectMemberTracker({
           project={project}
           projectMembers={projectMembers}
           currentUser={currentUser}
+          preSelectedMemberId={selectedMemberId || undefined}
         />
       )}
     </div>

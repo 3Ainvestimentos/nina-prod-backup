@@ -29,7 +29,7 @@ const guideSections = [
     },
     {
         title: "Acompanhamento Individual",
-        content: "O coração do registro histórico. Aqui você pode selecionar um colaborador para visualizar uma linha do tempo cronológica com todas as interações já realizadas. Para registrar um novo evento, basta usar o botão 'Nova Interação'. Formulários específicos e guiados estão disponíveis para 1:1, N3 Individual e Avaliação de Risco, garantindo que as informações corretas sejam coletadas em cada tipo de conversa."
+        content: "O coração do registro histórico. Aqui você pode selecionar um colaborador para visualizar uma linha do tempo cronológica com todas as interações já realizadas. Para registrar um novo evento, basta usar o botão 'Nova Interação'. Formulários específicos e guiados estão disponíveis para 1:1, N3 Individual e Avaliação de Risco, garantindo que as informações corretas sejam coletadas em cada tipo de conversa. A interação N3 Individual está integrada com o Google Agenda: ao registrar uma interação N3, uma reunião é automaticamente agendada no Google Agenda de ambos (líder e colaborador) e o colaborador recebe um e-mail com o aviso da reunião marcada."
     },
     {
         title: "Plano de Desenvolvimento Individual (PDI)",
@@ -42,6 +42,10 @@ const guideSections = [
     {
         title: "Ranking de Aderência",
         content: "Uma forma de medir e incentivar a performance da liderança. Esta página exibe um ranking de líderes baseado no 'Índice de Aderência', que é o percentual de interações obrigatórias realizadas em relação ao total previsto para o período. É o principal indicador de engajamento da liderança com o processo de gestão. Use os filtros para analisar por período."
+    },
+    {
+        title: "Projetos",
+        content: "Gerencie projetos específicos e acompanhe a participação dos membros da equipe. Ao acessar um projeto, é possível visualizar todos os membros participantes e registrar interações individuais (Feedbacks) com cada um. O campo 'Indicador' permite destacar membros com informações relevantes como posição em competições, reconhecimentos ou classificações. Todas as interações ficam registradas na timeline do membro, permitindo um acompanhamento completo de seu desempenho no projeto."
     }
 ];
 
@@ -73,6 +77,18 @@ const faqSections = [
     {
         question: "Realizei um 1:1 fora do mês obrigatório. Por que o status no dashboard não mudou?",
         answer: "O dashboard e o Índice de Aderência funcionam com base em um cronograma fixo para garantir uma medição padronizada para toda a liderança (ex: 1:1 é esperado em Março, Junho, etc.). Interações realizadas fora desses meses são importantes e ficam registradas no histórico do colaborador na página 'Acompanhamento Individual', mas não contam para a meta de aderência daquele período específico."
+    },
+    {
+        question: "Como funcionam os Projetos no sistema?",
+        answer: "Projetos permitem acompanhar iniciativas específicas com um grupo de colaboradores. Apenas administradores podem criar novos projetos, definir nomes, descrições e selecionar membros participantes. Como líder, você pode visualizar os projetos dos quais faz parte, acessar os membros participantes e registrar interações individuais (Feedbacks) com cada membro. Todas as interações ficam registradas na timeline do colaborador, permitindo um acompanhamento completo de seu desempenho no projeto. Esta funcionalidade é ideal para acompanhar squads, iniciativas temporárias ou grupos de trabalho específicos."
+    },
+    {
+        question: "O que é o campo Indicador nas interações de projeto?",
+        answer: "O campo Indicador é um campo de texto livre que permite registrar destaques, classificações ou reconhecimentos específicos para um membro em uma interação de projeto. Você pode usá-lo para registrar informações como '1º lugar', '2º lugar', 'MVP do mês', 'Destaque da semana' ou qualquer outra classificação relevante para o contexto do projeto. Este indicador aparece em destaque (negrito) acima das anotações na timeline do colaborador."
+    },
+    {
+        question: "Posso criar ou editar projetos?",
+        answer: "Apenas administradores podem criar novos projetos, definir nomes, descrições e selecionar membros participantes. Como líder, você pode visualizar os projetos dos quais faz parte, acessar os membros participantes e registrar interações (Feedbacks) com cada membro do projeto. Todas as suas interações ficam registradas na timeline do colaborador para acompanhamento completo."
     }
 ];
 

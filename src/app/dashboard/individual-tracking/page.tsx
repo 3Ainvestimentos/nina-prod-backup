@@ -230,17 +230,8 @@ export default function IndividualTrackingPage() {
         });
         return;
     }
-
-    if (interactionType === 'N3 Individual' && !nextInteractionDate) {
-        toast({
-            variant: "destructive",
-            title: "Data da Próxima Interação",
-            description: "Para N3 Individual, a data da próxima interação é obrigatória.",
-        });
-        return;
-    }
     
-     if (interactionType === 'N3 Individual' && !isLeaderAuthorizedForCalendar) {
+     if (interactionType === 'N3 Individual' && nextInteractionDate && !isLeaderAuthorizedForCalendar) {
         toast({
             variant: "destructive",
             title: "Agendamento desativado",

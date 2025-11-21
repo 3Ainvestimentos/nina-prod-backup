@@ -1,6 +1,4 @@
-
 import type {NextConfig} from 'next';
-
 const nextConfig: NextConfig = {
   /* config options here */
   typescript: {
@@ -37,8 +35,18 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  async headers() {
+    return [
+      {
+        source: '/(.*)',
+        headers: [
+          {
+            key: 'Permissions-Policy',
+            value: 'clipboard-write=*, microphone=*',
+          },
+        ],
+      },
+    ];
+  },
 };
-
 export default nextConfig;
-
-    

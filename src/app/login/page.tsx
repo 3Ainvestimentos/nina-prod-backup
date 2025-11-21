@@ -31,16 +31,22 @@ export default function LoginPage() {
   const popupRef = useRef<Window | null>(null);
   const authInProgressRef = useRef(false);
   const signInInProgressRef = useRef(false);
+  const hasVerifiedOnceRef = useRef(false);
+  const authSuccessTimestampRef = useRef<number>(0);
+
+  // Versão estável de handleGoogleAuth usando useRef para evitar loop de dependências
+  const handleGoogleAuthRef = useRef<(() => Promise<void>) | null>(null);
 
   const handleGoogleAuth = useCallback(async () => {
     // Previne múltiplas chamadas simultâneas
     if (authInProgressRef.current || isAuthLoading) {
-        console.log("Autenticação Google já em progresso, ignorando chamada duplicada.");
+        console.log("[GoogleAuth] Autenticação já em progresso, ignorando chamada duplicada.");
         return;
     }
 
     // Se já existe popup aberto, apenas foca nele
     if (popupRef.current && !popupRef.current.closed) {
+        console.log("[GoogleAuth] Popup já aberto, apenas focando.");
         popupRef.current.focus();
         return;
     }
@@ -53,6 +59,7 @@ export default function LoginPage() {
         return;
     }
     
+    console.log("[GoogleAuth] Iniciando fluxo de autorização para:", user.email);
     setIsAuthLoading(true);
     try {
         const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
@@ -99,8 +106,7 @@ export default function LoginPage() {
                         });
                     }
                 } catch (e) {
-                    // Se não conseguir acessar popup.closed, pode ser problema de cross-origin, mas não é bloqueio
-                    console.log("Não foi possível verificar status do popup (isso é normal)");
+                    console.log("[GoogleAuth] Não foi possível verificar status do popup (cross-origin)");
                 }
             }, 500);
             
@@ -128,11 +134,14 @@ export default function LoginPage() {
             // Escuta mensagem do popup
             messageHandler = (event: MessageEvent) => {
                 if (event.data?.type === 'GOOGLE_AUTH_SUCCESS') {
+                    console.log("[GoogleAuth] Autorização concluída com sucesso!");
+                    authSuccessTimestampRef.current = Date.now();
                     cleanup();
-                    // Aguarda um pouco para garantir que o token foi salvo
+                    // Aguarda para garantir que o token foi salvo no Firestore
                     setTimeout(() => {
+                        console.log("[GoogleAuth] Redirecionando para dashboard...");
                         router.push("/dashboard/v2");
-                    }, 1000);
+                    }, 2000); // Aumentado para 2 segundos
                 }
             };
             window.addEventListener('message', messageHandler);
@@ -141,8 +150,8 @@ export default function LoginPage() {
             timer = setInterval(() => {
                 try {
                     if (popup.closed) {
+                        console.log("[GoogleAuth] Popup fechado pelo usuário.");
                         cleanup();
-                        // Não redireciona automaticamente - apenas limpa
                     }
                 } catch (e) {
                     // Ignora erros de cross-origin
@@ -153,7 +162,7 @@ export default function LoginPage() {
             throw new Error("URL de autorização não recebida.");
         }
     } catch (error: any) {
-        console.error("Erro ao iniciar autorização com Google:", error);
+        console.error("[GoogleAuth] Erro ao iniciar autorização:", error);
         authInProgressRef.current = false;
         setIsAuthLoading(false);
         popupRef.current = null;
@@ -164,6 +173,9 @@ export default function LoginPage() {
         });
     }
   }, [user, toast, router, isAuthLoading]);
+
+  // Atualiza a ref sempre que a função mudar
+  handleGoogleAuthRef.current = handleGoogleAuth;
 
 
   const handleLogin = async () => {
@@ -192,14 +204,35 @@ export default function LoginPage() {
 
   useEffect(() => {
     const verifyAccess = async () => {
+      // Evita múltiplas verificações na mesma sessão
+      if (hasVerifiedOnceRef.current) {
+        console.log("[Login] Verificação já realizada nesta sessão, ignorando.");
+        return;
+      }
+
+      // Se acabou de autorizar (menos de 5 segundos), aguarda antes de verificar
+      const timeSinceAuth = Date.now() - authSuccessTimestampRef.current;
+      if (authSuccessTimestampRef.current > 0 && timeSinceAuth < 5000) {
+        console.log("[Login] Autorização recente detectada, aguardando propagação do token...");
+        setTimeout(() => {
+          hasVerifiedOnceRef.current = false; // Permite verificar novamente
+          verifyAccess();
+        }, 2000);
+        return;
+      }
+
       if (isUserLoading || !user || !firestore || isVerifying) return;
 
+      hasVerifiedOnceRef.current = true;
       setIsVerifying(true);
+      
+      console.log("[Login] Iniciando verificação de acesso para:", user.email);
       
       // Aceita emails de ambos os domínios: @3ainvestimentos.com.br e @3ariva.com.br
       const isValidDomain = user.email?.endsWith('@3ainvestimentos.com.br') || user.email?.endsWith('@3ariva.com.br');
       
       if (!isValidDomain) {
+          console.log("[Login] Domínio inválido:", user.email);
           toast({
               variant: "destructive",
               title: "Acesso Negado",
@@ -207,25 +240,33 @@ export default function LoginPage() {
           });
           if (auth) await signOut(auth);
           setIsVerifying(false);
+          hasVerifiedOnceRef.current = false;
           return;
       }
 
       if (user.email && adminEmails.includes(user.email)) {
         // Admins: checar token no employees por e-mail; só abre o Calendar se faltar
+        console.log("[Login] Usuário admin detectado:", user.email);
         try {
           const employeesRef = collection(firestore!, "employees");
           const qByEmail = query(employeesRef, where("email", "==", user.email));
           const snap = await getDocs(qByEmail);
           const doc = snap.docs[0]?.data() as Employee | undefined;
           const hasToken = !!(doc as any)?.googleAuth?.refreshToken;
+          
+          console.log("[Login] Admin - Token encontrado:", hasToken);
+          
           if (!hasToken) {
-            if (!authInProgressRef.current && !isAuthLoading) {
-              await handleGoogleAuth();
+            if (!authInProgressRef.current && !isAuthLoading && handleGoogleAuthRef.current) {
+              console.log("[Login] Iniciando autorização Google Calendar para admin...");
+              await handleGoogleAuthRef.current();
             }
           } else {
+            console.log("[Login] Admin já autorizado, redirecionando...");
             router.push("/dashboard/v2");
           }
-        } catch (_e) {
+        } catch (e) {
+          console.error("[Login] Erro ao verificar admin:", e);
           // Falhou leitura: tenta seguir para dashboard; usuário poderá autorizar depois nas telas
           router.push("/dashboard/v2");
         }
@@ -246,16 +287,25 @@ export default function LoginPage() {
         const employeeDoc = querySnapshot.docs[0];
         const employeeData = employeeDoc.data() as Employee;
 
+        console.log("[Login] Dados do funcionário:", {
+          role: employeeData.role,
+          isDirector: employeeData.isDirector,
+          isAdmin: employeeData.isAdmin,
+          hasToken: !!(employeeData as any).googleAuth?.refreshToken
+        });
+
         const hasAccess = employeeData.role === 'Líder' || employeeData.role === 'Líder de Projeto' || employeeData.isDirector === true || employeeData.isAdmin === true;
         const needsCalendarAuth = hasAccess && !(employeeData as any).googleAuth?.refreshToken;
 
         if (hasAccess) {
             if (needsCalendarAuth) {
+                console.log("[Login] Líder precisa autorizar Google Calendar...");
                 // Evita chamar handleGoogleAuth se já está em progresso
-                if (!authInProgressRef.current && !isAuthLoading) {
-                  await handleGoogleAuth(); // Redirect directly to Google OAuth
+                if (!authInProgressRef.current && !isAuthLoading && handleGoogleAuthRef.current) {
+                  await handleGoogleAuthRef.current();
                 }
             } else {
+                console.log("[Login] Líder já autorizado, redirecionando...");
                 router.push("/dashboard/v2");
             }
         } else {
@@ -265,6 +315,7 @@ export default function LoginPage() {
       } catch (error: any) {
         const msg = String(error?.message || "");
         const code = (error?.code || "").toString();
+        console.error("[Login] Erro na verificação:", { msg, code });
         // Suprime erro ruidoso de permissão (false-positive em alguns cenários de carga)
         const isPermDenied = code === 'permission-denied' || msg.includes('Missing or insufficient permissions');
         if (!isPermDenied) {
@@ -277,6 +328,7 @@ export default function LoginPage() {
         if (auth) {
           await signOut(auth);
         }
+        hasVerifiedOnceRef.current = false;
       } finally {
         setIsVerifying(false);
       }
@@ -285,7 +337,7 @@ export default function LoginPage() {
     if (user) {
         verifyAccess();
     }
-  }, [user, isUserLoading, firestore, router, auth, toast, isVerifying, handleGoogleAuth]);
+  }, [user, isUserLoading, firestore, router, auth, toast, isVerifying, isAuthLoading]);
 
   const isLoading = isUserLoading || isVerifying || isSigningIn;
 

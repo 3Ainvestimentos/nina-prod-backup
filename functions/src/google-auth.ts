@@ -230,7 +230,7 @@ export const googleAuthCallback = functions
 
         // Tenta identificar o funcionário pelo e-mail do Google (mais estável que UID)
         let updatedAnyDoc = false;
-        let userEmail: string | undefined;
+        let userEmail: string | null | undefined;
         
         try {
           oauth2Client.setCredentials(tokens);

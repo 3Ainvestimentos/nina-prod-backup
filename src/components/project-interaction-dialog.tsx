@@ -149,6 +149,52 @@ export function ProjectInteractionDialog({
 
       console.log('💾 [PROJECT_INTERACTION] Salvando interação 1:1 no Firestore');
       const docRef = await addDoc(interactionsRef, interactionData);
+      console.log('✅ [PROJECT_INTERACTION] Interação do projeto salva com sucesso, ID:', docRef.id);
+
+      // Salvar também na coleção do funcionário para aparecer no dashboard
+      // Interações de projetos são contadas como "Feedback" no dashboard
+      console.log('🔄 [PROJECT_INTERACTION] Iniciando sincronização com coleção do funcionário...', {
+        targetMemberId: targetMember.id,
+        targetMemberName: targetMember.name,
+        firestoreAvailable: !!firestore
+      });
+      
+      if (!firestore) {
+        console.error('❌ [PROJECT_INTERACTION] Firestore não disponível para sincronização');
+      } else {
+        try {
+          const employeeInteractionsRef = collection(firestore, "employees", targetMember.id, "interactions");
+          const employeeInteractionData = {
+            type: "Feedback" as const, // Interações de projetos são Feedback
+            date: interactionData.date,
+            notes: data.content, // Usar string simples para compatibilidade com Interaction
+            authorId: currentUser.id,
+            source: "project", // Marcar origem como projeto
+            projectId: project.id, // Referência ao projeto (opcional, mas útil para rastreabilidade)
+          };
+
+          console.log('💾 [PROJECT_INTERACTION] Salvando interação na coleção do funcionário', {
+            employeeId: targetMember.id,
+            employeeName: targetMember.name,
+            projectId: project.id,
+            type: employeeInteractionData.type, // Confirmar que é "Feedback"
+            date: employeeInteractionData.date,
+          });
+
+          await addDoc(employeeInteractionsRef, employeeInteractionData);
+          
+          console.log('✅ [PROJECT_INTERACTION] Interação sincronizada com sucesso como tipo:', employeeInteractionData.type);
+        } catch (syncError: any) {
+          // Log do erro mas não falha a operação principal
+          console.error('⚠️ [PROJECT_INTERACTION] Erro ao sincronizar com coleção do funcionário:', syncError);
+          console.error('⚠️ [PROJECT_INTERACTION] Detalhes do erro:', {
+            message: syncError?.message,
+            code: syncError?.code,
+            stack: syncError?.stack
+          });
+          // Ainda mostra sucesso porque a interação do projeto foi salva
+        }
+      }
 
       logProjectSuccess('Interação 1:1 criada', {
         projectId: project.id,

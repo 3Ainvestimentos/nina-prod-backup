@@ -8,7 +8,7 @@
 - Gerenciamento de PDI: Permitir que os Líderes adicionem, editem e excluam ações nos Planos de Desenvolvimento Pessoal (PDI) dos membros da equipe por meio de formulários modais.
 - Painel de Análise de Risco: Avaliar e visualizar o índice de risco dos membros da equipe com base em métricas de saúde, satisfação e desempenho.
 - Painel de Liderança: Monitorar a frequência de reuniões 1:1 dentro das equipes, mostrando status (em dia, atenção, atrasado), filtrado por equipe, status e período.
-- Painel de Gerenciamento de Admin: Permitir que os administradores gerenciem os funcionários, incluindo funções, permissões, upload de CSV e funcionalidade de modo de manutenção.
+- Painel de Gerenciamento de Admin: Permitir que os administradores gerenciem os funcionários, incluindo funções, permissões, upload de CSV e funcionalidade de modo de manutenção..
 
 ## Style Guidelines:
 

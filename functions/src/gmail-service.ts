@@ -18,10 +18,29 @@ export function formatN3EmailBody(
     minute: "2-digit",
   });
 
-  // Garante que os valores existam
-  const captacao = notes.captacao || "N/A";
-  const churnPF = notes.churnPF || "N/A";
-  const roa = notes.roa || "N/A";
+  // Funções de formatação (igual ao frontend)
+  const formatCurrency = (value: string | number | undefined) => {
+    if (!value && value !== 0) return "N/A";
+    const num = typeof value === "string" ? parseFloat(value.replace(',', '.')) : value;
+    if (Number.isNaN(num)) return "N/A";
+    return num.toLocaleString("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+      minimumFractionDigits: 2,
+    });
+  };
+
+  const formatPercentage = (value: string | number | undefined) => {
+    if (!value && value !== 0) return "N/A";
+    const num = typeof value === "string" ? parseFloat(value.replace(',', '.')) : value;
+    if (Number.isNaN(num)) return "N/A";
+    return `${num.toFixed(2).replace(".", ",")}%`;
+  };
+
+  // Formatar os valores
+  const captacao = formatCurrency(notes.captacao);
+  const churnPF = formatPercentage(notes.churnPF);
+  const roa = formatPercentage(notes.roa);
   const esforcos = notes.esforcos ? notes.esforcos.replace(/\n/g, "<br>") : "Não informado";
   const planoAcao = notes.planoAcao ? notes.planoAcao.replace(/\n/g, "<br>") : "Não informado";
 

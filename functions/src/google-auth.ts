@@ -18,15 +18,20 @@ const GOOGLE_CLIENT_SECRET = functions.config().google?.client_secret;
 // ✅ Redirect URI coerente com a MESMA região (us-central1)
 const REDIRECT_URL = `https://${REGION}-${process.env.GCLOUD_PROJECT}.cloudfunctions.net/googleAuthCallback`;
 
-const oauth2Client = new google.auth.OAuth2(
-  GOOGLE_CLIENT_ID,
-  GOOGLE_CLIENT_SECRET,
-  REDIRECT_URL
-);
+export const getOAuth2Client = () => {
+  return new google.auth.OAuth2(
+    GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET,
+    REDIRECT_URL
+  );
+};
+
+const oauth2Client = getOAuth2Client();
 
 const SCOPES = [
   "https://www.googleapis.com/auth/calendar.events",
   "https://www.googleapis.com/auth/userinfo.email",
+  "https://www.googleapis.com/auth/gmail.send",
 ];
 
 // Helper para CORS + pré-flight

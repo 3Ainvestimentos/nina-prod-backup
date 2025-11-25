@@ -3,12 +3,14 @@ import * as functions from "firebase-functions";
 import { admin } from "./admin-app"; // ✅ inicialização centralizada
 import { updateLeaderRanking } from "./update-ranking";
 import { createCalendarEvent } from "./calendar-events";
-import { googleAuthInit, googleAuthCallback } from "./google-auth";
+import { googleAuthInit, googleAuthCallback, getOAuth2Client } from "./google-auth";
 import { migrateGoogleAuthTokens } from "./migrations";
 import { setupFirstAdmin } from "./setup-admin";
+import { formatN3EmailBody, sendEmail } from "./gmail-service";
 
 // Região única do projeto
 const REGION = process.env.FUNCTIONS_REGION || "us-central1";
+const db = admin.firestore();
 
 /**
  * Callable: promover admin
@@ -62,6 +64,103 @@ export const onInteractionCreate = functions
 
     const tasks: Promise<any>[] = [updateLeaderRanking(employeeId)];
     if (interactionData) tasks.push(createCalendarEvent(interactionData, employeeId));
+
+    // --- Lógica de Envio de Email N3 (SEPARADO do calendário) ---
+    if (interactionData?.type === "N3 Individual" && interactionData.authorId) {
+      functions.logger.log(`[EmailN3] ✅ Trigger de email N3 ativado! Tipo: ${interactionData.type}, AuthorId: ${interactionData.authorId}`);
+      tasks.push((async () => {
+        try {
+          functions.logger.log(`[EmailN3] Interação N3 detectada. Buscando credenciais do líder (UID: ${interactionData.authorId})`);
+
+          // 1. Obter email do autor pelo Firebase Auth (authorId é UID, não ID do documento)
+          const authorUser = await admin.auth().getUser(interactionData.authorId).catch((e) => {
+            functions.logger.warn('[EmailN3] getUser(authorId) falhou', { authorId: interactionData.authorId, errorMessage: e?.message });
+            return null;
+          });
+          const authorEmail = authorUser?.email;
+          
+          if (!authorEmail) {
+            functions.logger.warn(`[EmailN3] Não foi possível obter email do autor pelo UID.`, { authorId: interactionData.authorId });
+            return;
+          }
+          
+          functions.logger.log(`[EmailN3] Email do autor obtido: ${authorEmail}`);
+
+          // 2. Buscar documento do líder em employees pelo email
+          const leaderQuery = await db.collection("employees").where("email", "==", authorEmail).limit(1).get();
+          
+          if (leaderQuery.empty) {
+            functions.logger.warn(`[EmailN3] Líder não encontrado em employees pelo email: ${authorEmail}`);
+            return;
+          }
+          
+          const leaderDoc = leaderQuery.docs[0];
+          const leaderData = leaderDoc.data();
+          const refreshToken = leaderData?.googleAuth?.refreshToken;
+
+          functions.logger.log(`[EmailN3] Refresh Token encontrado? ${!!refreshToken ? "Sim" : "Não"}`);
+
+          if (!refreshToken) {
+            functions.logger.warn(`[EmailN3] Líder ${authorEmail} não possui refresh_token. Email não será enviado.`);
+            return;
+          }
+
+          // 3. Buscar dados do Colaborador (destinatário)
+          const employeeDoc = await db.collection("employees").doc(employeeId).get();
+          const employeeData = employeeDoc.data();
+          const employeeEmail = employeeData?.email;
+          const employeeName = employeeData?.name || "Colaborador";
+          const leaderName = leaderData?.name || "Líder";
+
+          functions.logger.log(`[EmailN3] Email do colaborador encontrado: ${employeeEmail}`);
+
+          if (!employeeEmail) {
+            functions.logger.warn(`[EmailN3] Colaborador ${employeeId} não possui email cadastrado.`);
+            return;
+          }
+
+          // 4. Configurar cliente OAuth2
+          const oauth2Client = getOAuth2Client();
+          oauth2Client.setCredentials({ refresh_token: refreshToken });
+
+          // 5. Gerar corpo do email
+          const htmlBody = formatN3EmailBody(interactionData, leaderName, employeeName);
+
+          // 6. Enviar email (Para: Líder + Colaborador)
+          const recipients = [employeeEmail];
+          if (authorEmail && authorEmail !== employeeEmail) {
+            recipients.push(authorEmail);
+          }
+
+          functions.logger.log(`[EmailN3] Enviando email para: ${recipients.join(", ")}`);
+
+          const emailSubject = `Resumo da Interação N3 Individual - ${employeeName}`;
+          
+          functions.logger.log(`[EmailN3] Preparando envio de email separado (não relacionado ao calendário)`);
+          functions.logger.log(`[EmailN3] Assunto: ${emailSubject}`);
+          functions.logger.log(`[EmailN3] Destinatários: ${recipients.join(", ")}`);
+
+          await sendEmail(
+            oauth2Client,
+            recipients,
+            emailSubject,
+            htmlBody
+          );
+
+          functions.logger.log(`[EmailN3] ✅ Email de resumo N3 enviado com sucesso! (Separado do convite do calendário)`);
+
+        } catch (emailError: any) {
+          // Erro não bloqueante
+          functions.logger.error(`[EmailN3] ❌ Erro ao enviar email N3:`, {
+            message: emailError?.message,
+            code: emailError?.code,
+            stack: emailError?.stack,
+            response: emailError?.response?.data
+          });
+        }
+      })());
+    }
+    // -----------------------------------
 
     try {
       await Promise.all(tasks);

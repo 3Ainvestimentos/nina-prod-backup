@@ -295,11 +295,16 @@ export default function LoginPage() {
         });
 
         const hasAccess = employeeData.role === 'Líder' || employeeData.role === 'Líder de Projeto' || employeeData.isDirector === true || employeeData.isAdmin === true;
-        const needsCalendarAuth = hasAccess && !(employeeData as any).googleAuth?.refreshToken;
+        const googleAuth = (employeeData as any).googleAuth;
+        const hasToken = !!googleAuth?.refreshToken;
+        const hasGmailScope = googleAuth?.scope?.includes('gmail.send');
+        
+        // Precisa autorizar se não tem token OU se tem token antigo sem escopo de email
+        const needsCalendarAuth = hasAccess && (!hasToken || !hasGmailScope);
 
         if (hasAccess) {
             if (needsCalendarAuth) {
-                console.log("[Login] Líder precisa autorizar Google Calendar...");
+                console.log("[Login] Líder precisa autorizar Google Calendar/Gmail (Token:", hasToken, "Scope:", hasGmailScope, ")...");
                 // Evita chamar handleGoogleAuth se já está em progresso
                 if (!authInProgressRef.current && !isAuthLoading && handleGoogleAuthRef.current) {
                   await handleGoogleAuthRef.current();

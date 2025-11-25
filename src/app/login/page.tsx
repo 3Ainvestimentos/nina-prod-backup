@@ -245,24 +245,41 @@ export default function LoginPage() {
       }
 
       if (user.email && adminEmails.includes(user.email)) {
-        // Admins: checar token no employees por e-mail; só abre o Calendar se faltar
+        // Admins: checar token e escopo no employees por e-mail; só abre o Calendar se faltar
         console.log("[Login] Usuário admin detectado:", user.email);
         try {
           const employeesRef = collection(firestore!, "employees");
           const qByEmail = query(employeesRef, where("email", "==", user.email));
           const snap = await getDocs(qByEmail);
           const doc = snap.docs[0]?.data() as Employee | undefined;
-          const hasToken = !!(doc as any)?.googleAuth?.refreshToken;
+          const googleAuth = (doc as any)?.googleAuth;
+          const hasToken = !!googleAuth?.refreshToken;
           
-          console.log("[Login] Admin - Token encontrado:", hasToken);
+          // Verificar escopo (pode ser string ou array, ou não existir)
+          const savedScope = googleAuth?.scope;
+          let hasGmailScope = false;
           
-          if (!hasToken) {
+          if (savedScope) {
+            if (typeof savedScope === 'string') {
+              hasGmailScope = savedScope.includes('gmail.send');
+            } else if (Array.isArray(savedScope)) {
+              hasGmailScope = savedScope.some(scope => 
+                typeof scope === 'string' && scope.includes('gmail.send')
+              );
+            }
+          }
+          
+          console.log("[Login] Admin - Token encontrado:", hasToken, "Escopo gmail.send:", hasGmailScope);
+          
+          if (!hasToken || !hasGmailScope) {
             if (!authInProgressRef.current && !isAuthLoading && handleGoogleAuthRef.current) {
-              console.log("[Login] Iniciando autorização Google Calendar para admin...");
+              console.log("[Login] Iniciando autorização Google Calendar/Gmail para admin...", {
+                reason: !hasToken ? 'Sem token' : 'Sem escopo gmail.send'
+              });
               await handleGoogleAuthRef.current();
             }
           } else {
-            console.log("[Login] Admin já autorizado, redirecionando...");
+            console.log("[Login] Admin já autorizado com todos os escopos necessários, redirecionando...");
             router.push("/dashboard/v2");
           }
         } catch (e) {
@@ -297,20 +314,39 @@ export default function LoginPage() {
         const hasAccess = employeeData.role === 'Líder' || employeeData.role === 'Líder de Projeto' || employeeData.isDirector === true || employeeData.isAdmin === true;
         const googleAuth = (employeeData as any).googleAuth;
         const hasToken = !!googleAuth?.refreshToken;
-        const hasGmailScope = googleAuth?.scope?.includes('gmail.send');
+        
+        // Verificar escopo (pode ser string ou array, ou não existir)
+        const savedScope = googleAuth?.scope;
+        let hasGmailScope = false;
+        
+        if (savedScope) {
+          if (typeof savedScope === 'string') {
+            hasGmailScope = savedScope.includes('gmail.send');
+          } else if (Array.isArray(savedScope)) {
+            hasGmailScope = savedScope.some(scope => 
+              typeof scope === 'string' && scope.includes('gmail.send')
+            );
+          }
+        }
         
         // Precisa autorizar se não tem token OU se tem token antigo sem escopo de email
         const needsCalendarAuth = hasAccess && (!hasToken || !hasGmailScope);
 
         if (hasAccess) {
             if (needsCalendarAuth) {
-                console.log("[Login] Líder precisa autorizar Google Calendar/Gmail (Token:", hasToken, "Scope:", hasGmailScope, ")...");
+                console.log("[Login] Líder precisa autorizar Google Calendar/Gmail", {
+                  hasToken,
+                  hasGmailScope,
+                  savedScope: savedScope || 'N/A',
+                  scopeType: typeof savedScope,
+                  reason: !hasToken ? 'Sem token' : 'Sem escopo gmail.send'
+                });
                 // Evita chamar handleGoogleAuth se já está em progresso
                 if (!authInProgressRef.current && !isAuthLoading && handleGoogleAuthRef.current) {
                   await handleGoogleAuthRef.current();
                 }
             } else {
-                console.log("[Login] Líder já autorizado, redirecionando...");
+                console.log("[Login] Líder já autorizado com todos os escopos necessários, redirecionando...");
                 router.push("/dashboard/v2");
             }
         } else {

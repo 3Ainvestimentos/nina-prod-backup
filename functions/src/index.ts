@@ -97,11 +97,27 @@ export const onInteractionCreate = functions
           const leaderDoc = leaderQuery.docs[0];
           const leaderData = leaderDoc.data();
           const refreshToken = leaderData?.googleAuth?.refreshToken;
+          const savedScope = leaderData?.googleAuth?.scope;
+          
+          // Verificar se o escopo está presente (pode ser string ou array)
+          const scopeString = typeof savedScope === 'string' 
+            ? savedScope 
+            : (Array.isArray(savedScope) ? savedScope.join(' ') : '');
+          const hasGmailScope = scopeString.includes('gmail.send');
 
           functions.logger.log(`[EmailN3] Refresh Token encontrado? ${!!refreshToken ? "Sim" : "Não"}`);
+          functions.logger.log(`[EmailN3] Escopo salvo: ${savedScope || 'N/A'} (tipo: ${typeof savedScope})`);
+          functions.logger.log(`[EmailN3] Escopo gmail.send presente? ${hasGmailScope ? "Sim" : "Não"}`);
 
           if (!refreshToken) {
             functions.logger.warn(`[EmailN3] Líder ${authorEmail} não possui refresh_token. Email não será enviado.`);
+            return;
+          }
+
+          if (!hasGmailScope) {
+            functions.logger.warn(`[EmailN3] ⚠️ ATENÇÃO: Líder ${authorEmail} não possui escopo 'gmail.send' autorizado.`);
+            functions.logger.warn(`[EmailN3] ⚠️ SOLUÇÃO: O usuário precisa fazer logout e login novamente para forçar nova autorização.`);
+            functions.logger.warn(`[EmailN3] ⚠️ Escopo atual salvo: ${savedScope || 'Nenhum escopo salvo'}`);
             return;
           }
 

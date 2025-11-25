@@ -81,8 +81,8 @@ export const googleAuthInit = functions
           access_type: "offline",
           scope: SCOPES,
           state: uid,
-          prompt: "consent", // Força consent para sempre obter refresh_token
-          include_granted_scopes: true as any,
+          prompt: "consent", // Força consent para sempre obter refresh_token e todos os escopos
+          include_granted_scopes: false, // Não incluir escopos já concedidos - força pedir todos novamente
           login_hint: loginHint,
           hd: hostedDomain,
         });

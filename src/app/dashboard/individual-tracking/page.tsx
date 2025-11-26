@@ -42,6 +42,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { setDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Switch } from "@/components/ui/switch";
 
 type NewInteraction = Omit<Interaction, "id" | "date" | "authorId" | "notes"> & { notes: string | OneOnOneNotes | N3IndividualNotes };
 
@@ -77,6 +78,7 @@ export default function IndividualTrackingPage() {
   const [n3Notes, setN3Notes] = useState<N3IndividualNotes>(initialN3Notes);
   const [nextInteractionDate, setNextInteractionDate] = useState<Date>();
   const [isSaving, setIsSaving] = useState(false);
+  const [sendEmailToAssessor, setSendEmailToAssessor] = useState(false);
   
   const firestore = useFirestore();
   const { user } = useUser();
@@ -175,6 +177,7 @@ export default function IndividualTrackingPage() {
     setN3Notes(initialN3Notes);
     setInteractionType('N3 Individual');
     setNextInteractionDate(undefined);
+    setSendEmailToAssessor(false);
     clearStorage();
   }, [clearStorage]);
 
@@ -190,6 +193,7 @@ export default function IndividualTrackingPage() {
       setOneOnOneNotes(data.oneOnOneNotes || initialOneOnOneNotes);
       setN3Notes(data.n3Notes || initialN3Notes);
       setSimpleNotes(data.simpleNotes || "");
+      setSendEmailToAssessor(data.sendEmailToAssessor || false);
       if (data.nextInteractionDate) {
         setNextInteractionDate(new Date(data.nextInteractionDate));
       }
@@ -199,6 +203,7 @@ export default function IndividualTrackingPage() {
         setN3Notes(initialN3Notes);
         setInteractionType('N3 Individual');
         setNextInteractionDate(undefined);
+        setSendEmailToAssessor(false);
     }
   }, [selectedEmployeeId, getStorageKey]);
   
@@ -212,9 +217,10 @@ export default function IndividualTrackingPage() {
       n3Notes,
       simpleNotes,
       nextInteractionDate,
+      sendEmailToAssessor,
     };
     localStorage.setItem(key, JSON.stringify(dataToSave));
-  }, [interactionType, oneOnOneNotes, n3Notes, simpleNotes, nextInteractionDate, selectedEmployeeId, getStorageKey, openInteractionDialog]);
+  }, [interactionType, oneOnOneNotes, n3Notes, simpleNotes, nextInteractionDate, sendEmailToAssessor, selectedEmployeeId, getStorageKey, openInteractionDialog]);
 
 
   const handleMemberChange = (id: string) => {
@@ -326,9 +332,15 @@ export default function IndividualTrackingPage() {
         date: new Date().toISOString(),
     };
 
-    if (interactionType === 'N3 Individual' && nextInteractionDate) {
-        interactionToSave.nextInteractionDate = nextInteractionDate.toISOString();
+    if (interactionType === 'N3 Individual') {
+        if (nextInteractionDate) {
+            interactionToSave.nextInteractionDate = nextInteractionDate.toISOString();
+        }
+        interactionToSave.sendEmailToAssessor = sendEmailToAssessor;
+        console.log('[DEBUG] Salvando N3 com sendEmailToAssessor:', sendEmailToAssessor);
     }
+
+    console.log('[DEBUG] Objeto completo a ser salvo:', interactionToSave);
 
     try {
         await addDoc(interactionsCollection, interactionToSave);
@@ -663,11 +675,33 @@ export default function IndividualTrackingPage() {
                     </div>
                    )}
                 </div>
-                <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={isSaving}>Cancelar</Button>
-                  <Button type="submit" onClick={handleSaveInteraction} disabled={isSaving}>
-                    {isSaving ? "Salvando..." : 'Salvar Interação'}
-                  </Button>
+                <DialogFooter className="sm:flex-row flex-col gap-4">
+                  {interactionType === 'N3 Individual' && (
+                    <div className="flex items-center gap-2 mr-auto">
+                      <Switch
+                        id="send-email-switch"
+                        checked={sendEmailToAssessor}
+                        onCheckedChange={setSendEmailToAssessor}
+                        className={cn(
+                          "data-[state=checked]:bg-green-500 data-[state=unchecked]:bg-red-500"
+                        )}
+                      />
+                      <Label 
+                        htmlFor="send-email-switch" 
+                        className="text-sm cursor-pointer"
+                      >
+                        {sendEmailToAssessor 
+                          ? "Enviar cópia para o assessor" 
+                          : "Não enviar cópia para o assessor"}
+                      </Label>
+                    </div>
+                  )}
+                  <div className="flex gap-2 sm:ml-auto">
+                    <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={isSaving}>Cancelar</Button>
+                    <Button type="submit" onClick={handleSaveInteraction} disabled={isSaving}>
+                      {isSaving ? "Salvando..." : 'Salvar Interação'}
+                    </Button>
+                  </div>
                 </DialogFooter>
               </DialogContent>
             </Dialog>

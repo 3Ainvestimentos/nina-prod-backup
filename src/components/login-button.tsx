@@ -83,7 +83,7 @@ export function LoginButton() {
                 toast({
                     variant: "destructive",
                     title: "Pop-up Bloqueado",
-                    description: "Por favor, habilite pop-ups para este site e tente novamente.",
+                    description: "Por favor, habilite pop-ups para este site e tente novamente. Se o problema persistir, limpe o cache do navegador (Ctrl+Shift+Del) e recarregue a página.",
                 });
                 return;
             }
@@ -98,7 +98,7 @@ export function LoginButton() {
                         toast({
                             variant: "destructive",
                             title: "Pop-up Bloqueado",
-                            description: "Por favor, habilite pop-ups para este site e tente novamente.",
+                            description: "Por favor, habilite pop-ups para este site e tente novamente. Se o problema persistir, limpe o cache do navegador (Ctrl+Shift+Del) e recarregue a página.",
                         });
                     }
                 } catch (e) {

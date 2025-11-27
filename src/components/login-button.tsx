@@ -210,9 +210,16 @@ export function LoginButton() {
 
   useEffect(() => {
     const verifyAccess = async () => {
-      // Evita múltiplas verificações na mesma sessão
+      // PRIMEIRA VERIFICAÇÃO: Se já foi verificado nesta sessão (sessionStorage persiste entre recarregamentos)
+      const alreadyCheckedThisSession = typeof window !== 'undefined' && sessionStorage.getItem(SESSION_STORAGE_KEY) === 'true';
+      if (alreadyCheckedThisSession) {
+        console.log("[LoginButton] Já foi verificado nesta sessão (sessionStorage), ignorando verificação automática.");
+        return;
+      }
+
+      // Evita múltiplas verificações na mesma renderização (useRef não persiste entre recarregamentos)
       if (hasVerifiedOnceRef.current) {
-        console.log("[LoginButton] Verificação já realizada nesta sessão, ignorando.");
+        console.log("[LoginButton] Verificação já realizada nesta renderização, ignorando.");
         return;
       }
 

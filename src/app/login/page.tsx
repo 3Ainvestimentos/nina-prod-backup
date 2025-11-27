@@ -215,9 +215,16 @@ export default function LoginPage() {
 
   useEffect(() => {
     const verifyAccess = async () => {
-      // Evita múltiplas verificações na mesma sessão
+      // PRIMEIRA VERIFICAÇÃO: Se já foi verificado nesta sessão (sessionStorage persiste entre recarregamentos)
+      const alreadyCheckedThisSession = typeof window !== 'undefined' && sessionStorage.getItem(SESSION_STORAGE_KEY) === 'true';
+      if (alreadyCheckedThisSession) {
+        console.log("[Login] Já foi verificado nesta sessão (sessionStorage), ignorando verificação automática.");
+        return;
+      }
+
+      // Evita múltiplas verificações na mesma renderização (useRef não persiste entre recarregamentos)
       if (hasVerifiedOnceRef.current) {
-        console.log("[Login] Verificação já realizada nesta sessão, ignorando.");
+        console.log("[Login] Verificação já realizada nesta renderização, ignorando.");
         return;
       }
 

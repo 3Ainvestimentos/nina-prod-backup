@@ -19,6 +19,9 @@ import { loginWithGoogle } from "@/firebase/google-login";
 
 const adminEmails = ['matheus@3ainvestimentos.com.br', 'lucas.nogueira@3ainvestimentos.com.br'];
 
+// Chave para rastrear se já verificou autorização Google nesta sessão
+const SESSION_STORAGE_KEY = 'google-auth-checked-session';
+
 export default function LoginPage() {
   const auth = useAuth();
   const firestore = useFirestore();
@@ -151,6 +154,10 @@ export default function LoginPage() {
                 try {
                     if (popup.closed) {
                         console.log("[GoogleAuth] Popup fechado pelo usuário.");
+                        // Limpa sessionStorage para permitir nova tentativa na mesma sessão
+                        if (typeof window !== 'undefined') {
+                            sessionStorage.removeItem(SESSION_STORAGE_KEY);
+                        }
                         cleanup();
                     }
                 } catch (e) {
@@ -163,6 +170,10 @@ export default function LoginPage() {
         }
     } catch (error: any) {
         console.error("[GoogleAuth] Erro ao iniciar autorização:", error);
+        // Limpa sessionStorage para permitir nova tentativa na mesma sessão
+        if (typeof window !== 'undefined') {
+            sessionStorage.removeItem(SESSION_STORAGE_KEY);
+        }
         authInProgressRef.current = false;
         setIsAuthLoading(false);
         popupRef.current = null;
@@ -272,10 +283,17 @@ export default function LoginPage() {
           console.log("[Login] Admin - Token encontrado:", hasToken, "Escopo gmail.send:", hasGmailScope);
           
           if (!hasToken || !hasGmailScope) {
-            if (!authInProgressRef.current && !isAuthLoading && handleGoogleAuthRef.current) {
+            // Verifica se já foi verificado nesta sessão (evita popup ao atualizar página)
+            const alreadyCheckedThisSession = typeof window !== 'undefined' && sessionStorage.getItem(SESSION_STORAGE_KEY) === 'true';
+            
+            if (!alreadyCheckedThisSession && !authInProgressRef.current && !isAuthLoading && handleGoogleAuthRef.current) {
               console.log("[Login] Iniciando autorização Google Calendar/Gmail para admin...", {
                 reason: !hasToken ? 'Sem token' : 'Sem escopo gmail.send'
               });
+              // Marca que já verificou nesta sessão
+              if (typeof window !== 'undefined') {
+                sessionStorage.setItem(SESSION_STORAGE_KEY, 'true');
+              }
               await handleGoogleAuthRef.current();
             }
           } else {
@@ -341,8 +359,15 @@ export default function LoginPage() {
                   scopeType: typeof savedScope,
                   reason: !hasToken ? 'Sem token' : 'Sem escopo gmail.send'
                 });
-                // Evita chamar handleGoogleAuth se já está em progresso
-                if (!authInProgressRef.current && !isAuthLoading && handleGoogleAuthRef.current) {
+                // Verifica se já foi verificado nesta sessão (evita popup ao atualizar página)
+                const alreadyCheckedThisSession = typeof window !== 'undefined' && sessionStorage.getItem(SESSION_STORAGE_KEY) === 'true';
+                
+                // Evita chamar handleGoogleAuth se já está em progresso ou já foi verificado nesta sessão
+                if (!alreadyCheckedThisSession && !authInProgressRef.current && !isAuthLoading && handleGoogleAuthRef.current) {
+                  // Marca que já verificou nesta sessão
+                  if (typeof window !== 'undefined') {
+                    sessionStorage.setItem(SESSION_STORAGE_KEY, 'true');
+                  }
                   await handleGoogleAuthRef.current();
                 }
             } else {

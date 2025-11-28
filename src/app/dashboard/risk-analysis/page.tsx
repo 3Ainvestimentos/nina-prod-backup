@@ -19,7 +19,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line, ReferenceL
 import { useCollection, useFirestore, useMemoFirebase, useUser } from "@/firebase";
 import { collection } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
-import { Users, AlertTriangle } from "lucide-react";
+import { Users, AlertTriangle, History, BarChart3 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmployeeSelectionDialog } from "@/components/employee-selection-dialog";
 
@@ -43,6 +43,11 @@ const adminEmails = ['matheus@3ainvestimentos.com.br', 'lucas.nogueira@3ainvesti
 export default function RiskAnalysisPage() {
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
   const [isSelectionDialogOpen, setIsSelectionDialogOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<'current' | 'historical'>('current');
+
+  const toggleView = () => {
+    setViewMode(prev => prev === 'current' ? 'historical' : 'current');
+  };
 
   const firestore = useFirestore();
   const { user } = useUser();
@@ -104,15 +109,27 @@ export default function RiskAnalysisPage() {
         return;
       }
       setLoadingInteractions(true);
-      const newInteractions: { [key: string]: Interaction[] } = {};
       
       const { getDocs } = await import("firebase/firestore");
 
-      for (const id of selectedEmployeeIds) {
-        const interactionsCollection = collection(firestore, "employees", id, "interactions");
-        const snapshot = await getDocs(interactionsCollection);
-        newInteractions[id] = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Interaction));
-      }
+      // Buscar todas as interações em paralelo
+      const results = await Promise.all(
+        selectedEmployeeIds.map(async (id) => {
+          const interactionsCollection = collection(firestore, "employees", id, "interactions");
+          const snapshot = await getDocs(interactionsCollection);
+          return {
+            id,
+            interactions: snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Interaction))
+          };
+        })
+      );
+
+      // Converter array de resultados para objeto
+      const newInteractions: { [key: string]: Interaction[] } = {};
+      results.forEach(({ id, interactions }) => {
+        newInteractions[id] = interactions;
+      });
+
       setInteractions(newInteractions);
       setLoadingInteractions(false);
     };
@@ -139,6 +156,34 @@ export default function RiskAnalysisPage() {
     }).sort((a,b) => b.risk - a.risk);
   }, [selectedEmployees]);
 
+  // Verificar se há valores negativos para ajustar o domínio do eixo Y
+  const hasNegativeValues = useMemo(() => {
+    return barChartData.some(item => item.risk < 0);
+  }, [barChartData]);
+
+  // Calcular domínio e ticks dinamicamente
+  const yAxisDomain = useMemo(() => {
+    if (hasNegativeValues) {
+      return [-10, 10];
+    } else {
+      const maxRisk = Math.max(...barChartData.map(item => item.risk), 10);
+      return [0, Math.max(maxRisk, 10)];
+    }
+  }, [hasNegativeValues, barChartData]);
+
+  const yAxisTicks = useMemo(() => {
+    if (hasNegativeValues) {
+      return [-10, -8, -6, -4, -2, 0, 2, 4, 6, 8, 10];
+    } else {
+      const max = yAxisDomain[1];
+      const ticks: number[] = [];
+      for (let i = 0; i <= max; i += 2) {
+        ticks.push(i);
+      }
+      return ticks;
+    }
+  }, [hasNegativeValues, yAxisDomain]);
+
   const barChartConfig = {
     risk: {
       label: "Índice de Risco",
@@ -152,6 +197,9 @@ export default function RiskAnalysisPage() {
     type MonthRow = { key: string; date: string; __latest: Record<string, Latest> };
 
     const byMonth: Record<string, MonthRow> = {};
+    
+    // Filtrar apenas a partir de outubro de 2025 (2025-10)
+    const october2025Key = "2025-10";
 
     selectedEmployeeIds.forEach((id) => {
       const employeeInteractions = interactions[id] || [];
@@ -160,6 +208,10 @@ export default function RiskAnalysisPage() {
         .forEach((int) => {
           const dt = new Date(int.date);
           const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`; // yyyy-MM para ordenação
+          
+          // Filtrar meses antes de outubro de 2025
+          if (key < october2025Key) return;
+          
           const monthAbbr = dt.toLocaleString("pt-BR", { month: "short" }).replace(".", "");
           const label = `${monthAbbr}/${String(dt.getFullYear()).slice(-2)}`; // MMM/yy
           if (!byMonth[key]) byMonth[key] = { key, date: label, __latest: {} };
@@ -279,144 +331,180 @@ export default function RiskAnalysisPage() {
             </CardContent>
         </Card>
 
-        <div className="grid gap-6 flex-1 lg:grid-cols-5">
-          <Card className="lg:col-span-2 flex flex-col">
-            <CardHeader>
-              <CardTitle>Distribuição de Risco Atual</CardTitle>
-              <CardDescription>
-                Índice de risco atual por membro.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex-1 pb-0">
-              {isLoading ? ( <Skeleton className="h-full w-full" /> ) : selectedEmployees.length > 0 ? (
-                  <ChartContainer config={barChartConfig} className="w-full h-full min-h-[250px]">
+        <Card className="flex-1 flex flex-col overflow-hidden">
+          <CardHeader>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <CardTitle>
+                  {viewMode === 'current' ? 'Índice de Risco' : 'Série Histórica do Índice de Risco'}
+                </CardTitle>
+                <CardDescription>
+                  {viewMode === 'current' 
+                    ? 'Índice de risco atual por colaborador selecionado.'
+                    : 'Evolução das pontuações de risco a partir de outubro de 2025.'
+                  }
+                </CardDescription>
+              </div>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={toggleView}
+                className="font-semibold text-white"
+                style={{ 
+                  backgroundColor: 'hsl(170, 60%, 50%)',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'hsl(170, 60%, 45%)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'hsl(170, 60%, 50%)';
+                }}
+              >
+                {viewMode === 'current' ? (
+                  <>
+                    <History className="h-4 w-4 mr-2" />
+                    Histórico
+                  </>
+                ) : (
+                  <>
+                    <BarChart3 className="h-4 w-4 mr-2" />
+                    Atual
+                  </>
+                )}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="flex-1 pb-4 overflow-x-hidden">
+            {viewMode === 'current' ? (
+              <>
+                {isLoading ? ( 
+                  <Skeleton className="h-full w-full min-h-[315px]" /> 
+                ) : selectedEmployees.length > 0 ? (
+                  <ChartContainer config={barChartConfig} className="w-full h-[315px]">
                     <BarChart
-                        accessibilityLayer
-                        data={barChartData}
-                        layout="vertical"
-                        margin={{ left: 30, right: 30, bottom: 30 }}
+                      accessibilityLayer
+                      data={barChartData}
+                      margin={{ left: 10, right: 10, top: 20, bottom: 60 }}
                     >
-                      <CartesianGrid horizontal={false} />
-                      <YAxis
+                      <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                      <XAxis
                         dataKey="name"
                         type="category"
                         tickLine={false}
-                        tickMargin={5}
+                        tickMargin={10}
                         axisLine={false}
                         tick={{ fill: "hsl(var(--foreground))", fontSize: 10 }}
-                        width={70}
+                        angle={-45}
+                        textAnchor="end"
+                        interval={0}
                       />
-                       <XAxis dataKey="risk" type="number" domain={[-10, 10]} />
-                      <ChartTooltip
-                        cursor={false}
-                        content={<ChartTooltipContent />}
-                      />
-                      <ReferenceArea x1={0} x2={10} y1={undefined} y2={undefined} fill="hsl(var(--destructive) / 0.1)" strokeOpacity={0.5}>
-                         <Legend content={() => <text x={"100%"} y={15} dominantBaseline="middle" textAnchor="end" fill="hsl(var(--destructive))" fontSize="10">Risco Potencial</text>} />
-                      </ReferenceArea>
-                       <ReferenceLine y={0} stroke="hsl(var(--border))" strokeWidth={1} />
-                       <ReferenceLine 
-                          x={5} 
-                          stroke="hsl(var(--muted-foreground))" 
-                          strokeDasharray="3 3" 
-                          label={{ 
-                            value: "Risco Alto", 
-                            position: "bottom", 
-                            fill: "hsl(var(--muted-foreground))",
-                            fontSize: 10,
-                            offset: 20,
-                          }}
+                        <YAxis dataKey="risk" type="number" domain={yAxisDomain} ticks={yAxisTicks} />
+                        <ChartTooltip
+                          cursor={false}
+                          content={<ChartTooltipContent />}
                         />
-                      <Bar dataKey="risk" name="Índice de Risco" radius={4} />
+                        <ReferenceArea y1={0} y2={yAxisDomain[1]} fill="hsl(var(--destructive) / 0.1)" strokeOpacity={0.5} />
+                        {hasNegativeValues && <ReferenceLine x={0} stroke="hsl(var(--border))" strokeWidth={1} />}
+                        <Bar dataKey="risk" name="Índice de Risco" radius={[4, 4, 0, 0]} />
+                        {yAxisDomain[1] >= 5 && (
+                          <ReferenceLine 
+                            y={5} 
+                            stroke="hsl(var(--muted-foreground))" 
+                            strokeWidth={2}
+                            strokeDasharray="3 3" 
+                            label={{ 
+                              value: "Risco Alto - 5", 
+                              position: "left", 
+                              fill: "hsl(var(--muted-foreground))",
+                              fontSize: 10,
+                            }}
+                          />
+                        )}
                     </BarChart>
                   </ChartContainer>
-              ) : (
-                  <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-                      Selecione um colaborador.
+                ) : (
+                  <div className="flex items-center justify-center h-full min-h-[315px] text-muted-foreground text-sm">
+                    Selecione um colaborador para ver o índice de risco.
                   </div>
-              )}
-            </CardContent>
-          </Card>
-          <Card className="lg:col-span-3 flex flex-col">
-            <CardHeader>
-              <CardTitle>Série Histórica do Índice de Risco</CardTitle>
-              <CardDescription>
-                Evolução das pontuações de risco.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex-1 pb-0">
-              {isLoading ? ( <Skeleton className="h-full w-full" /> ) : selectedEmployees.length > 0 ? (
-                  <ChartContainer config={lineChartConfig} className="w-full h-full min-h-[250px]">
-                    <LineChart data={lineChartData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                        <XAxis dataKey="date" tickMargin={10} padding={{ left: 12, right: 12 }} />
-                        <YAxis />
-                        <ChartTooltip content={<CustomLineTooltip />} />
-                        <Legend 
-                          content={({ payload }) => {
-                            if (!payload) return null;
-                            return (
-                              <div className="flex flex-wrap gap-4 justify-center mt-4">
-                                {payload.map((entry: any, index: number) => {
-                                  const employeeId = selectedEmployeeIds[index];
-                                  const isSelected = selectedLineId === employeeId;
-                                  return (
-                                    <div
-                                      key={entry.value}
-                                      onClick={() => setSelectedLineId(isSelected ? null : employeeId)}
-                                      className={`flex items-center gap-2 cursor-pointer transition-opacity ${
-                                        selectedLineId && !isSelected ? 'opacity-30' : 'opacity-100'
-                                      } hover:opacity-100`}
-                                      style={{ cursor: 'pointer' }}
-                                    >
-                                      <span
-                                        style={{
-                                          display: 'inline-block',
-                                          width: '12px',
-                                          height: '12px',
-                                          backgroundColor: entry.color,
-                                          borderRadius: '2px',
-                                          transform: 'rotate(45deg)',
-                                        }}
-                                      />
-                                      <span className="text-xs">{entry.value}</span>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            );
-                          }}
-                        />
-                        {selectedEmployeeIds.map((id, index) => {
-                          const isSelected = selectedLineId === id;
-                          const isDimmed = selectedLineId !== null && !isSelected;
+                )}
+              </>
+            ) : (
+              <>
+                {isLoading ? ( 
+                  <Skeleton className="h-full w-full min-h-[315px]" /> 
+                ) : selectedEmployees.length > 0 ? (
+                  <ChartContainer config={lineChartConfig} className="w-full h-[315px]">
+                    <LineChart data={lineChartData} margin={{ top: 5, right: 20, left: 10, bottom: 40 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="date" tickMargin={10} padding={{ left: 12, right: 12 }} />
+                      <YAxis />
+                      <ChartTooltip content={<CustomLineTooltip />} />
+                      <Legend 
+                        content={({ payload }) => {
+                          if (!payload) return null;
                           return (
-                            <Line 
-                              key={id} 
-                              type="monotone" 
-                              dataKey={id} 
-                              stroke={lineChartConfig[id]?.color || chartColors[index % chartColors.length]} 
-                              name={employees?.find(e => e.id === id)?.name}
-                              strokeWidth={isSelected ? 3 : 2}
-                              strokeOpacity={isDimmed ? 0.3 : 1}
-                              dot={false}
-                              activeDot={{ r: 6 }}
-                              connectNulls
-                              onMouseEnter={() => setHoveredLineId(id)}
-                              onMouseLeave={() => setHoveredLineId(null)}
-                            />
+                            <div className="flex flex-wrap gap-4 justify-center mt-4">
+                              {payload.map((entry: any, index: number) => {
+                                const employeeId = selectedEmployeeIds[index];
+                                const isSelected = selectedLineId === employeeId;
+                                return (
+                                  <div
+                                    key={entry.value}
+                                    onClick={() => setSelectedLineId(isSelected ? null : employeeId)}
+                                    className={`flex items-center gap-2 cursor-pointer transition-opacity ${
+                                      selectedLineId && !isSelected ? 'opacity-30' : 'opacity-100'
+                                    } hover:opacity-100`}
+                                    style={{ cursor: 'pointer' }}
+                                  >
+                                    <span
+                                      style={{
+                                        display: 'inline-block',
+                                        width: '12px',
+                                        height: '12px',
+                                        backgroundColor: entry.color,
+                                        borderRadius: '2px',
+                                        transform: 'rotate(45deg)',
+                                      }}
+                                    />
+                                    <span className="text-xs">{entry.value}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
                           );
-                        })}
+                        }}
+                      />
+                      {selectedEmployeeIds.map((id, index) => {
+                        const isSelected = selectedLineId === id;
+                        const isDimmed = selectedLineId !== null && !isSelected;
+                        return (
+                          <Line 
+                            key={id} 
+                            type="monotone" 
+                            dataKey={id} 
+                            stroke={lineChartConfig[id]?.color || chartColors[index % chartColors.length]} 
+                            name={employees?.find(e => e.id === id)?.name}
+                            strokeWidth={isSelected ? 4 : 3}
+                            strokeOpacity={isDimmed ? 0.3 : 1}
+                            dot={false}
+                            activeDot={{ r: 6 }}
+                            connectNulls
+                            onMouseEnter={() => setHoveredLineId(id)}
+                            onMouseLeave={() => setHoveredLineId(null)}
+                          />
+                        );
+                      })}
                     </LineChart>
                   </ChartContainer>
-              ) : (
-                  <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-                      Selecione um colaborador para ver o histórico.
+                ) : (
+                  <div className="flex items-center justify-center h-full min-h-[315px] text-muted-foreground text-sm">
+                    Selecione um colaborador para ver o histórico.
                   </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
         <EmployeeSelectionDialog 
             open={isSelectionDialogOpen}
             onOpenChange={setIsSelectionDialogOpen}

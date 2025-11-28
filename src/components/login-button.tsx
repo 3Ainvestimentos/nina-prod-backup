@@ -14,6 +14,9 @@ import { loginWithGoogle } from "@/firebase/google-login";
 
 const adminEmails = ['matheus@3ainvestimentos.com.br', 'lucas.nogueira@3ainvestimentos.com.br'];
 
+// Chave para rastrear se já verificou autorização Google nesta sessão
+const SESSION_STORAGE_KEY = 'google-auth-checked-session';
+
 export function LoginButton() {
   const auth = useAuth();
   const firestore = useFirestore();
@@ -147,6 +150,10 @@ export function LoginButton() {
                 try {
                     if (popup.closed) {
                         console.log("[GoogleAuth] Popup fechado pelo usuário.");
+                        // Limpa sessionStorage para permitir nova tentativa na mesma sessão
+                        if (typeof window !== 'undefined') {
+                            sessionStorage.removeItem(SESSION_STORAGE_KEY);
+                        }
                         cleanup();
                     }
                 } catch (e) {
@@ -159,6 +166,10 @@ export function LoginButton() {
         }
     } catch (error: any) {
         console.error("[GoogleAuth] Erro ao iniciar autorização:", error);
+        // Limpa sessionStorage para permitir nova tentativa na mesma sessão
+        if (typeof window !== 'undefined') {
+            sessionStorage.removeItem(SESSION_STORAGE_KEY);
+        }
         authInProgressRef.current = false;
         setIsAuthLoading(false);
         popupRef.current = null;
@@ -199,9 +210,16 @@ export function LoginButton() {
 
   useEffect(() => {
     const verifyAccess = async () => {
-      // Evita múltiplas verificações na mesma sessão
+      // PRIMEIRA VERIFICAÇÃO: Se já foi verificado nesta sessão (sessionStorage persiste entre recarregamentos)
+      const alreadyCheckedThisSession = typeof window !== 'undefined' && sessionStorage.getItem(SESSION_STORAGE_KEY) === 'true';
+      if (alreadyCheckedThisSession) {
+        console.log("[LoginButton] Já foi verificado nesta sessão (sessionStorage), ignorando verificação automática.");
+        return;
+      }
+
+      // Evita múltiplas verificações na mesma renderização (useRef não persiste entre recarregamentos)
       if (hasVerifiedOnceRef.current) {
-        console.log("[LoginButton] Verificação já realizada nesta sessão, ignorando.");
+        console.log("[LoginButton] Verificação já realizada nesta renderização, ignorando.");
         return;
       }
 
@@ -237,8 +255,15 @@ export function LoginButton() {
           console.log("[LoginButton] Admin - Token encontrado:", hasToken);
           
           if (!hasToken) {
-            if (!authInProgressRef.current && !isAuthLoading && handleGoogleAuthRef.current) {
+            // Verifica se já foi verificado nesta sessão (evita popup ao atualizar página)
+            const alreadyCheckedThisSession = typeof window !== 'undefined' && sessionStorage.getItem(SESSION_STORAGE_KEY) === 'true';
+            
+            if (!alreadyCheckedThisSession && !authInProgressRef.current && !isAuthLoading && handleGoogleAuthRef.current) {
               console.log("[LoginButton] Iniciando autorização Google Calendar para admin...");
+              // Marca que já verificou nesta sessão
+              if (typeof window !== 'undefined') {
+                sessionStorage.setItem(SESSION_STORAGE_KEY, 'true');
+              }
               await handleGoogleAuthRef.current();
             }
           } else {
@@ -279,8 +304,15 @@ export function LoginButton() {
         if (hasAccess) {
             if (needsCalendarAuth) {
                 console.log("[LoginButton] Líder precisa autorizar Google Calendar...");
-                // Evita chamar handleGoogleAuth se já está em progresso
-                if (!authInProgressRef.current && !isAuthLoading && handleGoogleAuthRef.current) {
+                // Verifica se já foi verificado nesta sessão (evita popup ao atualizar página)
+                const alreadyCheckedThisSession = typeof window !== 'undefined' && sessionStorage.getItem(SESSION_STORAGE_KEY) === 'true';
+                
+                // Evita chamar handleGoogleAuth se já está em progresso ou já foi verificado nesta sessão
+                if (!alreadyCheckedThisSession && !authInProgressRef.current && !isAuthLoading && handleGoogleAuthRef.current) {
+                  // Marca que já verificou nesta sessão
+                  if (typeof window !== 'undefined') {
+                    sessionStorage.setItem(SESSION_STORAGE_KEY, 'true');
+                  }
                   await handleGoogleAuthRef.current();
                 }
             } else {

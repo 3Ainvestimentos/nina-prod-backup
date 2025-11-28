@@ -64,6 +64,7 @@ export interface Interaction {
   riskScore?: number; // Add riskScore to interaction
   nextInteractionDate?: string; // ISO 8601 string
   source?: string; // To identify the origin of the interaction (e.g., 'Pipedrive')
+  sendEmailToAssessor?: boolean; // Controla se email será enviado ao assessor na reunião N3
 }
 
 export interface PDIAction {

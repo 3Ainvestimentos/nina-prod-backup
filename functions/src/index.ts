@@ -60,15 +60,18 @@ export const onInteractionCreate = functions
       type: interactionData?.type,
       nextInteractionDate: interactionData?.nextInteractionDate,
       authorId: interactionData?.authorId,
+      sendEmailToAssessor: interactionData?.sendEmailToAssessor,
     });
 
     const tasks: Promise<any>[] = [updateLeaderRanking(employeeId)];
     if (interactionData) tasks.push(createCalendarEvent(interactionData, employeeId));
 
     // --- Lógica de Envio de Email N3 (SEPARADO do calendário) ---
-    if (interactionData?.type === "N3 Individual" && interactionData.authorId) {
-      functions.logger.log(`[EmailN3] ✅ Trigger de email N3 ativado! Tipo: ${interactionData.type}, AuthorId: ${interactionData.authorId}`);
-      tasks.push((async () => {
+    // GARANTIA: Email só é enviado se sendEmailToAssessor for explicitamente true
+    if (interactionData?.type === "N3 Individual") {
+      if (interactionData.sendEmailToAssessor === true && interactionData.authorId) {
+        functions.logger.log(`[EmailN3] ✅ Trigger de email N3 ativado! Tipo: ${interactionData.type}, AuthorId: ${interactionData.authorId}, sendEmailToAssessor: ${interactionData.sendEmailToAssessor}`);
+        tasks.push((async () => {
         try {
           functions.logger.log(`[EmailN3] Interação N3 detectada. Buscando credenciais do líder (UID: ${interactionData.authorId})`);
 
@@ -175,6 +178,9 @@ export const onInteractionCreate = functions
           });
         }
       })());
+      } else {
+        functions.logger.log(`[EmailN3] ❌ Email N3 NÃO será enviado. sendEmailToAssessor: ${interactionData.sendEmailToAssessor}, authorId: ${!!interactionData.authorId}`);
+      }
     }
     // -----------------------------------
 

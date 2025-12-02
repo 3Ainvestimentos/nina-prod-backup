@@ -103,6 +103,7 @@ export default function AdminPage() {
   const [isExporting, setIsExporting] = useState(false);
   const [setupLoading, setSetupLoading] = useState<{[key: string]: boolean}>({});
   const [loadingReports, setLoadingReports] = useState(true);
+  const [newAdminId, setNewAdminId] = useState<string>("");
   
   // Estados para Projetos
   const [isProjectFormOpen, setIsProjectFormOpen] = useState(false);
@@ -783,8 +784,7 @@ export default function AdminPage() {
                     </TableHead>
                     <TableHead>Interações / Ano</TableHead>
                     <TableHead>Função</TableHead>
-                    <TableHead>Gerenciamento</TableHead>
-                    <TableHead>Admin</TableHead>
+                    <TableHead className="text-center">Gerenciamento</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -797,8 +797,7 @@ export default function AdminPage() {
                           <TableCell><Skeleton className="h-5 w-20" /></TableCell>
                           <TableCell><Skeleton className="h-5 w-20" /></TableCell>
                           <TableCell><Skeleton className="h-9 w-[180px]" /></TableCell>
-                          <TableCell><Skeleton className="h-6 w-12" /></TableCell>
-                          <TableCell><Skeleton className="h-6 w-12" /></TableCell>
+                          <TableCell className="flex justify-center"><Skeleton className="h-6 w-12" /></TableCell>
                           <TableCell className="text-right"><Skeleton className="h-8 w-8 rounded-full" /></TableCell>
                       </TableRow>
                   ))}
@@ -860,21 +859,12 @@ export default function AdminPage() {
                           </SelectContent>
                         </Select>
                       </TableCell>
-                      <TableCell>
-                          <div className="flex items-center space-x-2">
+                      <TableCell className="text-center">
+                          <div className="flex items-center justify-center space-x-2">
                               <Switch 
                                   id={`management-${employee.id}`}
                                   checked={!!employee.isUnderManagement}
                                   onCheckedChange={(checked) => handleManagementToggle(employee.id, checked)}
-                              />
-                          </div>
-                      </TableCell>
-                      <TableCell>
-                          <div className="flex items-center space-x-2">
-                              <Switch 
-                                  id={`admin-${employee.id}`}
-                                  checked={!!employee.isAdmin}
-                                  onCheckedChange={(checked) => handlePermissionToggle(employee.id, 'isAdmin', checked)}
                               />
                           </div>
                       </TableCell>
@@ -1160,7 +1150,43 @@ export default function AdminPage() {
                         </div>
                     </div>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-6">
+                    {/* Add New Admin Section */}
+                    <div className="flex gap-4 items-end border-b pb-6">
+                        <div className="flex-1 space-y-2">
+                             <p className="text-sm font-medium">Adicionar Administrador</p>
+                             <Select value={newAdminId} onValueChange={setNewAdminId}>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Selecione um funcionário..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {employees
+                                        ?.filter(e => !e.isAdmin)
+                                        .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+                                        .map(employee => (
+                                            <SelectItem key={employee.id} value={employee.id}>
+                                                {employee.name}
+                                            </SelectItem>
+                                        ))
+                                    }
+                                </SelectContent>
+                             </Select>
+                        </div>
+                        <Button 
+                            onClick={() => {
+                                if (newAdminId) {
+                                    handlePermissionToggle(newAdminId, 'isAdmin', true);
+                                    setNewAdminId("");
+                                    toast({ title: "Admin adicionado", description: "Permissão concedida com sucesso." });
+                                }
+                            }}
+                            disabled={!newAdminId}
+                        >
+                            <PlusCircle className="mr-2 h-4 w-4" />
+                            Adicionar
+                        </Button>
+                    </div>
+
                     {isLoading ? (
                          <div className="space-y-3">
                             <Skeleton className="h-10 w-2/3" />
@@ -1168,21 +1194,50 @@ export default function AdminPage() {
                         </div>
                     ) : admins.length > 0 ? (
                         <ul className="space-y-4">
-                            {admins.map(admin => (
-                                <li key={admin.id} className="flex items-center justify-between">
+                            {admins.map(admin => {
+                                const isHardcodedAdmin = adminEmails.includes(admin.email || '');
+                                return (
+                                <li key={admin.id} className="flex items-center justify-between p-3 border rounded-lg bg-muted/30">
                                     <div className="flex items-center gap-3">
                                         <Avatar className="h-9 w-9">
                                             <AvatarImage src={admin.photoURL} alt={admin.name} />
                                             <AvatarFallback>{getInitials(admin.name)}</AvatarFallback>
                                         </Avatar>
                                         <div>
-                                            <span className="font-medium">{admin.name}</span>
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-medium">{admin.name}</span>
+                                                {isHardcodedAdmin && (
+                                                    <Badge variant="secondary" className="text-xs">Sistema</Badge>
+                                                )}
+                                            </div>
                                             <p className="text-sm text-muted-foreground">{admin.email}</p>
                                         </div>
                                     </div>
-                                    <ShieldCheck className="h-5 w-5 text-primary"/>
+                                    
+                                    {isHardcodedAdmin ? (
+                                        <TooltipProvider>
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <ShieldCheck className="h-5 w-5 text-muted-foreground/50 cursor-not-allowed"/>
+                                                </TooltipTrigger>
+                                                <TooltipContent>
+                                                    <p>Administrador definido pelo sistema.</p>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </TooltipProvider>
+                                    ) : (
+                                        <Button 
+                                            variant="ghost" 
+                                            size="sm"
+                                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                            onClick={() => handlePermissionToggle(admin.id, 'isAdmin', false)}
+                                        >
+                                            <Trash className="h-4 w-4 mr-2" />
+                                            Remover
+                                        </Button>
+                                    )}
                                 </li>
-                            ))}
+                            )})}
                         </ul>
                     ) : (
                         <p className="text-sm text-muted-foreground text-center py-4">Nenhum administrador cadastrado.</p>

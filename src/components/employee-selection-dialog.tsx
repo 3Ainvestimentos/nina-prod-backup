@@ -70,6 +70,9 @@ export function EmployeeSelectionDialog({
   const filteredEmployees = useMemo(() => {
     if (!allEmployees) return [];
     return allEmployees.filter(employee => {
+        // Filtrar usuários deletados (soft delete)
+        if ((employee as any)._isDeleted) return false;
+        
         return (
             (filters.name.size === 0 || (employee.name && filters.name.has(employee.name))) &&
             (filters.area.size === 0 || (employee.area && filters.area.has(employee.area))) &&

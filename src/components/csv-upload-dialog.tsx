@@ -62,7 +62,11 @@ export function CsvUploadDialog({ open, onOpenChange }: { open: boolean; onOpenC
     const reader = new FileReader();
     reader.onload = (e) => {
       const text = e.target?.result as string;
-      const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
+      const lines = text.split(/\r?\n/).filter(line => {
+        // Remove linhas vazias ou que contenham apenas separadores (ex: ",,,,,")
+        const cleaned = line.replace(/,/g, '').trim();
+        return cleaned !== '';
+      });
       if (lines.length < 2) {
         setError("O arquivo CSV está vazio ou contém apenas o cabeçalho.");
         return;
@@ -116,12 +120,19 @@ export function CsvUploadDialog({ open, onOpenChange }: { open: boolean; onOpenC
             }
         });
 
-        const importPromises = data.map(row => {
+        const importPromises = data
+            .filter(row => {
+                if (!row.id3a || !row.name || !row.email) {
+                    console.warn("Linha ignorada por falta de dados obrigatórios (id3a, name, email):", row);
+                    return false;
+                }
+                return true;
+            })
+            .map(row => {
             const docId = row.id3a;
-            if (!docId) {
-                console.warn("Linha ignorada por falta de id3a:", row);
-                return Promise.resolve(); // Ignora a linha se não tiver id
-            }
+            // Validação extra redundante, mas segura
+            if (!docId) return Promise.resolve();
+
             const docRef = doc(firestore, "employees", docId);
             
             const leaderEmail = row.leaderEmail?.toLowerCase();

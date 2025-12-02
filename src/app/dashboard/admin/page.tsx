@@ -43,6 +43,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { CsvUploadDialog } from "@/components/csv-upload-dialog";
 import { InteractionCsvUploadDialog } from "@/components/interaction-csv-upload-dialog";
@@ -67,7 +68,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 const superAdminEmails = ['lucas.nogueira@3ainvestimentos.com.br', 'matheus@3ainvestimentos.com.br', 'henrique.peixoto@3ainvestimentos.com.br'];
 const emailsToPromote = [
     'lucas.nogueira@3ainvestimentos.com.br',
-    'matheus@3ainvestimentos.com.br'
+    'matheus@3ainvestimentos.com.br',
+    'henrique.peixoto@3ainvestimentos.com.br'
 ];
 
 const roles: Role[] = ["Colaborador", "Líder", "Líder de Projeto", "Diretor"];
@@ -104,6 +106,7 @@ export default function AdminPage() {
   const [setupLoading, setSetupLoading] = useState<{[key: string]: boolean}>({});
   const [loadingReports, setLoadingReports] = useState(true);
   const [newAdminId, setNewAdminId] = useState<string>("");
+  const [invalidEmployees, setInvalidEmployees] = useState<Employee[]>([]);
   
   // Estados para Projetos
   const [isProjectFormOpen, setIsProjectFormOpen] = useState(false);
@@ -194,14 +197,14 @@ export default function AdminPage() {
         const cities = [...new Set(employees.map(e => e.city).filter(Boolean))].sort() as string[];
         const roleValues = [...new Set(employees.map(e => e.role).filter(Boolean))].sort() as Role[];
 
-        const leaders = employees.filter(e => e.role === 'Líder' || e.role === 'Diretor');
-        const directors = employees.filter(e => e.isDirector).sort((a,b) => {
+        const leaders = employees.filter(e => !(e as any)._isDeleted && (e.role === 'Líder' || e.role === 'Diretor'));
+        const directors = employees.filter(e => !(e as any)._isDeleted && e.isDirector).sort((a,b) => {
           const nameA = a.name || '';
           const nameB = b.name || '';
           return nameA.localeCompare(nameB);
         });
         
-        const adminsFromDb = employees.filter(e => e.isAdmin);
+        const adminsFromDb = employees.filter(e => !(e as any)._isDeleted && e.isAdmin);
         const adminMap = new Map(adminsFromDb.map(a => [a.email, a]));
 
         adminEmails.forEach(email => {
@@ -228,7 +231,7 @@ export default function AdminPage() {
         });
 
 
-        const employeesWithoutDiagnosis = employees.filter(emp => emp.isUnderManagement && !(emp as any).diagnosis);
+        const employeesWithoutDiagnosis = employees.filter(emp => !(emp as any)._isDeleted && emp.isUnderManagement && !(emp as any).diagnosis);
 
 
         return { 
@@ -285,6 +288,9 @@ export default function AdminPage() {
     if (!employees) return [];
     
     let filtered = employees.filter(employee => {
+        // Ignorar registros marcados como deletados (soft delete)
+        if ((employee as any)._isDeleted) return false;
+        
         return (
             (filters.name.size === 0 || (employee.name && filters.name.has(employee.name))) &&
             (filters.position.size === 0 || (employee.position && filters.position.has(employee.position))) &&
@@ -620,6 +626,113 @@ export default function AdminPage() {
             variant: "destructive",
             title: "Erro ao Atualizar",
             description: "Não foi possível atualizar a configuração.",
+        });
+    }
+  };
+
+  const checkInvalidEmployees = () => {
+    if (!employees) return;
+    // Critério: Sem nome (que é o que aparece vazio nos dropdowns) E não já deletado
+    const ghosts = employees.filter(e => !(e as any)._isDeleted && (!e.name || e.name.trim() === ''));
+    
+    setInvalidEmployees(ghosts);
+    if (ghosts.length === 0) {
+        toast({ title: "Nenhum fantasma óbvio", description: "Não encontrei registros sem nome." });
+    } else {
+        toast({ 
+            variant: "destructive",
+            title: "Fantasmas Encontrados", 
+            description: `${ghosts.length} registros sem nome encontrados.` 
+        });
+    }
+  };
+
+  const cleanInvalidEmployees = async () => {
+    if (!firestore || invalidEmployees.length === 0) return;
+    
+    // VALIDAÇÃO EXTRA DE SEGURANÇA: Garantir que só marcamos como deletados usuários realmente vazios
+    const safeToDelete = invalidEmployees.filter(emp => {
+        // Critério rigoroso: SEM nome OU nome vazio (após trim)
+        const hasNoName = !emp.name || emp.name.trim() === '';
+        // Se tiver nome válido, NÃO marcar como deletado
+        if (!hasNoName) {
+            console.warn(`Proteção: Não marcando ${emp.id} - possui nome: "${emp.name}"`);
+            return false;
+        }
+        return true;
+    });
+
+    if (safeToDelete.length === 0) {
+        toast({ 
+            variant: "destructive",
+            title: "Nada para limpar", 
+            description: "Nenhum registro atende aos critérios de segurança para limpeza." 
+        });
+        setInvalidEmployees([]);
+        return;
+    }
+
+    if (safeToDelete.length < invalidEmployees.length) {
+        toast({ 
+            title: "Filtro de Segurança", 
+            description: `${invalidEmployees.length - safeToDelete.length} registros foram protegidos.` 
+        });
+    }
+    
+    // SOFT DELETE: Marcar como deletado em vez de apagar permanentemente
+    let markedCount = 0;
+    let errorCount = 0;
+    const batchPromises = safeToDelete.map(async (emp) => {
+        try {
+            // Validação final antes de marcar
+            if (emp.name && emp.name.trim() !== '') {
+                console.warn(`Proteção final: Pulando ${emp.id} - tem nome: "${emp.name}"`);
+                return;
+            }
+            
+            // Marcar como deletado (soft delete)
+            const docRef = doc(firestore, "employees", emp.id);
+            await updateDoc(docRef, { 
+                _isDeleted: true,
+                _deletedAt: new Date().toISOString(),
+                _deletedBy: user?.email || 'system'
+            });
+            markedCount++;
+        } catch (e: any) {
+            errorCount++;
+            console.error(`Erro ao marcar ${emp.id} como deletado`, e);
+            // Se for erro de permissão, tentar apenas marcar o nome como [DELETADO]
+            if (e?.code === 'permission-denied') {
+                try {
+                    // Fallback: tentar apenas atualizar o nome
+                    const docRef = doc(firestore, "employees", emp.id);
+                    await updateDoc(docRef, { 
+                        name: '[DELETADO]',
+                        _isDeleted: true 
+                    });
+                    markedCount++;
+                    errorCount--; // Desconta o erro já que conseguimos marcar
+                } catch (fallbackError) {
+                    console.error(`Erro no fallback para ${emp.id}`, fallbackError);
+                }
+            }
+        }
+    });
+
+    await Promise.all(batchPromises);
+    
+    setInvalidEmployees([]);
+    if (markedCount > 0) {
+        toast({ 
+            title: "Limpeza Concluída", 
+            description: `${markedCount} registros foram marcados como deletados e não aparecerão mais nas listas.` 
+        });
+    }
+    if (errorCount > 0) {
+        toast({ 
+            variant: "destructive",
+            title: "Alguns erros ocorreram", 
+            description: `${errorCount} registros não puderam ser marcados. Verifique o console.` 
         });
     }
   };
@@ -1161,7 +1274,7 @@ export default function AdminPage() {
                                 </SelectTrigger>
                                 <SelectContent>
                                     {employees
-                                        ?.filter(e => !e.isAdmin)
+                                        ?.filter(e => !(e as any)._isDeleted && !e.isAdmin)
                                         .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
                                         .map(employee => (
                                             <SelectItem key={employee.id} value={employee.id}>
@@ -1303,6 +1416,52 @@ export default function AdminPage() {
                         <Upload className="mr-2 h-4 w-4" /> Importar Interações
                     </Button>
                 </div>
+
+                <div className="mb-6 border-t pt-6">
+                    <h3 className="text-lg font-medium mb-2">Manutenção de Banco de Dados</h3>
+                    <p className="text-sm text-muted-foreground mb-4">
+                        Verifique e remova registros de funcionários que estão incompletos (sem nome ou email).
+                    </p>
+                    <div className="flex gap-2 items-center">
+                        <Button variant="secondary" onClick={checkInvalidEmployees}>
+                            <ShieldCheck className="mr-2 h-4 w-4" /> 
+                            Verificar Usuários Inválidos
+                        </Button>
+                        
+                        {invalidEmployees.length > 0 && (
+                             <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                    <Button variant="destructive">
+                                        <Trash className="mr-2 h-4 w-4" />
+                                        Excluir {invalidEmployees.length} Inválidos
+                                    </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle>Confirmar Exclusão em Massa</AlertDialogTitle>
+                                        <AlertDialogDescription asChild>
+                                            <div className="text-sm text-muted-foreground space-y-2">
+                                                <p>Você está prestes a marcar <strong>{invalidEmployees.length}</strong> registros como deletados (soft delete). Eles não aparecerão mais nas listas, mas permanecerão no banco de dados.</p>
+                                                <div className="max-h-48 overflow-y-auto border rounded p-2 bg-muted text-xs font-mono">
+                                                    {invalidEmployees.map(e => (
+                                                        <div key={e.id}>ID: {e.id} {e.name ? `(${e.name})` : '(SEM NOME)'}</div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                        <AlertDialogAction onClick={cleanInvalidEmployees} className="bg-destructive hover:bg-destructive/90">
+                                            Confirmar Exclusão
+                                        </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
+                        )}
+                    </div>
+                </div>
+
                 <div className="border rounded-md">
                     <Table>
                         <TableHeader>

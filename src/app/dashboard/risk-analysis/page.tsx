@@ -85,8 +85,10 @@ export default function RiskAnalysisPage() {
 
   const managedEmployees = useMemo(() => {
     if (!currentUserEmployee || !employees) return [];
-    // Filtrar usuários deletados (soft delete)
-    const activeEmployees = employees.filter(e => !(e as any)._isDeleted);
+    // Filtrar usuários deletados (soft delete) e apenas do time comercial
+    const activeEmployees = employees.filter(e => 
+      !(e as any)._isDeleted && e.axis === 'Comercial'
+    );
     
     if (currentUserEmployee.isAdmin || currentUserEmployee.isDirector) {
         return activeEmployees;
@@ -248,6 +250,16 @@ export default function RiskAnalysisPage() {
     });
     return config;
   }, [selectedEmployees]);
+
+  // Calcular quantos pontos cada pessoa tem nos dados (para mostrar bolinha se tiver apenas 1 ponto)
+  const employeeDataPointCounts = useMemo(() => {
+    const counts: { [key: string]: number } = {};
+    selectedEmployeeIds.forEach((id) => {
+      const count = lineChartData.filter(row => row[id] != null).length;
+      counts[id] = count;
+    });
+    return counts;
+  }, [lineChartData, selectedEmployeeIds]);
   
   const handleSelectAtRisk = () => {
     if (!managedEmployees) return;
@@ -264,6 +276,27 @@ export default function RiskAnalysisPage() {
   
   // State para controlar qual linha está selecionada (clicada na legenda)
   const [selectedLineId, setSelectedLineId] = React.useState<string | null>(null);
+
+  // Tooltip customizado para o gráfico de barras (adiciona espaço entre "Risco" e o número)
+  const CustomBarTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload || !payload.length) return null;
+    
+    const item = payload[0];
+    return (
+      <div className="rounded-lg border bg-background px-2 py-1.5 shadow-md text-xs">
+        <p className="text-[10px] text-muted-foreground mb-0.5">{label}</p>
+        <div className="flex items-center gap-1.5">
+          <div 
+            className="w-1.5 h-1.5 rounded-full" 
+            style={{ backgroundColor: item.color || item.payload?.fill }}
+          />
+          <span className="text-xs font-medium">
+            {item.name} {item.value}
+          </span>
+        </div>
+      </div>
+    );
+  };
 
   // Tooltip customizado para mostrar apenas a linha sob o cursor
   const CustomLineTooltip = ({ active, payload, label }: any) => {
@@ -404,7 +437,7 @@ export default function RiskAnalysisPage() {
                         <YAxis dataKey="risk" type="number" domain={yAxisDomain} ticks={yAxisTicks} />
                         <ChartTooltip
                           cursor={false}
-                          content={<ChartTooltipContent />}
+                          content={<CustomBarTooltip />}
                         />
                         <ReferenceArea y1={0} y2={yAxisDomain[1]} fill="hsl(var(--destructive) / 0.1)" strokeOpacity={0.5} />
                         {hasNegativeValues && <ReferenceLine x={0} stroke="hsl(var(--border))" strokeWidth={1} />}
@@ -480,16 +513,24 @@ export default function RiskAnalysisPage() {
                       {selectedEmployeeIds.map((id, index) => {
                         const isSelected = selectedLineId === id;
                         const isDimmed = selectedLineId !== null && !isSelected;
+                        const color = lineChartConfig[id]?.color || chartColors[index % chartColors.length];
+                        
                         return (
                           <Line 
                             key={id} 
                             type="monotone" 
                             dataKey={id} 
-                            stroke={lineChartConfig[id]?.color || chartColors[index % chartColors.length]} 
+                            stroke={color}
                             name={employees?.find(e => e.id === id)?.name}
                             strokeWidth={isSelected ? 4 : 3}
                             strokeOpacity={isDimmed ? 0.3 : 1}
-                            dot={false}
+                            // Mostrar bolinha apenas quando selecionado (funciona mesmo com apenas 1 ponto)
+                            dot={isSelected ? { 
+                              r: 5, 
+                              fill: color,
+                              strokeWidth: 2,
+                              stroke: 'white'
+                            } : false}
                             activeDot={{ r: 6 }}
                             connectNulls
                             onMouseEnter={() => setHoveredLineId(id)}

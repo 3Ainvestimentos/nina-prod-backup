@@ -100,7 +100,6 @@ export default function LeadershipDashboardV2() {
       if (cached) {
         const { data, timestamp } = JSON.parse(cached);
         if (Date.now() - timestamp < 30000 && Array.isArray(data)) {
-          console.log('⚡ [DASHBOARD] Cache de employees carregado imediatamente');
           return data;
         }
       }
@@ -199,9 +198,6 @@ export default function LeadershipDashboardV2() {
 
     const targetIds = targetEmployees.map(e => e.id);
 
-    console.log(`📊 [DASHBOARD] Carregando dados de ${targetIds.length} colaboradores em paralelo...`);
-    console.time('⚡ [DASHBOARD] Carregamento de dados');
-
     try {
       // 🚀 OTIMIZAÇÃO: Fazer TODAS as requisições em PARALELO
       const allPromises = targetIds.map(async (id) => {
@@ -234,8 +230,6 @@ export default function LeadershipDashboardV2() {
       
       setInteractions(interactionsMap);
       setPdiActionsMap(pdiActionsMap);
-      console.timeEnd('⚡ [DASHBOARD] Carregamento de dados');
-      console.log(`✅ [DASHBOARD] Dados carregados com sucesso!`);
     } catch (error) {
       console.error('❌ [DASHBOARD] Erro ao carregar dados:', error);
     } finally {
@@ -249,8 +243,6 @@ export default function LeadershipDashboardV2() {
     setLoadingData(true);
     setHasSearched(true);
 
-    console.log(`📊 [DASHBOARD] Carregando dados de ${memberIds.length} membros de projeto em paralelo...`);
-    console.time('⚡ [DASHBOARD] Carregamento de dados (Projetos)');
 
     try {
       // 🚀 OTIMIZAÇÃO: Fazer TODAS as requisições em PARALELO
@@ -284,8 +276,6 @@ export default function LeadershipDashboardV2() {
       
       setInteractions(interactionsMap);
       setPdiActionsMap(pdiActionsMap);
-      console.timeEnd('⚡ [DASHBOARD] Carregamento de dados (Projetos)');
-      console.log(`✅ [DASHBOARD] Dados de projetos carregados com sucesso!`);
     } catch (error) {
       console.error('❌ [DASHBOARD] Erro ao carregar dados de projetos:', error);
     } finally {

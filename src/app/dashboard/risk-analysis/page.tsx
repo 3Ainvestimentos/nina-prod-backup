@@ -250,6 +250,16 @@ export default function RiskAnalysisPage() {
     });
     return config;
   }, [selectedEmployees]);
+
+  // Calcular quantos pontos cada pessoa tem nos dados (para mostrar bolinha se tiver apenas 1 ponto)
+  const employeeDataPointCounts = useMemo(() => {
+    const counts: { [key: string]: number } = {};
+    selectedEmployeeIds.forEach((id) => {
+      const count = lineChartData.filter(row => row[id] != null).length;
+      counts[id] = count;
+    });
+    return counts;
+  }, [lineChartData, selectedEmployeeIds]);
   
   const handleSelectAtRisk = () => {
     if (!managedEmployees) return;
@@ -503,16 +513,24 @@ export default function RiskAnalysisPage() {
                       {selectedEmployeeIds.map((id, index) => {
                         const isSelected = selectedLineId === id;
                         const isDimmed = selectedLineId !== null && !isSelected;
+                        const color = lineChartConfig[id]?.color || chartColors[index % chartColors.length];
+                        
                         return (
                           <Line 
                             key={id} 
                             type="monotone" 
                             dataKey={id} 
-                            stroke={lineChartConfig[id]?.color || chartColors[index % chartColors.length]} 
+                            stroke={color}
                             name={employees?.find(e => e.id === id)?.name}
                             strokeWidth={isSelected ? 4 : 3}
                             strokeOpacity={isDimmed ? 0.3 : 1}
-                            dot={false}
+                            // Mostrar bolinha apenas quando selecionado (funciona mesmo com apenas 1 ponto)
+                            dot={isSelected ? { 
+                              r: 5, 
+                              fill: color,
+                              strokeWidth: 2,
+                              stroke: 'white'
+                            } : false}
                             activeDot={{ r: 6 }}
                             connectNulls
                             onMouseEnter={() => setHoveredLineId(id)}

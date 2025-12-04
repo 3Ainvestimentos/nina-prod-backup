@@ -92,10 +92,31 @@ export default function LeadershipDashboardV2() {
   );
   const { data: employees, isLoading: areEmployeesLoading } = useCollection<Employee>(employeesCollection);
 
+  // Estado opcional para cache de employees - lê IMEDIATAMENTE na inicialização
+  const [cachedEmployees, setCachedEmployees] = useState<Employee[] | null>(() => {
+    try {
+      if (typeof window === 'undefined') return null;
+      const cached = localStorage.getItem('preloaded-employees');
+      if (cached) {
+        const { data, timestamp } = JSON.parse(cached);
+        if (Date.now() - timestamp < 30000 && Array.isArray(data)) {
+          console.log('⚡ [DASHBOARD] Cache de employees carregado imediatamente');
+          return data;
+        }
+      }
+    } catch (e) {
+      // Ignora erro, continua normalmente
+    }
+    return null;
+  });
+
   const [interactions, setInteractions] = useState<Map<string, Interaction[]>>(new Map());
   const [pdiActionsMap, setPdiActionsMap] = useState<Map<string, PDIAction[]>>(new Map());
   const [loadingData, setLoadingData] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
+
+  // Usar employees do cache se ainda não carregou do Firestore (otimização)
+  const employeesToUse = employees || cachedEmployees;
 
   const [leaderFilter, setLeaderFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | InteractionStatus>("all");
@@ -110,11 +131,11 @@ export default function LeadershipDashboardV2() {
 
 
   const currentUserEmployee = useMemo(() => {
-    if (!user || !employees) return null;
-    const employeeData = employees.find(e => e.email === user.email);
+    if (!user || !employeesToUse) return null;
+    const employeeData = employeesToUse.find(e => e.email === user.email);
     if (!employeeData) return null;
     return employeeData;
-  }, [user, employees]);
+  }, [user, employeesToUse]);
 
   // Buscar projetos onde o usuário é líder (para Líder de Projeto)
   const projectsCollection = useMemoFirebase(
@@ -141,7 +162,11 @@ export default function LeadershipDashboardV2() {
     return ids;
   }, [userProjects, currentUserEmployee]);
 
+  // Iniciar fetch assim que currentUserEmployee estiver disponível (mesmo que venha do cache)
   useEffect(() => {
+    // Só executa se temos employees (do cache ou do Firestore) e user
+    if (!employeesToUse || !user) return;
+    
     if (currentUserEmployee?.role === 'Líder' && !currentUserEmployee.isDirector && !currentUserEmployee.isAdmin) {
       setLeaderFilter(currentUserEmployee.id);
       fetchDataForLeader(currentUserEmployee.id);
@@ -150,16 +175,17 @@ export default function LeadershipDashboardV2() {
     if (currentUserEmployee?.role === 'Líder de Projeto' && projectMemberIds.size > 0) {
       fetchDataForProjectMembers(Array.from(projectMemberIds));
     }
-  }, [currentUserEmployee, projectMemberIds]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUserEmployee?.id, currentUserEmployee?.role, projectMemberIds.size, employeesToUse, user]);
 
 
   const fetchDataForLeader = useCallback(async (leaderId: string) => {
-    if (!firestore || !employees || !currentUserEmployee) return;
+    if (!firestore || !employeesToUse || !currentUserEmployee) return;
 
     setLoadingData(true);
     setHasSearched(true);
     
-    const targetEmployees = employees.filter(e => {
+    const targetEmployees = employeesToUse.filter(e => {
         if (!e.isUnderManagement) return false;
         
         const axisMatches = axisFilter === 'all' || e.axis === axisFilter;
@@ -173,59 +199,99 @@ export default function LeadershipDashboardV2() {
 
     const targetIds = targetEmployees.map(e => e.id);
 
-    const interactionsMap = new Map<string, Interaction[]>();
-    const pdiActionsMap = new Map<string, PDIAction[]>();
+    console.log(`📊 [DASHBOARD] Carregando dados de ${targetIds.length} colaboradores em paralelo...`);
+    console.time('⚡ [DASHBOARD] Carregamento de dados');
 
-    for (const id of targetIds) {
-      const interactionsQuery = query(collection(firestore, "employees", id, "interactions"));
-      const pdiActionsQuery = query(collection(firestore, "employees", id, "pdiActions"));
+    try {
+      // 🚀 OTIMIZAÇÃO: Fazer TODAS as requisições em PARALELO
+      const allPromises = targetIds.map(async (id) => {
+        const interactionsQuery = query(collection(firestore, "employees", id, "interactions"));
+        const pdiActionsQuery = query(collection(firestore, "employees", id, "pdiActions"));
+        
+        const [interactionsSnapshot, pdiActionsSnapshot] = await Promise.all([
+          getDocs(interactionsQuery),
+          getDocs(pdiActionsQuery)
+        ]);
 
-      const [interactionsSnapshot, pdiActionsSnapshot] = await Promise.all([
-        getDocs(interactionsQuery),
-        getDocs(pdiActionsQuery)
-      ]);
+        return {
+          id,
+          interactions: interactionsSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }) as Interaction),
+          pdiActions: pdiActionsSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }) as PDIAction),
+        };
+      });
 
-      const employeeInteractions = interactionsSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Interaction));
-      interactionsMap.set(id, employeeInteractions);
+      // Aguarda TODAS as requisições em paralelo
+      const results = await Promise.all(allPromises);
 
-      const employeePdiActions = pdiActionsSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as PDIAction));
-      pdiActionsMap.set(id, employeePdiActions);
+      // Constrói os mapas
+      const interactionsMap = new Map<string, Interaction[]>();
+      const pdiActionsMap = new Map<string, PDIAction[]>();
+
+      results.forEach(({ id, interactions, pdiActions }) => {
+        interactionsMap.set(id, interactions);
+        pdiActionsMap.set(id, pdiActions);
+      });
+      
+      setInteractions(interactionsMap);
+      setPdiActionsMap(pdiActionsMap);
+      console.timeEnd('⚡ [DASHBOARD] Carregamento de dados');
+      console.log(`✅ [DASHBOARD] Dados carregados com sucesso!`);
+    } catch (error) {
+      console.error('❌ [DASHBOARD] Erro ao carregar dados:', error);
+    } finally {
+      setLoadingData(false);
     }
-    
-    setInteractions(interactionsMap);
-    setPdiActionsMap(pdiActionsMap);
-    setLoadingData(false);
-  }, [employees, firestore, currentUserEmployee, axisFilter]);
+  }, [employeesToUse, firestore, currentUserEmployee, axisFilter]);
 
   const fetchDataForProjectMembers = useCallback(async (memberIds: string[]) => {
-    if (!firestore || !employees) return;
+    if (!firestore || !employeesToUse) return;
 
     setLoadingData(true);
     setHasSearched(true);
 
-    const interactionsMap = new Map<string, Interaction[]>();
-    const pdiActionsMap = new Map<string, PDIAction[]>();
+    console.log(`📊 [DASHBOARD] Carregando dados de ${memberIds.length} membros de projeto em paralelo...`);
+    console.time('⚡ [DASHBOARD] Carregamento de dados (Projetos)');
 
-    for (const id of memberIds) {
-      const interactionsQuery = query(collection(firestore, "employees", id, "interactions"));
-      const pdiActionsQuery = query(collection(firestore, "employees", id, "pdiActions"));
+    try {
+      // 🚀 OTIMIZAÇÃO: Fazer TODAS as requisições em PARALELO
+      const allPromises = memberIds.map(async (id) => {
+        const interactionsQuery = query(collection(firestore, "employees", id, "interactions"));
+        const pdiActionsQuery = query(collection(firestore, "employees", id, "pdiActions"));
+        
+        const [interactionsSnapshot, pdiActionsSnapshot] = await Promise.all([
+          getDocs(interactionsQuery),
+          getDocs(pdiActionsQuery)
+        ]);
 
-      const [interactionsSnapshot, pdiActionsSnapshot] = await Promise.all([
-        getDocs(interactionsQuery),
-        getDocs(pdiActionsQuery)
-      ]);
+        return {
+          id,
+          interactions: interactionsSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }) as Interaction),
+          pdiActions: pdiActionsSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }) as PDIAction),
+        };
+      });
 
-      const employeeInteractions = interactionsSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Interaction));
-      interactionsMap.set(id, employeeInteractions);
+      // Aguarda TODAS as requisições em paralelo
+      const results = await Promise.all(allPromises);
 
-      const employeePdiActions = pdiActionsSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as PDIAction));
-      pdiActionsMap.set(id, employeePdiActions);
+      // Constrói os mapas
+      const interactionsMap = new Map<string, Interaction[]>();
+      const pdiActionsMap = new Map<string, PDIAction[]>();
+
+      results.forEach(({ id, interactions, pdiActions }) => {
+        interactionsMap.set(id, interactions);
+        pdiActionsMap.set(id, pdiActions);
+      });
+      
+      setInteractions(interactionsMap);
+      setPdiActionsMap(pdiActionsMap);
+      console.timeEnd('⚡ [DASHBOARD] Carregamento de dados (Projetos)');
+      console.log(`✅ [DASHBOARD] Dados de projetos carregados com sucesso!`);
+    } catch (error) {
+      console.error('❌ [DASHBOARD] Erro ao carregar dados de projetos:', error);
+    } finally {
+      setLoadingData(false);
     }
-    
-    setInteractions(interactionsMap);
-    setPdiActionsMap(pdiActionsMap);
-    setLoadingData(false);
-  }, [employees, firestore]);
+  }, [employeesToUse, firestore]);
 
   const handleLeaderFilterChange = (leaderId: string) => {
     setLeaderFilter(leaderId);
@@ -359,11 +425,11 @@ const getInteractionStatus = useCallback((
 
   
   const trackedEmployees = useMemo((): TrackedEmployee[] => {
-    if (!employees || !currentUserEmployee || !dateRange?.from || !dateRange?.to || !hasSearched) return [];
+    if (!employeesToUse || !currentUserEmployee || !dateRange?.from || !dateRange?.to || !hasSearched) return [];
   
     const range = { start: dateRange.from, end: dateRange.to };
   
-    return employees
+    return employeesToUse
       .filter(e => {
         // Para Líder de Projeto, filtrar apenas membros dos projetos
         if (currentUserEmployee.role === 'Líder de Projeto') {
@@ -460,7 +526,7 @@ const getInteractionStatus = useCallback((
           adherence,
         };
       });
-  }, [employees, interactions, pdiActionsMap, currentUserEmployee, interactionTypeFilter, dateRange, hasSearched, leaderFilter, axisFilter, getInteractionStatus]);
+  }, [employeesToUse, interactions, pdiActionsMap, currentUserEmployee, interactionTypeFilter, dateRange, hasSearched, leaderFilter, axisFilter, getInteractionStatus]);
 
 
   const groupedAndFilteredEmployees = useMemo(() => {
@@ -540,14 +606,14 @@ const getInteractionStatus = useCallback((
 
 
   const { leadersWithTeams, uniqueAxes } = useMemo(() => {
-    if (!employees) return { leadersWithTeams: [], uniqueAxes: [] };
+    if (!employeesToUse) return { leadersWithTeams: [], uniqueAxes: [] };
     
     // Líder de Projeto não usa filtro de Axis ou Líder
     if (currentUserEmployee?.role === 'Líder de Projeto') {
       return { leadersWithTeams: [], uniqueAxes: [] };
     }
     
-    const leaders = employees
+    const leaders = employeesToUse
       .filter(e => e.role === 'Líder' && (axisFilter === 'all' || e.axis === axisFilter || (axisFilter === 'Comercial' && e.axis === 'Comercial')))
       .sort((a, b) => {
         const nameA = a.name || '';
@@ -556,22 +622,22 @@ const getInteractionStatus = useCallback((
       });
     
     const axes = [...new Set(
-      employees
+      employeesToUse
         .filter(e => e.role === 'Líder')
         .map(e => e.axis)
         .filter((a): a is string => !!a)
     )].sort();
       
     return { leadersWithTeams: leaders, uniqueAxes: axes };
-  }, [employees, axisFilter, currentUserEmployee]);
+  }, [employeesToUse, axisFilter, currentUserEmployee]);
 
   // Para Líder de Projeto: obter membros únicos dos projetos
   const projectMembers = useMemo(() => {
-    if (!employees || !currentUserEmployee || currentUserEmployee.role !== 'Líder de Projeto') {
+    if (!employeesToUse || !currentUserEmployee || currentUserEmployee.role !== 'Líder de Projeto') {
       return [];
     }
 
-    const members = employees.filter(e => projectMemberIds.has(e.id));
+    const members = employeesToUse.filter(e => projectMemberIds.has(e.id));
 
     const sortedMembers = members.sort((a, b) => {
       const nameA = a.name || '';
@@ -580,7 +646,7 @@ const getInteractionStatus = useCallback((
     });
 
     return sortedMembers;
-  }, [employees, projectMemberIds, currentUserEmployee]);
+  }, [employeesToUse, projectMemberIds, currentUserEmployee]);
 
   // Auto-selecionar Feedback como tipo de interação para Líder de Projeto
   useEffect(() => {
@@ -740,8 +806,13 @@ const getInteractionStatus = useCallback((
                 {isLoading ? (
                     <div role="rowgroup">
                         {Array.from({ length: 5 }).map((_, i) => (
-                            <div key={i} role="row" className="flex items-center p-4 border-b">
-                                <Skeleton className="h-9 w-full" />
+                            <div key={i} role="row" className="flex items-center p-4 border-b gap-4">
+                                <Skeleton className="h-10 w-10 rounded-full" />
+                                <div className="flex-1 space-y-2">
+                                    <Skeleton className="h-4 w-32" />
+                                    <Skeleton className="h-3 w-40" />
+                                </div>
+                                <Skeleton className="h-6 w-24 rounded-full" />
                             </div>
                         ))}
                     </div>

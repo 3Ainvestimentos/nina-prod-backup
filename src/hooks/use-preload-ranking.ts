@@ -96,10 +96,10 @@ export function usePreloadRanking(employees: Employee[] | null) {
       }
     };
 
-    // Executar após um pequeno delay para não bloquear renderização inicial
+    // Executar após um delay maior para não competir com fetches principais do dashboard
     const timeoutId = setTimeout(() => {
       preloadRankingData();
-    }, 2000); // 2 segundos após login
+    }, 5000); // 5 segundos após login - dá tempo para dashboard carregar primeiro
 
     return () => clearTimeout(timeoutId);
   }, [firestore, employees]);

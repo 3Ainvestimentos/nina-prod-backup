@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useUser } from "@/firebase";
 import { Loader2 } from "lucide-react";
 
-export default function LoadingPage() {
+// Componente interno que usa useSearchParams (precisa estar em Suspense)
+function LoadingContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, isUserLoading } = useUser();
@@ -45,5 +46,19 @@ export default function LoadingPage() {
       <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
       <p className="text-lg text-muted-foreground">{message}</p>
     </div>
+  );
+}
+
+// Componente principal com Suspense boundary
+export default function LoadingPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background">
+        <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+        <p className="text-lg text-muted-foreground">Carregando CRM Interno</p>
+      </div>
+    }>
+      <LoadingContent />
+    </Suspense>
   );
 }

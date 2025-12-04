@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Icons } from "@/components/icons";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signOut } from "firebase/auth";
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, Suspense } from "react";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import type { Employee } from "@/lib/types";
 import { useToast } from "@/hooks/use-toast";
@@ -22,7 +22,8 @@ const adminEmails = ['matheus@3ainvestimentos.com.br', 'lucas.nogueira@3ainvesti
 // Chave para rastrear se já verificou autorização Google nesta sessão
 const SESSION_STORAGE_KEY = 'google-auth-checked-session';
 
-export default function LoginPage() {
+// Componente interno que usa useSearchParams
+function LoginPageContent() {
   const auth = useAuth();
   const firestore = useFirestore();
   const router = useRouter();
@@ -461,6 +462,34 @@ export default function LoginPage() {
         </CardContent>
       </Card>
     </main>
+  );
+}
+
+// Componente principal com Suspense boundary
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <main className="flex min-h-screen flex-col items-center justify-center p-4" style={{ backgroundColor: 'hsl(220, 20%, 96%)' }}>
+        <Card className="w-full max-w-sm rounded-2xl border-none p-8 bg-white shadow-lg">
+          <div className="flex justify-center mb-8">
+            <Image 
+              src="https://firebasestorage.googleapis.com/v0/b/a-riva-hub.firebasestorage.app/o/Imagens%20institucionais%20(logos%20e%20etc)%2Flogo%20oficial%20preta.png?alt=media&token=ce88dc80-01cd-4295-b443-951e6c0210aa" 
+              alt="3A RIVA Investimentos" 
+              width={200} 
+              height={100} 
+              className="h-auto"
+            />
+          </div>
+          <CardContent className="p-0">
+            <Button variant="outline" className="w-full bg-white text-slate-800" disabled>
+              Carregando...
+            </Button>
+          </CardContent>
+        </Card>
+      </main>
+    }>
+      <LoginPageContent />
+    </Suspense>
   );
 }
 

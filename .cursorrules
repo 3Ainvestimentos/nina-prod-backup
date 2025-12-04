@@ -1,0 +1,304 @@
+# CURSOR RULES - Nina 1.0
+
+## WORKFLOW OBRIGATÓRIO: Planner → Worker → Orchestrator
+
+**SEMPRE siga este workflow ao implementar features novas ou fazer mudanças significativas no código.**
+
+### ⚠️ IMPORTANTE: SELEÇÃO DE MODELO
+
+**O Cursor NÃO seleciona modelos automaticamente.** O usuário precisa selecionar manualmente o modelo no chat do Cursor em cada etapa:
+
+- **ETAPA 1 (Planner):** Usuário deve selecionar **Opus 4.5** manualmente
+- **ETAPA 2 (Worker):** Usuário deve selecionar **Haiku 4.5** manualmente  
+- **ETAPA 3 (Orchestrator):** Usuário deve selecionar **Opus 4.5** manualmente
+
+**O assistente DEVE avisar qual modelo usar em cada etapa antes de prosseguir.**
+
+### FLUXO DO WORKFLOW
+
+```
+1. PLANNER (modelo mais caro - Opus 4.5) → Cria especificação técnica
+   ↓
+2. WORKER (modelo mais barato - Haiku 4.5) → Gera código baseado na especificação
+   ↓
+3. ORCHESTRATOR (mesmo Planner - Opus 4.5) → Analisa e aprova/rejeita o código
+   ↓
+4a. APROVADO → Implementa o código
+4b. REJEITADO → Feedback intermediário → Volta para WORKER
+```
+
+### ETAPA 1: PLANNER (Modelo Mais Caro - Opus 4.5)
+
+Quando o usuário pedir para implementar uma feature nova:
+
+1. **AVISE O USUÁRIO:** "🔵 **ATENÇÃO:** Por favor, selecione o modelo **Opus 4.5** no seletor de modelos do chat do Cursor antes de continuar. Vou criar a especificação técnica."
+2. **NUNCA vá direto para código** - Sempre crie uma especificação primeiro
+3. **Use modelo mais caro** (Opus 4.5) para criar especificação detalhada
+3. **Crie especificação técnica completa:**
+   ```markdown
+   ## 📋 ESPECIFICAÇÃO TÉCNICA
+   
+   ### 1. TAREFA PRINCIPAL
+   [Uma frase descrevendo o que será implementado]
+   
+   ### 2. REQUISITOS FUNCIONAIS
+   - [ ] Requisito 1
+   - [ ] Requisito 2
+   - [ ] Requisito 3
+   
+   ### 3. REQUISITOS NÃO-FUNCIONAIS
+   - [ ] Performance: [especificações]
+   - [ ] Segurança: [especificações]
+   - [ ] Manutenibilidade: [especificações]
+   
+   ### 4. ARQUIVOS A CRIAR/MODIFICAR
+   - `src/path/to/file1.tsx` - [descrição]
+   - `src/path/to/file2.tsx` - [descrição]
+   
+   ### 5. RESTRIÇÕES E CONSIDERAÇÕES
+   - [Restrição 1]
+   - [Restrição 2]
+   
+   ### 6. DEPENDÊNCIAS
+   - [Dependência 1]
+   - [Dependência 2]
+   
+   ### 7. TESTES NECESSÁRIOS
+   - [ ] Teste 1
+   - [ ] Teste 2
+   ```
+4. **Salve a especificação** em `.cursor/specs/[nome-da-tarefa].md`
+5. **Aguarde aprovação do usuário** antes de passar para o Worker
+
+### ETAPA 2: WORKER (Modelo Mais Barato - Haiku 4.5)
+
+Após a especificação ser aprovada:
+
+1. **AVISE O USUÁRIO:** "🟢 **ATENÇÃO:** Por favor, selecione o modelo **Haiku 4.5** no seletor de modelos do chat do Cursor. Vou fornecer o prompt completo do Worker para você colar."
+2. **Forneça o prompt completo** do Worker baseado em `.cursor/workflows/worker-prompt.md`, incluindo:
+   - A tarefa
+   - O contexto do projeto
+   - A especificação completa (leia de `.cursor/specs/[nome-da-tarefa].md`)
+   - Instruções para o Worker
+3. **Aguarde o Worker gerar código** usando Haiku 4.5 (o usuário vai colar o prompt e o Haiku vai responder)
+4. **Leia a especificação** do arquivo `.cursor/specs/[nome-da-tarefa].md`
+3. **Gere código seguindo EXATAMENTE a especificação:**
+   - Não adicione features extras
+   - Não remova requisitos
+   - Siga todos os arquivos listados
+   - Respeite todas as restrições
+5. **Formate a sugestão assim:**
+   ```markdown
+   ## 📝 CÓDIGO GERADO
+   
+   ### Baseado na especificação: [nome-da-tarefa].md
+   
+   ### Arquivos Implementados:
+   - `src/path/to/file1.tsx` - [descrição]
+   - `src/path/to/file2.tsx` - [descrição]
+   
+   ### Código:
+   \`\`\`typescript
+   [código gerado aqui]
+   \`\`\`
+   
+   ### Explicação:
+   [breve explicação da implementação]
+   ```
+6. **Peça para salvar** a sugestão em `.cursor/suggestions/[nome-da-tarefa].md`
+7. **Aguarde análise do Orchestrator**
+
+### ETAPA 3: ORCHESTRATOR (Mesmo Planner - Opus 4.5)
+
+Após o Worker gerar código:
+
+1. **AVISE O USUÁRIO:** "🔵 **ATENÇÃO:** Por favor, selecione o modelo **Opus 4.5** no seletor de modelos do chat do Cursor para análise do Orchestrator."
+2. **Use o mesmo modelo do Planner** (Opus 4.5) para análise rigorosa
+3. **Compare código gerado com especificação original:**
+   - Leia `.cursor/specs/[nome-da-tarefa].md` (especificação)
+   - Leia `.cursor/suggestions/[nome-da-tarefa].md` (código gerado)
+4. **Checklist de aprovação:**
+   - ✅ O código implementa TODOS os requisitos funcionais?
+   - ✅ Respeita TODAS as restrições?
+   - ✅ Os arquivos corretos foram criados/modificados?
+   - ✅ Segue padrões do codebase?
+   - ✅ Código limpo e legível?
+   - ✅ TypeScript com tipagem forte?
+   - ✅ Não expõe dados sensíveis?
+   - ✅ Valida inputs adequadamente?
+   - ✅ Trata erros corretamente?
+   - ✅ Não quebra funcionalidades existentes?
+   - ✅ Performance adequada?
+5. **Formate a análise assim:**
+   ```markdown
+   ## ✅ ANÁLISE DO ORCHESTRATOR
+   
+   **Especificação:** [nome-da-tarefa].md
+   **Código gerado:** [nome-da-tarefa].md
+   
+   **APROVAÇÃO:** [ ] ✅ APROVADO [ ] ❌ REJEITADO
+   **SCORE:** [0-100]/100
+   
+   ### Conformidade com Especificação:
+   - [ ] Todos os requisitos funcionais implementados
+   - [ ] Todas as restrições respeitadas
+   - [ ] Arquivos corretos criados/modificados
+   
+   ### Qualidade de Código:
+   - [ ] Segue padrões do codebase
+   - [ ] Código limpo e legível
+   - [ ] TypeScript correto
+   
+   ### Segurança e Boas Práticas:
+   - [ ] Não expõe dados sensíveis
+   - [ ] Valida inputs
+   - [ ] Trata erros
+   
+   ### Pontos Fortes:
+   - [lista]
+   
+   ### Problemas Encontrados:
+   - [lista detalhada]
+   
+   ### Feedback para Worker:
+   [Se REJEITADO: feedback específico e construtivo para correção]
+   ```
+6. **Se APROVADO:** Código pode ser implementado
+7. **Se REJEITADO:** Criar feedback intermediário e voltar para Worker
+
+### ETAPA 4: FEEDBACK INTERMEDIÁRIO (Se Rejeitado)
+
+Quando o Orchestrator rejeitar:
+
+1. **Crie documento de feedback:**
+   ```markdown
+   ## 🔄 FEEDBACK PARA WORKER
+   
+   **Especificação original:** [nome-da-tarefa].md
+   **Análise do Orchestrator:** [score e motivos]
+   
+   ### O que precisa ser corrigido:
+   1. [Problema 1 - descrição detalhada]
+   2. [Problema 2 - descrição detalhada]
+   
+   ### Sugestões específicas:
+   - [Sugestão 1]
+   - [Sugestão 2]
+   
+   ### Arquivos que precisam de revisão:
+   - `src/path/to/file1.tsx` - [motivo]
+   - `src/path/to/file2.tsx` - [motivo]
+   ```
+2. **Salve feedback** em `.cursor/feedback/[nome-da-tarefa]-feedback.md`
+3. **AVISE O USUÁRIO:** "🟢 **ATENÇÃO:** Por favor, selecione o modelo **Haiku 4.5** novamente. Vou fornecer o feedback para o Worker corrigir."
+4. **Volte para ETAPA 2 (Worker)** com o feedback
+5. **Worker revisa e gera novo código** baseado no feedback
+6. **Repete até aprovação**
+
+### EXCEÇÕES (Quando pode pular o workflow)
+
+Você pode pular o workflow apenas para:
+- Correções de bugs simples (typos, erros de sintaxe)
+- Refatorações menores (renomear variáveis, formatar código)
+- Ajustes de estilo/UI menores
+- Comandos de terminal/scripts simples
+
+**Para tudo mais:** Use o workflow completo Planner → Worker → Orchestrator
+
+### ECONOMIA DE TOKENS
+
+- **Planner (Opus 4.5):** ~2k tokens (1x) - Cria especificação
+- **Worker (Haiku 4.5):** ~1k tokens por iteração - Gera código (Muito rápido e barato)
+- **Orchestrator (Opus 4.5):** ~2k tokens por análise - Valida código
+- **Total típico:** ~5k tokens (vs ~30k+ sem workflow)
+
+**Economia:** ~83% de tokens!
+
+---
+
+## PADRÕES DO PROJETO
+
+### Stack e Tecnologias
+- **Frontend:** Next.js 15, React 18, TypeScript
+- **Backend:** Firebase (Firestore + Auth)
+- **UI:** Tailwind CSS, shadcn/ui
+- **Validação:** Zod
+- **Data:** date-fns
+- **Charts:** Recharts
+
+### Estrutura de Pastas
+- `src/app/` - Páginas Next.js
+- `src/components/` - Componentes React
+- `src/components/ui/` - Componentes shadcn/ui
+- `src/hooks/` - Hooks customizados
+- `src/lib/` - Utilitários e tipos
+- `src/firebase/` - Configuração Firebase
+- `functions/src/` - Cloud Functions
+- `.cursor/specs/` - Especificações técnicas
+- `.cursor/suggestions/` - Código gerado pelo Worker
+- `.cursor/feedback/` - Feedback intermediário
+
+### Convenções de Código
+- **Componentes:** PascalCase, arquivos `.tsx`
+- **Hooks:** camelCase com prefixo `use`, arquivos `.ts` ou `.tsx`
+- **Utils:** camelCase, arquivos `.ts`
+- **Tipos:** PascalCase, definidos em `src/lib/types.ts` ou inline
+- **Imports:** Agrupar por tipo (React, libs, componentes, utils, tipos)
+
+### Padrões React
+- Usar hooks customizados quando apropriado
+- `useMemo` para cálculos pesados
+- `useCallback` para funções passadas como props
+- Early returns para validações
+- Tratamento de erros explícito
+
+### Padrões Firebase
+- Usar hooks customizados (`useCollection`, `useDoc`)
+- Validação de dados antes de salvar
+- Soft delete: marcar como `_isDeleted: true` ao invés de deletar
+- Filtrar usuários deletados em todas as queries
+
+### Segurança
+- Nunca expor dados sensíveis (tokens, senhas, keys)
+- Validar inputs do usuário
+- Respeitar regras de autenticação/autorização
+- Usar variáveis de ambiente para configs sensíveis
+
+### UI/UX
+- Cor primária: `hsl(170, 60%, 50%)`
+- Usar componentes shadcn/ui
+- Loading states com Skeleton
+- Feedback com Toast
+- Tooltips para informações adicionais
+
+---
+
+## REGRAS GERAIS
+
+1. **Sempre responder em Português**
+2. **Priorizar segurança, depois corretude, depois performance**
+3. **Código limpo e legível** - KISS e SOLID light
+4. **Tipagem forte** - TypeScript estrito
+5. **Documentação mínima** - Apenas quando necessário
+6. **Testes proporcionais ao risco** - Não precisa 100% de cobertura
+7. **Commits atômicos** - Uma feature por commit
+8. **Nunca commitar segredos** - Sempre usar .env
+
+---
+
+## CONTEXTO DO PROJETO
+
+**Nina 1.0** - Plataforma de Gestão de Liderança para 3A RIVA Investimentos
+
+**Funcionalidades principais:**
+- Autenticação Google (apenas @3ainvestimentos.com.br)
+- Dashboard de Liderança com ranking e histórico
+- Acompanhamento Individual de colaboradores
+- Gerenciamento de PDI (Planos de Desenvolvimento Individual)
+- Análise de Risco dos colaboradores
+- Gerenciamento de Projetos
+- Painel Admin para configurações
+
+**Roles:** Colaborador, Líder, Diretor, Admin
+**Acesso:** Apenas Líder, Diretor e Admin podem acessar o dashboard
+

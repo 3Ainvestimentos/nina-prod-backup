@@ -4,7 +4,7 @@
 import { useAuth, useFirestore, useUser } from "@/firebase";
 import { Button } from "@/components/ui/button";
 import { Icons } from "@/components/icons";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { signOut } from "firebase/auth";
 import { useEffect, useState, useCallback, useRef } from "react";
 import { collection, query, where, getDocs } from "firebase/firestore";
@@ -26,11 +26,13 @@ export default function LoginPage() {
   const auth = useAuth();
   const firestore = useFirestore();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, isUserLoading } = useUser();
   const { toast } = useToast();
   const [isVerifying, setIsVerifying] = useState(false);
   const [isAuthLoading, setIsAuthLoading] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
+  const [authErrorMessage, setAuthErrorMessage] = useState<string | null>(null);
   const popupRef = useRef<Window | null>(null);
   const authInProgressRef = useRef(false);
   const signInInProgressRef = useRef(false);
@@ -412,6 +414,14 @@ export default function LoginPage() {
     }
   }, [user, isUserLoading, firestore, router, auth, toast, isVerifying, isAuthLoading]);
 
+  // Verifica se veio com parâmetro de erro da página de loading
+  useEffect(() => {
+    const reason = searchParams.get('reason');
+    if (reason === 'no-permission') {
+      setAuthErrorMessage("Você não tem permissão para acessar esta aplicação. Apenas Líderes, Diretores e Admins podem acessar.");
+    }
+  }, [searchParams]);
+
   const isLoading = isUserLoading || isVerifying || isSigningIn;
 
   return (
@@ -426,6 +436,11 @@ export default function LoginPage() {
                 className="h-auto"
             />
         </div>
+        {authErrorMessage && (
+          <div className="mb-4 p-3 bg-destructive/10 border border-destructive/30 rounded-md">
+            <p className="text-sm text-destructive text-center">{authErrorMessage}</p>
+          </div>
+        )}
         <CardContent className="p-0">
           <Button
           onClick={handleLogin}

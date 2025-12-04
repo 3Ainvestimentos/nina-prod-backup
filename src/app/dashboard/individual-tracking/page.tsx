@@ -135,11 +135,14 @@ export default function IndividualTrackingPage() {
 
   const managedEmployees = useMemo(() => {
     if (!currentUserEmployee || !employees) return [];
+    // Filtrar usuários deletados (soft delete)
+    const activeEmployees = employees.filter(e => !(e as any)._isDeleted);
+    
     if (currentUserEmployee.isAdmin || currentUserEmployee.isDirector) {
-        return employees;
+        return activeEmployees;
     }
     if (currentUserEmployee.role === 'Líder' || currentUserEmployee.role === 'Diretor') {
-        return employees.filter(e => e.leaderId === currentUserEmployee.id);
+        return activeEmployees.filter(e => e.leaderId === currentUserEmployee.id);
     }
     return [];
   }, [currentUserEmployee, employees]);

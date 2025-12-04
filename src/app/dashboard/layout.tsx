@@ -48,7 +48,6 @@ export default function DashboardLayout({
       if (cached) {
         const { data, timestamp } = JSON.parse(cached);
         if (Date.now() - timestamp < 30000 && Array.isArray(data)) {
-          console.log('⚡ [LAYOUT] Cache de employees carregado imediatamente');
           return data;
         }
       }

@@ -85,8 +85,10 @@ export default function RiskAnalysisPage() {
 
   const managedEmployees = useMemo(() => {
     if (!currentUserEmployee || !employees) return [];
-    // Filtrar usuários deletados (soft delete)
-    const activeEmployees = employees.filter(e => !(e as any)._isDeleted);
+    // Filtrar usuários deletados (soft delete) e apenas do time comercial
+    const activeEmployees = employees.filter(e => 
+      !(e as any)._isDeleted && e.axis === 'Comercial'
+    );
     
     if (currentUserEmployee.isAdmin || currentUserEmployee.isDirector) {
         return activeEmployees;
@@ -265,6 +267,27 @@ export default function RiskAnalysisPage() {
   // State para controlar qual linha está selecionada (clicada na legenda)
   const [selectedLineId, setSelectedLineId] = React.useState<string | null>(null);
 
+  // Tooltip customizado para o gráfico de barras (adiciona espaço entre "Risco" e o número)
+  const CustomBarTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload || !payload.length) return null;
+    
+    const item = payload[0];
+    return (
+      <div className="rounded-lg border bg-background px-2 py-1.5 shadow-md text-xs">
+        <p className="text-[10px] text-muted-foreground mb-0.5">{label}</p>
+        <div className="flex items-center gap-1.5">
+          <div 
+            className="w-1.5 h-1.5 rounded-full" 
+            style={{ backgroundColor: item.color || item.payload?.fill }}
+          />
+          <span className="text-xs font-medium">
+            {item.name} {item.value}
+          </span>
+        </div>
+      </div>
+    );
+  };
+
   // Tooltip customizado para mostrar apenas a linha sob o cursor
   const CustomLineTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload || !payload.length) return null;
@@ -404,7 +427,7 @@ export default function RiskAnalysisPage() {
                         <YAxis dataKey="risk" type="number" domain={yAxisDomain} ticks={yAxisTicks} />
                         <ChartTooltip
                           cursor={false}
-                          content={<ChartTooltipContent />}
+                          content={<CustomBarTooltip />}
                         />
                         <ReferenceArea y1={0} y2={yAxisDomain[1]} fill="hsl(var(--destructive) / 0.1)" strokeOpacity={0.5} />
                         {hasNegativeValues && <ReferenceLine x={0} stroke="hsl(var(--border))" strokeWidth={1} />}

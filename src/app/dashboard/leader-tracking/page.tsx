@@ -41,6 +41,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
 
 const adminEmails = ['matheus@3ainvestimentos.com.br', 'lucas.nogueira@3ainvestimentos.com.br', 'henrique.peixoto@3ainvestimentos.com.br'];
+// Conta de teste para desenvolvimento - REMOVER DEPOIS DOS TESTES
+const testAccountEmail = 'tester@3ainvestimentos.com.br';
 
 export default function LeaderTrackingPage() {
   const router = useRouter();
@@ -52,7 +54,7 @@ export default function LeaderTrackingPage() {
   const [isSaving, setIsSaving] = useState(false);
   
   const firestore = useFirestore();
-  const { user } = useUser();
+  const { user, isUserLoading } = useUser();
   const { toast } = useToast();
   
   const employeesCollection = useMemoFirebase(
@@ -72,7 +74,7 @@ export default function LeaderTrackingPage() {
   const currentUserEmployee = useMemo(() => {
     if (!user || !employees) return null;
     
-    // Verificar se o email está na lista de admins hardcoded
+    // Verificar se o email está na lista de admins hardcoded (apenas para isAdmin)
     if (user.email && adminEmails.includes(user.email)) {
       const employeeData = employees.find(e => e.email === user.email) || {};
       return {
@@ -80,7 +82,7 @@ export default function LeaderTrackingPage() {
         name: user.displayName || 'Admin',
         email: user.email,
         isAdmin: true,
-        isDirector: true,
+        // isDirector vem do documento do Firestore, não hardcoded
         role: 'Líder',
       } as Employee;
     }
@@ -88,24 +90,21 @@ export default function LeaderTrackingPage() {
     const employeeData = employees.find(e => e.email === user.email);
     if (!employeeData) return null;
     
-    // Se o employee tem isAdmin no documento, também é diretor
-    if (employeeData.isAdmin) {
-      return {
-        ...employeeData,
-        isDirector: true,
-      };
-    }
-    
+    // isDirector deve vir apenas do documento do Firestore
     return employeeData;
   }, [user, employees]);
 
   // Filtrar apenas líderes do time comercial (excluindo líderes honorários como Katharyne e Daniel Miranda)
+  // Inclui conta de teste se especificada
   const availableLeaders = useMemo(() => {
     if (!employees) return [];
     return employees.filter(e => 
       !(e as any)._isDeleted &&
       e.role === "Líder" && 
-      e.axis === "Comercial" &&
+      (
+        e.axis === "Comercial" ||
+        (testAccountEmail && e.email === testAccountEmail)
+      ) &&
       !e.name.toLowerCase().includes('katharyne') &&
       !e.name.toLowerCase().includes('daniel miranda')
     ).sort((a, b) => a.name.localeCompare(b.name));
@@ -118,10 +117,18 @@ export default function LeaderTrackingPage() {
 
   // Verificar se é admin/diretor (incluindo emails hardcoded)
   const isAuthorized = useMemo(() => {
+    // Se a autenticação ainda está carregando, considerar autorizado temporariamente para não mostrar alerta
+    if (isUserLoading) return true;
+
     if (!user) return false;
     
     // Verificar emails hardcoded primeiro
     if (user.email && adminEmails.includes(user.email)) {
+      return true;
+    }
+    
+    // Se ainda está carregando dados do funcionário, retornar true temporariamente
+    if (areEmployeesLoading) {
       return true;
     }
     
@@ -130,35 +137,16 @@ export default function LeaderTrackingPage() {
       return !!(currentUserEmployee.isAdmin || currentUserEmployee.isDirector);
     }
     
+    // Se os dados carregaram mas não encontrou o employee, não está autorizado
     return false;
-  }, [user, currentUserEmployee]);
+  }, [user, isUserLoading, currentUserEmployee, areEmployeesLoading]);
 
   // VALIDAÇÃO DE ACESSO: Apenas Diretores e Admins
-  useEffect(() => {
-    // Só redirecionar se os dados já carregaram completamente
-    if (areEmployeesLoading) return;
-    
-    // Se não está autorizado, redirecionar
-    if (!isAuthorized) {
-      console.log('[Leader Tracking] Acesso negado:', {
-        userEmail: user?.email,
-        currentUserEmployee,
-        isAuthorized,
-        isAdmin: currentUserEmployee?.isAdmin,
-        isDirector: currentUserEmployee?.isDirector,
-        adminEmails
-      });
-      toast({
-        variant: "destructive",
-        title: "Acesso Negado",
-        description: "Você não tem permissão para acessar esta página.",
-      });
-      router.replace("/dashboard/v2");
-    }
-  }, [isAuthorized, router, toast, areEmployeesLoading, user, currentUserEmployee]);
+  // Não redirecionar automaticamente - se o usuário consegue ver as abas, ele pode usar
+  // O redirecionamento só acontece se o usuário tentar acessar diretamente a URL sem permissão
 
-  // Mostrar loading enquanto carrega dados
-  if (areEmployeesLoading) {
+  // Mostrar loading enquanto carrega dados ou autenticação
+  if (areEmployeesLoading || isUserLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-muted-foreground">Carregando...</div>
@@ -167,7 +155,8 @@ export default function LeaderTrackingPage() {
   }
 
   // Se não está autorizado, não renderizar conteúdo
-  if (!isAuthorized) {
+  // Não mostrar se user for null (logout em andamento ou não logado)
+  if (!areEmployeesLoading && !isUserLoading && !isAuthorized && user) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <Alert variant="destructive" className="max-w-md">

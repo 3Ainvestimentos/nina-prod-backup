@@ -40,6 +40,9 @@ type ChartConfig = {
   };
 };
 
+// Conta de teste para desenvolvimento - REMOVER DEPOIS DOS TESTES
+const testAccountEmail = 'tester@3ainvestimentos.com.br';
+
 const adminEmails = ['matheus@3ainvestimentos.com.br', 'lucas.nogueira@3ainvestimentos.com.br', 'henrique.peixoto@3ainvestimentos.com.br'];
 
 export default function QualityAnalysisPage() {
@@ -53,7 +56,7 @@ export default function QualityAnalysisPage() {
   };
 
   const firestore = useFirestore();
-  const { user } = useUser();
+  const { user, isUserLoading } = useUser();
 
   const employeesCollection = useMemoFirebase(
     () => (firestore && user ? collection(firestore, "employees") : null),
@@ -63,6 +66,8 @@ export default function QualityAnalysisPage() {
 
   const currentUserEmployee = useMemo(() => {
     if (!user || !employees) return null;
+    
+    // Verificar se o email está na lista de admins hardcoded (apenas para isAdmin)
     if (user.email && adminEmails.includes(user.email)) {
         const employeeData = employees.find(e => e.email === user.email) || {};
         return {
@@ -70,29 +75,29 @@ export default function QualityAnalysisPage() {
             name: user.displayName || 'Admin',
             email: user.email,
             isAdmin: true,
-            isDirector: true,
+            // isDirector vem do documento do Firestore, não hardcoded
             role: 'Líder',
         } as Employee;
     }
+    
     const employeeData = employees.find(e => e.email === user.email);
     if (!employeeData) return null;
-    if (employeeData.isAdmin) {
-      return {
-        ...employeeData,
-        role: 'Líder',
-        isDirector: true,
-      };
-    }
+    
+    // isDirector deve vir apenas do documento do Firestore
     return employeeData;
   }, [user, employees]);
 
   // Filtrar apenas líderes do time comercial
+  // Inclui conta de teste se especificada
   const managedEmployees = useMemo(() => {
     if (!currentUserEmployee || !employees) return [];
     const activeEmployees = employees.filter(e => 
       !(e as any)._isDeleted &&
       e.role === "Líder" && 
-      e.axis === "Comercial"
+      (
+        e.axis === "Comercial" ||
+        (testAccountEmail && e.email === testAccountEmail)
+      )
     );
     
     if (currentUserEmployee.isAdmin || currentUserEmployee.isDirector) {
@@ -117,21 +122,21 @@ export default function QualityAnalysisPage() {
 
   React.useEffect(() => {
     const fetchInteractions = async () => {
-      if (!firestore || selectedEmployeeIds.length === 0) {
-        setInteractions({});
+      if (!firestore || managedEmployees.length === 0) {
+        // Não limpar interações se ainda estiver carregando
         return;
       }
       setLoadingInteractions(true);
       
       const { getDocs } = await import("firebase/firestore");
 
-      // Buscar todas as interações em paralelo
+      // Buscar interações de TODOS os funcionários gerenciados para permitir filtros (ex: Alta Qualidade)
       const results = await Promise.all(
-        selectedEmployeeIds.map(async (id) => {
-          const interactionsCollection = collection(firestore, "employees", id, "interactions");
+        managedEmployees.map(async (emp) => {
+          const interactionsCollection = collection(firestore, "employees", emp.id, "interactions");
           const snapshot = await getDocs(interactionsCollection);
           return {
-            id,
+            id: emp.id,
             interactions: snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Interaction))
           };
         })
@@ -147,14 +152,23 @@ export default function QualityAnalysisPage() {
       setLoadingInteractions(false);
     };
     fetchInteractions();
-  }, [selectedEmployeeIds, firestore]);
+  }, [managedEmployees, firestore]);
 
   // Verificar se é admin/diretor (incluindo emails hardcoded)
+  // Só retorna false se os dados já carregaram e o usuário realmente não tem permissão
   const isAuthorized = useMemo(() => {
+    // Se a autenticação ainda está carregando, considerar autorizado temporariamente para não mostrar alerta
+    if (isUserLoading) return true;
+    
     if (!user) return false;
     
     // Verificar emails hardcoded primeiro
     if (user.email && adminEmails.includes(user.email)) {
+      return true;
+    }
+    
+    // Se ainda está carregando dados do funcionário, retornar true temporariamente
+    if (areEmployeesLoading) {
       return true;
     }
     
@@ -163,27 +177,14 @@ export default function QualityAnalysisPage() {
       return !!(currentUserEmployee.isAdmin || currentUserEmployee.isDirector);
     }
     
+    // Se os dados carregaram mas não encontrou o employee, não está autorizado
     return false;
-  }, [user, currentUserEmployee]);
+  }, [user, isUserLoading, currentUserEmployee, areEmployeesLoading]);
 
   // VALIDAÇÃO DE ACESSO: Apenas Diretores e Admins
-  useEffect(() => {
-    // Só redirecionar se os dados já carregaram completamente
-    if (areEmployeesLoading) return;
-    
-    // Se não está autorizado, redirecionar
-    if (!isAuthorized) {
-      console.log('[Quality Analysis] Acesso negado:', {
-        userEmail: user?.email,
-        currentUserEmployee,
-        isAuthorized,
-        isAdmin: currentUserEmployee?.isAdmin,
-        isDirector: currentUserEmployee?.isDirector,
-        adminEmails
-      });
-      router.replace("/dashboard/v2");
-    }
-  }, [isAuthorized, router, areEmployeesLoading, user, currentUserEmployee]);
+  // VALIDAÇÃO DE ACESSO: Apenas Diretores e Admins
+  // Não redirecionar automaticamente - se o usuário consegue ver as abas, ele pode usar
+  // O redirecionamento só acontece se o usuário tentar acessar diretamente a URL sem permissão
 
   const barChartData = useMemo(() => {
     return selectedEmployees.map(emp => {
@@ -201,41 +202,24 @@ export default function QualityAnalysisPage() {
       } else {
         fillColor = "hsl(var(--muted-foreground))";
       }
+      // Pegar primeiro nome e último sobrenome
+      const nameParts = emp.name.split(' ');
+      const displayName = nameParts.length > 1 
+        ? `${nameParts[0]} ${nameParts[nameParts.length - 1]}`
+        : nameParts[0];
+      
       return {
-        name: emp.name.split(' ')[0],
+        name: displayName,
         quality: quality,
         fill: fillColor,
       }
     }).sort((a,b) => b.quality - a.quality);
   }, [selectedEmployees, interactions]);
 
-  // Verificar se há valores negativos para ajustar o domínio do eixo Y
-  const hasNegativeValues = useMemo(() => {
+  // Verificar se há valores negativos no gráfico de barras
+  const hasNegativeValuesInBar = useMemo(() => {
     return barChartData.some(item => item.quality < 0);
   }, [barChartData]);
-
-  // Calcular domínio e ticks dinamicamente (mesmo range do Índice de Risco: -10 a +10)
-  const yAxisDomain = useMemo(() => {
-    if (hasNegativeValues) {
-      return [-10, 10];
-    } else {
-      const maxQuality = Math.max(...barChartData.map(item => item.quality), 10);
-      return [0, Math.max(maxQuality, 10)];
-    }
-  }, [hasNegativeValues, barChartData]);
-
-  const yAxisTicks = useMemo(() => {
-    if (hasNegativeValues) {
-      return [-10, -8, -6, -4, -2, 0, 2, 4, 6, 8, 10];
-    } else {
-      const max = yAxisDomain[1];
-      const ticks: number[] = [];
-      for (let i = 0; i <= max; i += 2) {
-        ticks.push(i);
-      }
-      return ticks;
-    }
-  }, [hasNegativeValues, yAxisDomain]);
 
   const barChartConfig = {
     quality: {
@@ -251,8 +235,8 @@ export default function QualityAnalysisPage() {
 
     const byMonth: Record<string, MonthRow> = {};
     
-    // Filtrar apenas a partir de outubro de 2025 (2025-10)
-    const october2025Key = "2025-10";
+    // Filtrar apenas a partir de dezembro de 2025 (2025-12)
+    const december2025Key = "2025-12";
 
     selectedEmployeeIds.forEach((id) => {
       const employeeInteractions = interactions[id] || [];
@@ -262,8 +246,8 @@ export default function QualityAnalysisPage() {
           const dt = new Date(int.date);
           const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`; // yyyy-MM para ordenação
           
-          // Filtrar meses antes de outubro de 2025
-          if (key < october2025Key) return;
+          // Filtrar meses antes de dezembro de 2025
+          if (key < december2025Key) return;
           
           const monthAbbr = dt.toLocaleString("pt-BR", { month: "short" }).replace(".", "");
           const label = `${monthAbbr}/${String(dt.getFullYear()).slice(-2)}`; // MMM/yy
@@ -276,16 +260,29 @@ export default function QualityAnalysisPage() {
         });
     });
 
-    return Object.values(byMonth)
-      .sort((a, b) => a.key.localeCompare(b.key))
-      .map((row) => {
-        const out: Record<string, number | string> = { date: row.date };
-        for (const id of selectedEmployeeIds) {
-          const rec = row.__latest[id];
-          if (rec) out[id] = rec.score;
-        }
-        return out;
-      });
+    const sortedMonths = Object.values(byMonth).sort((a, b) => a.key.localeCompare(b.key));
+    const result = sortedMonths.map((row) => {
+      const out: Record<string, number | string> = { date: row.date };
+      for (const id of selectedEmployeeIds) {
+        const rec = row.__latest[id];
+        if (rec) out[id] = rec.score;
+      }
+      return out;
+    });
+    
+    // Se houver apenas um mês (dezembro), adicionar meses futuros vazios para distribuir corretamente
+    // Dezembro no início, janeiro no meio, fevereiro no final
+    if (result.length === 1 && sortedMonths[0]?.key === "2025-12") {
+      const januaryEntry: Record<string, number | string | undefined> = { date: "jan/26" };
+      const februaryEntry: Record<string, number | string | undefined> = { date: "fev/26" };
+      for (const id of selectedEmployeeIds) {
+        januaryEntry[id] = undefined;
+        februaryEntry[id] = undefined;
+      }
+      return [result[0], januaryEntry, februaryEntry];
+    }
+    
+    return result;
   }, [interactions, selectedEmployeeIds]);
 
   const lineChartConfig = useMemo(() => {
@@ -299,6 +296,38 @@ export default function QualityAnalysisPage() {
     return config;
   }, [selectedEmployees]);
 
+  // Verificar se há valores negativos no gráfico de linha também
+  const hasNegativeValuesInLine = useMemo(() => {
+    return lineChartData.some(row => {
+      return selectedEmployeeIds.some(id => {
+        const value = row[id];
+        return typeof value === 'number' && value < 0;
+      });
+    });
+  }, [lineChartData, selectedEmployeeIds]);
+
+  // Combinar verificação de valores negativos de ambos os gráficos
+  const hasNegativeValues = hasNegativeValuesInBar || hasNegativeValuesInLine;
+
+  // Calcular domínio e ticks dinamicamente (mesmo range do Índice de Risco: -10 a +10)
+  const yAxisDomain = useMemo(() => {
+    if (hasNegativeValues) {
+      return [-10, 10];
+    } else {
+      // Sempre ir até 10, mesmo que não haja valores negativos
+      return [0, 10];
+    }
+  }, [hasNegativeValues]);
+
+  const yAxisTicks = useMemo(() => {
+    if (hasNegativeValues) {
+      return [-10, -8, -6, -4, -2, 0, 2, 4, 6, 8, 10];
+    } else {
+      // Sempre mostrar ticks até 10
+      return [0, 2, 4, 6, 8, 10];
+    }
+  }, [hasNegativeValues]);
+
   // Calcular quantos pontos cada pessoa tem nos dados (para mostrar bolinha se tiver apenas 1 ponto)
   const employeeDataPointCounts = useMemo(() => {
     const counts: { [key: string]: number } = {};
@@ -311,14 +340,52 @@ export default function QualityAnalysisPage() {
   
   const handleSelectHighQuality = () => {
     if (!managedEmployees) return;
+    
+    // Debug: verificar todos os funcionários e seus qualityScores
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Quality Analysis] handleSelectHighQuality - Debug:', {
+        managedEmployeesCount: managedEmployees.length,
+        managedEmployees: managedEmployees.map(emp => ({
+          id: emp.id,
+          name: emp.name,
+          email: emp.email,
+          isTestAccount: emp.email === testAccountEmail,
+        })),
+        interactionsKeys: Object.keys(interactions),
+      });
+    }
+    
     const highQualityIds = managedEmployees
       .filter(emp => {
         const qualityInteractions = interactions[emp.id]?.filter(int => int.type === 'Índice de Qualidade') || [];
         const latestQuality = qualityInteractions
           .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
-        return (latestQuality?.qualityScore ?? 0) >= 5;
+        const qualityScore = latestQuality?.qualityScore ?? 0;
+        const passes = qualityScore >= 5;
+        
+        // Debug: verificar cada funcionário
+        if (process.env.NODE_ENV === 'development') {
+          console.log('[Quality Analysis] Filtering employee:', {
+            id: emp.id,
+            name: emp.name,
+            email: emp.email,
+            isTestAccount: emp.email === testAccountEmail,
+            qualityInteractionsCount: qualityInteractions.length,
+            latestQuality,
+            qualityScore,
+            passes,
+          });
+        }
+        
+        return passes;
       })
       .map(emp => emp.id);
+    
+    // Debug: resultado final
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Quality Analysis] High quality IDs:', highQualityIds);
+    }
+    
     setSelectedEmployeeIds(highQualityIds);
   };
   
@@ -381,8 +448,8 @@ export default function QualityAnalysisPage() {
     );
   };
 
-  // Mostrar loading enquanto carrega dados
-  if (areEmployeesLoading) {
+  // Mostrar loading enquanto carrega dados ou autenticação
+  if (areEmployeesLoading || isUserLoading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-muted-foreground">Carregando...</div>
@@ -390,8 +457,10 @@ export default function QualityAnalysisPage() {
     );
   }
 
-  // Se não está autorizado, não renderizar conteúdo
-  if (!isAuthorized) {
+  // Só verificar autorização após os dados carregarem completamente
+  // Se não está autorizado E os dados já carregaram, mostrar mensagem
+  // Também não mostrar se o usuário não estiver logado (user null), pois isso será tratado pelo redirecionamento de login
+  if (!areEmployeesLoading && !isUserLoading && !isAuthorized && user) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <Alert variant="destructive" className="max-w-md">
@@ -451,7 +520,7 @@ export default function QualityAnalysisPage() {
                 <CardDescription>
                   {viewMode === 'current' 
                     ? 'Índice de qualidade atual por líder selecionado.'
-                    : 'Evolução das pontuações de qualidade a partir de outubro de 2025.'
+                    : 'Evolução das pontuações de qualidade a partir de dezembro de 2025.'
                   }
                 </CardDescription>
               </div>
@@ -490,12 +559,13 @@ export default function QualityAnalysisPage() {
                 {isLoading ? ( 
                   <Skeleton className="h-full w-full min-h-[315px]" /> 
                 ) : selectedEmployees.length > 0 ? (
-                  <ChartContainer config={barChartConfig} className="w-full h-[315px]">
-                    <BarChart
-                      accessibilityLayer
-                      data={barChartData}
-                      margin={{ left: 10, right: 10, top: 20, bottom: 60 }}
-                    >
+                  <div className="w-full h-[315px] 2xl:h-[60vh] min-h-[315px]">
+                    <ChartContainer config={barChartConfig} className="w-full h-full">
+                      <BarChart
+                        accessibilityLayer
+                        data={barChartData}
+                        margin={{ left: 50, right: 10, top: 20, bottom: 100 }}
+                      >
                       <CartesianGrid vertical={false} strokeDasharray="3 3" />
                       <XAxis
                         dataKey="name"
@@ -513,8 +583,17 @@ export default function QualityAnalysisPage() {
                           cursor={false}
                           content={<CustomBarTooltip />}
                         />
-                        {hasNegativeValues && <ReferenceLine x={0} stroke="hsl(var(--border))" strokeWidth={1} />}
-                        <Bar dataKey="quality" name="Índice de Qualidade" radius={[4, 4, 0, 0]} />
+                        <Bar 
+                          dataKey="quality" 
+                          name="Índice de Qualidade" 
+                          radius={[4, 4, 0, 0]} 
+                          isAnimationActive={true}
+                          animationBegin={0}
+                          animationDuration={800}
+                          animationEasing="ease-out"
+                          layout="vertical"
+                        />
+                        {hasNegativeValues && <ReferenceLine y={0} stroke="hsl(var(--foreground))" strokeWidth={2} strokeOpacity={0.5} />}
                         {yAxisDomain[1] >= 5 && (
                           <ReferenceLine 
                             y={5} 
@@ -526,11 +605,13 @@ export default function QualityAnalysisPage() {
                               position: "left", 
                               fill: "hsl(var(--muted-foreground))",
                               fontSize: 10,
+                              offset: 10,
                             }}
                           />
                         )}
                     </BarChart>
                   </ChartContainer>
+                  </div>
                 ) : (
                   <div className="flex items-center justify-center h-full min-h-[315px] text-muted-foreground text-sm">
                     Selecione um líder para ver o índice de qualidade.
@@ -542,11 +623,17 @@ export default function QualityAnalysisPage() {
                 {isLoading ? ( 
                   <Skeleton className="h-full w-full min-h-[315px]" /> 
                 ) : selectedEmployees.length > 0 ? (
-                  <ChartContainer config={lineChartConfig} className="w-full h-[315px]">
-                    <LineChart data={lineChartData} margin={{ top: 5, right: 20, left: 10, bottom: 40 }}>
+                  <div className="w-full h-[350px] 2xl:h-[60vh] min-h-[350px]">
+                    <ChartContainer config={lineChartConfig} className="w-full h-full">
+                      <LineChart data={lineChartData} margin={{ top: 5, right: 20, left: 10, bottom: 40 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="date" tickMargin={10} padding={{ left: 12, right: 12 }} />
-                      <YAxis />
+                      <XAxis 
+                        dataKey="date" 
+                        tickMargin={10} 
+                        padding={{ left: 12, right: 12 }}
+                        type="category"
+                      />
+                      <YAxis type="number" domain={yAxisDomain} ticks={yAxisTicks} />
                       <ChartTooltip content={<CustomLineTooltip />} />
                       <Legend 
                         content={({ payload }) => {
@@ -613,6 +700,7 @@ export default function QualityAnalysisPage() {
                       })}
                     </LineChart>
                   </ChartContainer>
+                  </div>
                 ) : (
                   <div className="flex items-center justify-center h-full min-h-[315px] text-muted-foreground text-sm">
                     Selecione um líder para ver o histórico.

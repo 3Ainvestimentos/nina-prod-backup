@@ -105,6 +105,7 @@ export default function IndividualTrackingPage() {
   const currentUserEmployee = useMemo(() => {
     if (!user || !employees) return null;
     
+    // Verificar se o email está na lista de admins hardcoded (apenas para isAdmin)
     if (user.email && adminEmails.includes(user.email)) {
         const employeeData = employees.find(e => e.email === user.email) || {};
         return {
@@ -112,23 +113,15 @@ export default function IndividualTrackingPage() {
             name: user.displayName || 'Admin',
             email: user.email,
             isAdmin: true,
-            isDirector: true,
+            // isDirector vem do documento do Firestore, não hardcoded
             role: 'Líder',
         } as Employee;
     }
 
     const employeeData = employees.find(e => e.email === user.email);
-
     if (!employeeData) return null;
 
-    if (employeeData.isAdmin) {
-      return {
-        ...employeeData,
-        role: 'Líder',
-        isDirector: true,
-      };
-    }
-    
+    // isDirector deve vir apenas do documento do Firestore
     return employeeData;
   }, [user, employees]);
 

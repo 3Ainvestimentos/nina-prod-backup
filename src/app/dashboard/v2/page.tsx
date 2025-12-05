@@ -89,7 +89,10 @@ const n3IndividualSchedule = {
     'Senior': 1, // 1 por mês
 };
 
+// Conta de teste para desenvolvimento - REMOVER DEPOIS DOS TESTES
+const testAccountEmail = 'tester@3ainvestimentos.com.br';
 
+const adminEmails = ['matheus@3ainvestimentos.com.br', 'lucas.nogueira@3ainvestimentos.com.br', 'henrique.peixoto@3ainvestimentos.com.br'];
 
 export default function LeadershipDashboardV2() {
   const firestore = useFirestore();
@@ -140,8 +143,45 @@ export default function LeadershipDashboardV2() {
 
   const currentUserEmployee = useMemo(() => {
     if (!user || !employeesToUse) return null;
+    
+    // Verificar se o email está na lista de admins hardcoded (apenas para isAdmin)
+    if (user.email && adminEmails.includes(user.email)) {
+      const employeeData = employeesToUse.find(e => e.email === user.email);
+      const result = {
+        ...(employeeData || {}),
+        name: user.displayName || 'Admin',
+        email: user.email,
+        isAdmin: true,
+        // isDirector vem do documento do Firestore, não hardcoded
+        role: 'Líder',
+      } as Employee;
+      
+      // Debug: verificar se isDirector está sendo lido do documento
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[Dashboard V2] currentUserEmployee (admin hardcoded):', {
+          email: result.email,
+          isAdmin: result.isAdmin,
+          isDirector: result.isDirector,
+          isDirectorFromDoc: employeeData?.isDirector,
+        });
+      }
+      
+      return result;
+    }
+    
     const employeeData = employeesToUse.find(e => e.email === user.email);
     if (!employeeData) return null;
+    
+    // Debug: verificar se isDirector está sendo lido do documento
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[Dashboard V2] currentUserEmployee (from Firestore):', {
+        email: employeeData.email,
+        isAdmin: employeeData.isAdmin,
+        isDirector: employeeData.isDirector,
+      });
+    }
+    
+    // isDirector deve vir apenas do documento do Firestore
     return employeeData;
   }, [user, employeesToUse]);
 
@@ -685,6 +725,17 @@ const getInteractionStatus = useCallback((
   const isLeaderOnly = currentUserEmployee?.role === 'Líder' && !currentUserEmployee.isDirector && !currentUserEmployee.isAdmin;
   const isProjectLeader = currentUserEmployee?.role === 'Líder de Projeto';
   const isDirectorOrAdmin = currentUserEmployee?.isDirector || currentUserEmployee?.isAdmin;
+  
+  // Debug: verificar valores de isDirector e isAdmin
+  if (process.env.NODE_ENV === 'development' && currentUserEmployee) {
+    console.log('[Dashboard V2] Permissões:', {
+      email: currentUserEmployee.email,
+      role: currentUserEmployee.role,
+      isAdmin: currentUserEmployee.isAdmin,
+      isDirector: currentUserEmployee.isDirector,
+      isDirectorOrAdmin,
+    });
+  }
 
   // Conteúdo do Dashboard (colaboradores) - será usado na primeira aba ou diretamente
   const dashboardContent = (
@@ -1196,14 +1247,16 @@ function LeaderTrackingContent({ employees, currentUserEmployee }: { employees: 
   const { user } = useUser();
   
   // Filtrar apenas líderes do time comercial (excluindo líderes honorários como Katharyne e Daniel Miranda)
+  // Inclui conta de teste se especificada
   const availableLeaders = useMemo(() => {
     if (!employees) return [];
     return employees.filter(e => 
       !(e as any)._isDeleted &&
       e.role === "Líder" && 
-      e.axis === "Comercial" &&
-      !e.name.toLowerCase().includes('katharyne') &&
-      !e.name.toLowerCase().includes('daniel miranda')
+      (
+        (e.axis === "Comercial" && !e.name.toLowerCase().includes('katharyne') && !e.name.toLowerCase().includes('daniel miranda')) ||
+        (testAccountEmail && e.email === testAccountEmail)
+      )
     ).sort((a, b) => a.name.localeCompare(b.name));
   }, [employees]);
 

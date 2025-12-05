@@ -60,6 +60,8 @@ export default function RiskAnalysisPage() {
 
   const currentUserEmployee = useMemo(() => {
     if (!user || !employees) return null;
+    
+    // Verificar se o email está na lista de admins hardcoded (apenas para isAdmin)
     if (user.email && adminEmails.includes(user.email)) {
         const employeeData = employees.find(e => e.email === user.email) || {};
         return {
@@ -67,19 +69,15 @@ export default function RiskAnalysisPage() {
             name: user.displayName || 'Admin',
             email: user.email,
             isAdmin: true,
-            isDirector: true,
+            // isDirector vem do documento do Firestore, não hardcoded
             role: 'Líder',
         } as Employee;
     }
+    
     const employeeData = employees.find(e => e.email === user.email);
     if (!employeeData) return null;
-    if (employeeData.isAdmin) {
-      return {
-        ...employeeData,
-        role: 'Líder',
-        isDirector: true,
-      };
-    }
+    
+    // isDirector deve vir apenas do documento do Firestore
     return employeeData;
   }, [user, employees]);
 
@@ -153,8 +151,14 @@ export default function RiskAnalysisPage() {
       } else {
         fillColor = "hsl(var(--muted-foreground))";
       }
+      // Pegar primeiro nome e último sobrenome
+      const nameParts = emp.name.split(' ');
+      const displayName = nameParts.length > 1 
+        ? `${nameParts[0]} ${nameParts[nameParts.length - 1]}`
+        : nameParts[0];
+      
       return {
-        name: emp.name.split(' ')[0],
+        name: displayName,
         risk: risk,
         fill: fillColor,
       }
@@ -416,12 +420,13 @@ export default function RiskAnalysisPage() {
                 {isLoading ? ( 
                   <Skeleton className="h-full w-full min-h-[315px]" /> 
                 ) : selectedEmployees.length > 0 ? (
-                  <ChartContainer config={barChartConfig} className="w-full h-[315px]">
-                    <BarChart
-                      accessibilityLayer
-                      data={barChartData}
-                      margin={{ left: 10, right: 10, top: 20, bottom: 60 }}
-                    >
+                  <div className="w-full h-[315px] 2xl:h-[60vh] min-h-[315px]">
+                    <ChartContainer config={barChartConfig} className="w-full h-full">
+                      <BarChart
+                        accessibilityLayer
+                        data={barChartData}
+                        margin={{ left: 10, right: 10, top: 20, bottom: 100 }}
+                      >
                       <CartesianGrid vertical={false} strokeDasharray="3 3" />
                       <XAxis
                         dataKey="name"
@@ -440,8 +445,17 @@ export default function RiskAnalysisPage() {
                           content={<CustomBarTooltip />}
                         />
                         <ReferenceArea y1={0} y2={yAxisDomain[1]} fill="hsl(var(--destructive) / 0.1)" strokeOpacity={0.5} />
-                        {hasNegativeValues && <ReferenceLine x={0} stroke="hsl(var(--border))" strokeWidth={1} />}
-                        <Bar dataKey="risk" name="Índice de Risco" radius={[4, 4, 0, 0]} />
+                        <Bar 
+                          dataKey="risk" 
+                          name="Índice de Risco" 
+                          radius={[4, 4, 0, 0]} 
+                          isAnimationActive={true}
+                          animationBegin={0}
+                          animationDuration={800}
+                          animationEasing="ease-out"
+                          layout="vertical"
+                        />
+                        {hasNegativeValues && <ReferenceLine y={0} stroke="hsl(var(--foreground))" strokeWidth={2} strokeOpacity={0.5} />}
                         {yAxisDomain[1] >= 5 && (
                           <ReferenceLine 
                             y={5} 
@@ -458,6 +472,7 @@ export default function RiskAnalysisPage() {
                         )}
                     </BarChart>
                   </ChartContainer>
+                  </div>
                 ) : (
                   <div className="flex items-center justify-center h-full min-h-[315px] text-muted-foreground text-sm">
                     Selecione um colaborador para ver o índice de risco.
@@ -469,8 +484,9 @@ export default function RiskAnalysisPage() {
                 {isLoading ? ( 
                   <Skeleton className="h-full w-full min-h-[315px]" /> 
                 ) : selectedEmployees.length > 0 ? (
-                  <ChartContainer config={lineChartConfig} className="w-full h-[315px]">
-                    <LineChart data={lineChartData} margin={{ top: 5, right: 20, left: 10, bottom: 40 }}>
+                  <div className="w-full h-[315px] 2xl:h-[60vh] min-h-[315px]">
+                    <ChartContainer config={lineChartConfig} className="w-full h-full">
+                      <LineChart data={lineChartData} margin={{ top: 5, right: 20, left: 10, bottom: 40 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} />
                       <XAxis dataKey="date" tickMargin={10} padding={{ left: 12, right: 12 }} />
                       <YAxis />
@@ -540,6 +556,7 @@ export default function RiskAnalysisPage() {
                       })}
                     </LineChart>
                   </ChartContainer>
+                  </div>
                 ) : (
                   <div className="flex items-center justify-center h-full min-h-[315px] text-muted-foreground text-sm">
                     Selecione um colaborador para ver o histórico.

@@ -133,19 +133,19 @@ const OneOnOneDetails = ({ notes }: { notes: OneOnOneNotes }) => (
                     <div className="flex flex-wrap gap-x-6 gap-y-2">
                         <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground">Captação TIME:</span>
-                            <span className="font-mono font-medium">{notes.captacaoTIME || "-"}</span>
+                            <span className="font-mono font-medium">{formatCurrency(notes.captacaoTIME)}</span>
                         </div>
                         <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground">Churn PF TIME:</span>
-                            <span className="font-mono font-medium">{notes.churnPFTIME || "-"}</span>
+                            <span className="font-mono font-medium">{formatPercentage(notes.churnPFTIME)}</span>
                         </div>
                         <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground">ROA TIME:</span>
-                            <span className="font-mono font-medium">{notes.roaTIME || "-"}</span>
+                            <span className="font-mono font-medium">{formatPercentage(notes.roaTIME)}</span>
                         </div>
                         <div className="flex items-center gap-2">
                             <span className="text-xs text-muted-foreground">Nota Ranking:</span>
-                            <span className="font-mono font-medium">{notes.notaRanking.toFixed(2)}</span>
+                            <span className="font-mono font-medium">{Math.round(notes.notaRanking)} %</span>
                         </div>
                     </div>
                 </div>

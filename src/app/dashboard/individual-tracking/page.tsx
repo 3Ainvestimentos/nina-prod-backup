@@ -142,7 +142,20 @@ export default function IndividualTrackingPage() {
         return activeEmployees;
     }
     if (currentUserEmployee.role === 'Líder' || currentUserEmployee.role === 'Diretor') {
-        return activeEmployees.filter(e => e.leaderId === currentUserEmployee.id);
+        const filtered = activeEmployees.filter(e => 
+          e.leaderId === currentUserEmployee.id && 
+          e.isUnderManagement === true
+        );
+        console.log('[Individual Tracking] Líder filtrando colaboradores:', {
+          leaderId: currentUserEmployee.id,
+          leaderName: currentUserEmployee.name,
+          leaderRole: currentUserEmployee.role,
+          totalEmployees: activeEmployees.length,
+          filteredCount: filtered.length,
+          employeesWithLeaderId: activeEmployees.filter(e => e.leaderId === currentUserEmployee.id).length,
+          employeesWithIsUnderManagement: activeEmployees.filter(e => e.isUnderManagement === true).length
+        });
+        return filtered;
     }
     return [];
   }, [currentUserEmployee, employees]);

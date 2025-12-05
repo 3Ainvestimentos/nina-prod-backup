@@ -37,6 +37,14 @@ const titles: { [key: string]: { title: string; description?: string } } = {
     title: "Projetos",
     description: "Gerencie seus projetos independentes e acompanhe interações.",
   },
+  "/dashboard/leader-tracking": {
+    title: "Acompanhamento Individual de Líderes",
+    description: "Registre e acompanhe as interações com os líderes do time comercial.",
+  },
+  "/dashboard/quality-analysis": {
+    title: "Análise de Qualidade",
+    description: "Compare e analise o índice de qualidade dos líderes.",
+  },
 };
 
 function getPageDetails(pathname: string): { title: string; description?: string } {

@@ -5,7 +5,7 @@ export type Role = "Colaborador" | "Líder" | "Líder de Projeto" | "Diretor";
 
 export type InteractionStatus = string;
 // PDI is not a direct interaction type, it has its own table.
-export type InteractionType = "1:1" | "Feedback" | "N3 Individual" | "Índice de Risco";
+export type InteractionType = "1:1" | "Feedback" | "N3 Individual" | "Índice de Risco" | "N2 Individual" | "Índice de Qualidade";
 
 export interface User {
   id: string;
@@ -50,8 +50,27 @@ export interface N3IndividualNotes {
     captacao?: string;
     churnPF?: string;
     roa?: string;
-esforcos?: string;
+    esforcos?: string;
     planoAcao?: string;
+}
+
+export interface N2IndividualNotes {
+    captacaoTIME: string;
+    churnPFTIME: string;
+    roaTIME: string;
+    notaRanking: number; // readonly, preenchido automaticamente do ranking
+    planoAcao: string;
+    anotacoes: string;
+}
+
+export interface QualityIndexNotes {
+    performanceTime: "red" | "neutral" | "green";
+    relacionamentoTime: "red" | "neutral" | "green";
+    remuneracao: "red" | "neutral" | "green";
+    desenvolvimentoTecnico: "red" | "neutral" | "green";
+    processosGestao: "red" | "neutral" | "green";
+    aderenciaCampanhas: "red" | "neutral" | "green";
+    qualityScore: number; // calculado: Red=-1, Neutro=0, Green=+1 (range -6 a +6)
 }
 
 
@@ -59,9 +78,10 @@ export interface Interaction {
   id: string;
   type: InteractionType;
   date: string; // ISO 8601 string
-  notes: string | OneOnOneNotes | N3IndividualNotes;
+  notes: string | OneOnOneNotes | N3IndividualNotes | N2IndividualNotes | QualityIndexNotes;
   authorId: string;
   riskScore?: number; // Add riskScore to interaction
+  qualityScore?: number; // Add qualityScore to interaction (para Índice de Qualidade)
   nextInteractionDate?: string; // ISO 8601 string
   source?: string; // To identify the origin of the interaction (e.g., 'Pipedrive')
   sendEmailToAssessor?: boolean; // Controla se email será enviado ao assessor na reunião N3

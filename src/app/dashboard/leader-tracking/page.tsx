@@ -34,8 +34,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { useCollection, useFirestore, useMemoFirebase, useUser } from "@/firebase";
 import { addDoc, collection } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
-import { N2IndividualFormDialog } from "@/components/n2-individual-form-dialog";
-import { QualityIndexFormDialog } from "@/components/quality-index-form-dialog";
+import { N2IndividualForm } from "@/components/n2-individual-form";
+import { QualityIndexForm } from "@/components/quality-index-form";
 import { isSameMonth, isSameYear, parseISO } from "date-fns";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
@@ -47,11 +47,10 @@ const testAccountEmail = 'tester@3ainvestimentos.com.br';
 export default function LeaderTrackingPage() {
   const router = useRouter();
   const [selectedLeaderId, setSelectedLeaderId] = useState<string | null>(null);
-  const [openN2Dialog, setOpenN2Dialog] = useState(false);
-  const [openQualityDialog, setOpenQualityDialog] = useState(false);
-  const [openFeedbackDialog, setOpenFeedbackDialog] = useState(false);
   const [feedbackNotes, setFeedbackNotes] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [isInteractionDialogOpen, setIsInteractionDialogOpen] = useState(false);
+  const [selectedInteractionType, setSelectedInteractionType] = useState<Interaction['type'] | ''>('N2 Individual');
   
   const firestore = useFirestore();
   const { user, isUserLoading } = useUser();
@@ -170,8 +169,30 @@ export default function LeaderTrackingPage() {
     );
   }
 
+  const handleInteractionTypeChange = (value: string) => {
+    setSelectedInteractionType(value as Interaction['type']);
+  };
+
+  const handleStartInteraction = () => {
+    if (selectedInteractionType === 'Feedback') {
+      handleSaveFeedback();
+    }
+    // N2 e Qualidade agora são salvos via submit do formulário
+  };
+
   const handleLeaderChange = (id: string) => {
     setSelectedLeaderId(id);
+    setSelectedInteractionType('N2 Individual');
+    setFeedbackNotes('');
+  };
+
+  // Resetar estados ao fechar o diálogo principal
+  const handleInteractionDialogOpenChange = (open: boolean) => {
+    setIsInteractionDialogOpen(open);
+    if (!open) {
+      setSelectedInteractionType('N2 Individual');
+      setFeedbackNotes('');
+    }
   };
 
   const handleSaveN2 = async (notes: N2IndividualNotes) => {
@@ -217,7 +238,7 @@ export default function LeaderTrackingPage() {
         title: "Interação Salva!",
         description: "O registro N2 Individual foi salvo com sucesso.",
       });
-      setOpenN2Dialog(false);
+      setIsInteractionDialogOpen(false);
     } catch (error) {
       console.error("[LeaderTracking] Erro ao salvar N2:", error);
       toast({
@@ -274,7 +295,7 @@ export default function LeaderTrackingPage() {
         title: "Interação Salva!",
         description: "O registro de Índice de Qualidade foi salvo com sucesso.",
       });
-      setOpenQualityDialog(false);
+      setIsInteractionDialogOpen(false);
     } catch (error) {
       console.error("[LeaderTracking] Erro ao salvar Índice de Qualidade:", error);
       toast({
@@ -321,7 +342,7 @@ export default function LeaderTrackingPage() {
         title: "Interação Salva!",
         description: "O registro de Feedback foi salvo com sucesso.",
       });
-      setOpenFeedbackDialog(false);
+      setIsInteractionDialogOpen(false);
       setFeedbackNotes("");
     } catch (error) {
       console.error("[LeaderTracking] Erro ao salvar Feedback:", error);
@@ -366,77 +387,92 @@ export default function LeaderTrackingPage() {
 
       {selectedLeader && (
         <Card>
-          <CardHeader>
-            <CardTitle>Acompanhamento de {selectedLeader.name}</CardTitle>
-            <CardDescription>
-              Visualize o histórico de interações e registre novas interações.
-            </CardDescription>
-            <div className="flex gap-2 mt-4">
-              <Dialog open={openN2Dialog} onOpenChange={setOpenN2Dialog}>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle>Acompanhamento de {selectedLeader.name}</CardTitle>
+              <CardDescription>
+                Visualize o histórico de interações e registre novas interações.
+              </CardDescription>
+            </div>
+            <div className="flex gap-2">
+              <Dialog open={isInteractionDialogOpen} onOpenChange={handleInteractionDialogOpenChange}>
                 <DialogTrigger asChild>
-                  <Button variant="outline" size="sm">
+                  <Button>
                     <PlusCircle className="mr-2 h-4 w-4" />
-                    N2 Individual
+                    Nova Interação
                   </Button>
                 </DialogTrigger>
-                <N2IndividualFormDialog
-                  open={openN2Dialog}
-                  onOpenChange={setOpenN2Dialog}
-                  employee={selectedLeader}
-                  onSave={handleSaveN2}
-                  isSaving={isSaving}
-                />
-              </Dialog>
-
-              <Dialog open={openQualityDialog} onOpenChange={setOpenQualityDialog}>
-                <DialogTrigger asChild>
-                  <Button variant="outline" size="sm">
-                    <PlusCircle className="mr-2 h-4 w-4" />
-                    Índice de Qualidade
-                  </Button>
-                </DialogTrigger>
-                <QualityIndexFormDialog
-                  open={openQualityDialog}
-                  onOpenChange={setOpenQualityDialog}
-                  employee={selectedLeader}
-                  onSave={handleSaveQuality}
-                  isSaving={isSaving}
-                />
-              </Dialog>
-
-              <Dialog open={openFeedbackDialog} onOpenChange={setOpenFeedbackDialog}>
-                <DialogTrigger asChild>
-                  <Button variant="outline" size="sm">
-                    <PlusCircle className="mr-2 h-4 w-4" />
-                    Feedback
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
+                <DialogContent className={selectedInteractionType === 'Índice de Qualidade' ? "max-w-3xl" : "sm:max-w-xl"}>
                   <DialogHeader>
-                    <DialogTitle>Feedback</DialogTitle>
+                    <DialogTitle>Registrar Nova Interação</DialogTitle>
                     <DialogDescription>
-                      Registre um feedback para o líder {selectedLeader.name}.
+                      Preencha os detalhes da interação com {selectedLeader.name}.
                     </DialogDescription>
                   </DialogHeader>
-                  <div className="space-y-4 py-4">
+                  <div className="grid gap-4 py-4 max-h-[60vh] overflow-y-auto px-6">
                     <div className="space-y-2">
-                      <Label htmlFor="feedback-notes">Anotações</Label>
-                      <Textarea
-                        id="feedback-notes"
-                        placeholder="Digite o feedback..."
-                        value={feedbackNotes}
-                        onChange={(e) => setFeedbackNotes(e.target.value)}
-                        disabled={isSaving}
-                        rows={6}
-                      />
+                      <Label htmlFor="interaction-type">Tipo de Interação</Label>
+                      <Select
+                        value={selectedInteractionType}
+                        onValueChange={handleInteractionTypeChange}
+                      >
+                        <SelectTrigger id="interaction-type">
+                          <SelectValue placeholder="Selecione o tipo..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="N2 Individual">N2 Individual</SelectItem>
+                          <SelectItem value="Índice de Qualidade">Índice de Qualidade</SelectItem>
+                          <SelectItem value="Feedback">Feedback</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
+
+                    {selectedInteractionType === 'Feedback' && (
+                      <div className="space-y-2">
+                        <Label htmlFor="feedback-notes">Anotações do Feedback</Label>
+                        <Textarea
+                          id="feedback-notes"
+                          placeholder="Digite o feedback..."
+                          value={feedbackNotes}
+                          onChange={(e) => setFeedbackNotes(e.target.value)}
+                          disabled={isSaving}
+                          rows={6}
+                        />
+                      </div>
+                    )}
+
+                    {selectedInteractionType === 'N2 Individual' && selectedLeader && (
+                      <N2IndividualForm
+                        id="n2-form"
+                        employee={selectedLeader}
+                        onSave={handleSaveN2}
+                        isSaving={isSaving}
+                      />
+                    )}
+
+                    {selectedInteractionType === 'Índice de Qualidade' && selectedLeader && (
+                      <QualityIndexForm
+                        id="quality-form"
+                        employee={selectedLeader}
+                        onSave={handleSaveQuality}
+                        isSaving={isSaving}
+                      />
+                    )}
                   </div>
                   <DialogFooter>
-                    <Button variant="outline" onClick={() => setOpenFeedbackDialog(false)} disabled={isSaving}>
+                    <Button variant="outline" onClick={() => setIsInteractionDialogOpen(false)}>
                       Cancelar
                     </Button>
-                    <Button onClick={handleSaveFeedback} disabled={isSaving || feedbackNotes.trim() === ''}>
-                      {isSaving ? "Salvando..." : "Salvar Feedback"}
+                    <Button 
+                      onClick={selectedInteractionType === 'Feedback' ? handleStartInteraction : undefined}
+                      type={selectedInteractionType === 'Feedback' ? 'button' : 'submit'}
+                      form={
+                        selectedInteractionType === 'N2 Individual' ? 'n2-form' :
+                        selectedInteractionType === 'Índice de Qualidade' ? 'quality-form' : undefined
+                      }
+                      disabled={!selectedInteractionType || (selectedInteractionType === 'Feedback' && (!feedbackNotes.trim() || isSaving))}
+                    >
+                      {isSaving ? "Salvando..." : "Salvar Interação"}
                     </Button>
                   </DialogFooter>
                 </DialogContent>

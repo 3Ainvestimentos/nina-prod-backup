@@ -42,6 +42,13 @@ export function MainNav({ user }: { user: Employee }) {
     return true; // Show by default if no auth rule
   };
 
+  const getLabel = (item: typeof navItems[0]) => {
+    if (item.href === "/dashboard/risk-analysis") {
+       return user.isDirector || user.isAdmin ? "Análise de Índices" : "Análise de Risco";
+    }
+    return item.label;
+  };
+
   return (
     <SidebarMenu>
       {navItems.map((item) => {
@@ -56,10 +63,10 @@ export function MainNav({ user }: { user: Employee }) {
 
         return (
           <SidebarMenuItem key={item.href}>
-            <SidebarMenuButton asChild isActive={isActive} tooltip={item.label}>
+            <SidebarMenuButton asChild isActive={isActive} tooltip={getLabel(item)}>
               <Link href={item.href}>
                 <item.icon />
-                <span>{item.label}</span>
+                <span>{getLabel(item)}</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

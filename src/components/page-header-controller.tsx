@@ -99,9 +99,13 @@ export function PageHeaderController() {
   const isDirectorOrAdmin = currentUserEmployee?.isDirector || currentUserEmployee?.isAdmin;
 
   // Se for diretor/admin e estiver na página principal do dashboard, mudar o título
-  const title = (pathname === "/dashboard/v2" && isDirectorOrAdmin) 
-    ? "Dashboard" 
-    : defaultTitle;
+  let title = defaultTitle;
+
+  if (pathname === "/dashboard/v2" && isDirectorOrAdmin) {
+    title = "Dashboard";
+  } else if (pathname === "/dashboard/risk-analysis") {
+    title = isDirectorOrAdmin ? "Análise de Índices" : "Análise de Risco";
+  }
 
   return <PageHeader title={title} description={description} />;
 }

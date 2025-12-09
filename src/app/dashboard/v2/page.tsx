@@ -1051,8 +1051,8 @@ const getInteractionStatus = useCallback((
     return (
       <Tabs defaultValue="dashboard" className="w-full">
         <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-          <TabsTrigger value="leader-tracking">Dashboard Diretores</TabsTrigger>
+          <TabsTrigger value="dashboard">Assessores</TabsTrigger>
+          <TabsTrigger value="leader-tracking">Líderes</TabsTrigger>
         </TabsList>
         <TabsContent value="dashboard">
           {dashboardContent}

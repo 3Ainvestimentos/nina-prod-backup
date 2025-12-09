@@ -33,6 +33,7 @@ export interface Employee {
   team?: string;
   diagnosis?: Diagnosis;
   riskScore?: number;
+  qualityScore?: number; // Pontuação do Índice de Qualidade para líderes
   isUnderManagement?: boolean;
   isDirector?: boolean;
   isAdmin?: boolean;

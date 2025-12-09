@@ -3,6 +3,12 @@
 
 import { usePathname } from "next/navigation";
 import { PageHeader } from "./page-header";
+import { useUser, useFirestore, useCollection, useMemoFirebase } from "@/firebase";
+import { collection } from "firebase/firestore";
+import type { Employee } from "@/lib/types";
+import { useMemo } from "react";
+
+const adminEmails = ['matheus@3ainvestimentos.com.br', 'lucas.nogueira@3ainvestimentos.com.br', 'henrique.peixoto@3ainvestimentos.com.br'];
 
 const titles: { [key: string]: { title: string; description?: string } } = {
   "/dashboard/v2": {
@@ -22,8 +28,8 @@ const titles: { [key: string]: { title: string; description?: string } } = {
     description: "Visualize e gerencie o PDI e o diagnóstico de cada colaborador.",
   },
   "/dashboard/risk-analysis": {
-    title: "Análise de Risco",
-    description: "Compare e analise o índice de risco dos colaboradores.",
+    title: "Análise de Índices",
+    description: "Compare e analise os índices de risco e qualidade.",
   },
   "/dashboard/ranking": {
     title: "Ranking de Líderes",
@@ -62,7 +68,40 @@ function getPageDetails(pathname: string): { title: string; description?: string
 
 export function PageHeaderController() {
   const pathname = usePathname();
-  const { title, description } = getPageDetails(pathname);
+  const { title: defaultTitle, description } = getPageDetails(pathname);
+  
+  const firestore = useFirestore();
+  const { user } = useUser();
+
+  const employeesCollection = useMemoFirebase(
+    () => (firestore && user ? collection(firestore, "employees") : null),
+    [firestore, user]
+  );
+  
+  const { data: employees } = useCollection<Employee>(employeesCollection);
+
+  const currentUserEmployee = useMemo(() => {
+    if (!user || !employees) return null;
+    
+    // Verificar se o email está na lista de admins hardcoded
+    if (user.email && adminEmails.includes(user.email)) {
+      const employeeData = employees.find(e => e.email === user.email) || {};
+      return {
+        ...employeeData,
+        isAdmin: true,
+        // isDirector vem do documento
+      } as Employee;
+    }
+    
+    return employees.find(e => e.email === user.email);
+  }, [user, employees]);
+
+  const isDirectorOrAdmin = currentUserEmployee?.isDirector || currentUserEmployee?.isAdmin;
+
+  // Se for diretor/admin e estiver na página principal do dashboard, mudar o título
+  const title = (pathname === "/dashboard/v2" && isDirectorOrAdmin) 
+    ? "Dashboard" 
+    : defaultTitle;
 
   return <PageHeader title={title} description={description} />;
 }

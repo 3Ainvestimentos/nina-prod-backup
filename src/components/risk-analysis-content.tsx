@@ -496,7 +496,7 @@ export function RiskAnalysisContent({
                       <LineChart data={lineChartData} margin={{ top: 5, right: 20, left: 10, bottom: 40 }}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} />
                         <XAxis dataKey="date" tickMargin={10} padding={{ left: 12, right: 12 }} />
-                        <YAxis />
+                        <YAxis domain={[0, 10]} ticks={[0, 2, 4, 6, 8, 10]} />
                         <ChartTooltip content={<CustomLineTooltip />} />
                         <Legend 
                           content={({ payload }) => {

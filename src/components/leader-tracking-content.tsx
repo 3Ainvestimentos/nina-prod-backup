@@ -62,8 +62,6 @@ export function LeaderTrackingContent({
   const [isSaving, setIsSaving] = useState(false);
   const [isInteractionDialogOpen, setIsInteractionDialogOpen] = useState(false);
   const [selectedInteractionType, setSelectedInteractionType] = useState<Interaction['type'] | ''>('N2 Individual');
-  const [analysisConfirmed, setAnalysisConfirmed] = useState(false);
-  const [analysisNotes, setAnalysisNotes] = useState("");
   
   const firestore = useFirestore();
   const { user } = useUser();
@@ -190,8 +188,6 @@ export function LeaderTrackingContent({
     if (!open) {
       setSelectedInteractionType('N2 Individual');
       setFeedbackNotes('');
-      setAnalysisConfirmed(false);
-      setAnalysisNotes('');
     }
   };
 
@@ -360,98 +356,6 @@ export function LeaderTrackingContent({
     }
   };
 
-  const handleSaveGlobalAnalysis = async () => {
-    if (!user || !currentUserEmployee || !firestore) {
-      toast({
-        variant: "destructive",
-        title: "Erro de Validação",
-        description: "Não foi possível salvar, tente novamente.",
-      });
-      return;
-    }
-
-    if (!analysisConfirmed) {
-      toast({
-        variant: "destructive",
-        title: "Erro de Validação",
-        description: "Você precisa confirmar a análise para salvar.",
-      });
-      return;
-    }
-
-    // Verificar se é diretor/admin
-    const isDirectorOrAdmin = currentUserEmployee.isDirector || currentUserEmployee.isAdmin || (user.email && adminEmails.includes(user.email));
-    if (!isDirectorOrAdmin) {
-      toast({
-        variant: "destructive",
-        title: "Acesso Negado",
-        description: "Apenas Diretores podem registrar análises globais.",
-      });
-      return;
-    }
-
-    setIsSaving(true);
-
-    // Salvar no perfil do diretor (não do líder)
-    const directorInteractionsCollection = collection(firestore, "employees", currentUserEmployee.id, "interactions");
-
-    const now = new Date();
-    
-    // Verificar se já existe uma análise deste tipo no mês atual
-    try {
-      const { getDocs, query: firestoreQuery, where } = await import("firebase/firestore");
-      const q = firestoreQuery(
-        directorInteractionsCollection,
-        where("type", "==", selectedInteractionType)
-      );
-      const snapshot = await getDocs(q);
-      
-      const existingInteraction = snapshot.docs.find(doc => {
-        const data = doc.data() as Interaction;
-        const interactionDate = parseISO(data.date);
-        return isSameMonth(interactionDate, now) && isSameYear(interactionDate, now);
-      });
-
-      if (existingInteraction) {
-        toast({
-          variant: "destructive",
-          title: "Registro Duplicado",
-          description: `Uma análise "${selectedInteractionType}" já foi registrada para este mês.`,
-        });
-        setIsSaving(false);
-        return;
-      }
-    } catch (error) {
-      console.error("[LeaderTracking] Erro ao verificar interação existente:", error);
-    }
-
-    const interactionToSave: Partial<Interaction> = {
-      type: selectedInteractionType as 'Análise do Índice de Qualidade' | 'Análise do Índice de Risco',
-      notes: analysisNotes.trim() || '',
-      authorId: user.uid,
-      date: now.toISOString(),
-    };
-
-    try {
-      await addDoc(directorInteractionsCollection, interactionToSave);
-      toast({
-        title: "Análise Registrada!",
-        description: `A análise "${selectedInteractionType}" foi registrada com sucesso.`,
-      });
-      setIsInteractionDialogOpen(false);
-      setAnalysisConfirmed(false);
-      setAnalysisNotes("");
-    } catch (error) {
-      console.error("[LeaderTracking] Erro ao salvar análise global:", error);
-      toast({
-        variant: "destructive",
-        title: "Erro ao Salvar",
-        description: "Não foi possível salvar a análise. Verifique as permissões e tente novamente.",
-      });
-    } finally {
-      setIsSaving(false);
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -520,12 +424,6 @@ export function LeaderTrackingContent({
                           <SelectItem value="N2 Individual">N2 Individual</SelectItem>
                           <SelectItem value="Índice de Qualidade">Índice de Qualidade</SelectItem>
                           <SelectItem value="Feedback">Feedback</SelectItem>
-                          {isAuthorized && (
-                            <>
-                              <SelectItem value="Análise do Índice de Qualidade">Análise do Índice de Qualidade</SelectItem>
-                              <SelectItem value="Análise do Índice de Risco">Análise do Índice de Risco</SelectItem>
-                            </>
-                          )}
                         </SelectContent>
                       </Select>
                     </div>
@@ -562,32 +460,6 @@ export function LeaderTrackingContent({
                       />
                     )}
 
-                    {(selectedInteractionType === 'Análise do Índice de Qualidade' || selectedInteractionType === 'Análise do Índice de Risco') && (
-                      <div className="space-y-4">
-                        <div className="flex items-center space-x-2">
-                          <Checkbox
-                            id="analysis-confirmed"
-                            checked={analysisConfirmed}
-                            onCheckedChange={(checked) => setAnalysisConfirmed(checked === true)}
-                            disabled={isSaving}
-                          />
-                          <Label htmlFor="analysis-confirmed" className="text-sm font-medium cursor-pointer">
-                            Confirmo que realizei esta análise
-                          </Label>
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="analysis-notes">Anotações (opcional)</Label>
-                          <Textarea
-                            id="analysis-notes"
-                            placeholder="Digite anotações sobre a análise..."
-                            value={analysisNotes}
-                            onChange={(e) => setAnalysisNotes(e.target.value)}
-                            disabled={isSaving}
-                            rows={4}
-                          />
-                        </div>
-                      </div>
-                    )}
                   </div>
                   <DialogFooter>
                     <Button variant="outline" onClick={() => setIsInteractionDialogOpen(false)}>
@@ -595,12 +467,10 @@ export function LeaderTrackingContent({
                     </Button>
                     <Button 
                       onClick={
-                        selectedInteractionType === 'Feedback' ? handleStartInteraction :
-                        (selectedInteractionType === 'Análise do Índice de Qualidade' || selectedInteractionType === 'Análise do Índice de Risco') ? handleSaveGlobalAnalysis :
-                        undefined
+                        selectedInteractionType === 'Feedback' ? handleStartInteraction : undefined
                       }
                       type={
-                        selectedInteractionType === 'Feedback' || selectedInteractionType === 'Análise do Índice de Qualidade' || selectedInteractionType === 'Análise do Índice de Risco' ? 'button' : 'submit'
+                        selectedInteractionType === 'Feedback' ? 'button' : 'submit'
                       }
                       form={
                         selectedInteractionType === 'N2 Individual' ? 'n2-form' :
@@ -609,7 +479,7 @@ export function LeaderTrackingContent({
                       disabled={
                         !selectedInteractionType || 
                         (selectedInteractionType === 'Feedback' && (!feedbackNotes.trim() || isSaving)) ||
-                        ((selectedInteractionType === 'Análise do Índice de Qualidade' || selectedInteractionType === 'Análise do Índice de Risco') && (!analysisConfirmed || isSaving))
+                        isSaving
                       }
                     >
                       {isSaving ? "Salvando..." : "Salvar Interação"}

@@ -1557,23 +1557,16 @@ function LeaderTrackingContent({ employees, currentUserEmployee }: { employees: 
               {(['Análise do Índice de Qualidade', 'Análise do Índice de Risco'] as const).map((actionType) => {
                 const actionStatus = directorGlobalActionsStatus[actionType];
                 const isCompleted = actionStatus.completed;
-                const notes = actionStatus.notes;
                 const status = isCompleted ? "Realizado 1/1" : "Realizado 0/1";
                 
                 return (
-                  <div key={actionType} className="p-4 border rounded-lg space-y-3">
+                  <div key={actionType} className="p-4 border rounded-lg">
                     <div className="flex items-center justify-between">
                       <span className="text-sm font-medium">{actionType}</span>
                       <Badge variant={isCompleted ? "default" : "destructive"}>
                         {status}
                       </Badge>
                     </div>
-                    {isCompleted && notes && notes.trim() && (
-                      <div className="pt-2 border-t">
-                        <p className="text-xs font-medium text-muted-foreground mb-1">Anotações:</p>
-                        <p className="text-sm text-foreground whitespace-pre-wrap">{notes}</p>
-                      </div>
-                    )}
                   </div>
                 );
               })}

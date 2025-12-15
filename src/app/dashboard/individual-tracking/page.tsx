@@ -7,6 +7,7 @@ import { collection } from "firebase/firestore";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { IndividualTrackingContent } from "@/components/individual-tracking-content";
 import { LeaderTrackingContent } from "@/components/leader-tracking-content";
+import { CommercialTeamContent } from "@/components/commercial-team-content";
 
 const adminEmails = ['matheus@3ainvestimentos.com.br', 'lucas.nogueira@3ainvestimentos.com.br', 'henrique.peixoto@3ainvestimentos.com.br'];
 
@@ -46,21 +47,29 @@ export default function IndividualTrackingPage() {
   if (isDirectorOrAdmin) {
     return (
       <Tabs defaultValue="assessores" className="w-full space-y-6">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="assessores">Assessores</TabsTrigger>
           <TabsTrigger value="lideres">Líderes</TabsTrigger>
+          <TabsTrigger value="equipe-comercial">Equipe Comercial</TabsTrigger>
         </TabsList>
         <TabsContent value="assessores">
           <IndividualTrackingContent 
-            employees={employees} 
-            currentUserEmployee={currentUserEmployee}
+            employees={employees || undefined} 
+            currentUserEmployee={currentUserEmployee || undefined}
             areEmployeesLoading={areEmployeesLoading}
           />
         </TabsContent>
         <TabsContent value="lideres">
           <LeaderTrackingContent 
-            employees={employees}
-            currentUserEmployee={currentUserEmployee}
+            employees={employees || undefined}
+            currentUserEmployee={currentUserEmployee || undefined}
+            areEmployeesLoading={areEmployeesLoading}
+          />
+        </TabsContent>
+        <TabsContent value="equipe-comercial">
+          <CommercialTeamContent 
+            employees={employees || undefined}
+            currentUserEmployee={currentUserEmployee || undefined}
             areEmployeesLoading={areEmployeesLoading}
           />
         </TabsContent>
@@ -71,8 +80,8 @@ export default function IndividualTrackingPage() {
   // Se for líder, mostra apenas o conteúdo de assessores
   return (
     <IndividualTrackingContent 
-      employees={employees} 
-      currentUserEmployee={currentUserEmployee}
+      employees={employees || undefined} 
+      currentUserEmployee={currentUserEmployee || undefined}
       areEmployeesLoading={areEmployeesLoading}
     />
   );

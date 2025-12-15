@@ -9,6 +9,8 @@ import {
   ChevronDown,
   FileText,
   Award,
+  BarChart3,
+  TrendingUp,
 } from "lucide-react";
 import { formatDate, cn } from "@/lib/utils";
 import { Skeleton } from "./ui/skeleton";
@@ -28,6 +30,8 @@ const interactionIcons: Record<Interaction["type"], React.ReactNode> = {
   "Índice de Risco": <ShieldAlert className="h-4 w-4" />,
   "N2 Individual": <FileText className="h-4 w-4" />,
   "Índice de Qualidade": <Award className="h-4 w-4" />,
+  "Análise do Índice de Qualidade": <BarChart3 className="h-4 w-4" />,
+  "Análise do Índice de Risco": <TrendingUp className="h-4 w-4" />,
 };
 
 const OneOnOneDetails = ({ notes }: { notes: OneOnOneNotes }) => (
@@ -264,7 +268,7 @@ const OneOnOneDetails = ({ notes }: { notes: OneOnOneNotes }) => (
     <div className="relative flex items-start gap-4">
       <div className="flex h-6 w-6 items-center justify-center rounded-full bg-secondary z-10">
         <span className={cn("flex h-6 w-6 items-center justify-center rounded-full bg-muted text-foreground", item.type === 'Índice de Risco' && "text-destructive")}>
-            {item.type ? interactionIcons[item.type] : null}
+            {item.type && item.type in interactionIcons ? (interactionIcons[item.type] as React.ReactNode) : null}
         </span>
       </div>
       <div className="flex-1 pt-0.5">
@@ -290,18 +294,25 @@ const OneOnOneDetails = ({ notes }: { notes: OneOnOneNotes }) => (
               Índice de Qualidade: {item.qualityScore}
             </div>
         )}
-        {item.type === 'Feedback' && typeof item.notes === 'object' && item.notes && 'indicator' in item.notes && item.notes.indicator && (
+        {item.type === 'Feedback' && typeof item.notes === 'object' && item.notes && 'indicator' in item.notes && (item.notes as { indicator: unknown }).indicator && (
             <div className="text-sm font-bold text-foreground mt-2">
-              Indicador: {item.notes.indicator}
+              Indicador: {String(item.notes.indicator)}
             </div>
         )}
         <div className="mt-2 text-sm">
             {typeof item.notes === 'string' && item.type === 'Feedback' ? (
                  <p className="whitespace-pre-wrap">{item.notes}</p>
             ) : typeof item.notes === 'object' && item.type === 'Feedback' && item.notes && 'content' in item.notes ? (
-                 <p className="whitespace-pre-wrap">{item.notes.content}</p>
+                 <p className="whitespace-pre-wrap">{String((item.notes as { content: unknown }).content)}</p>
             ) : typeof item.notes === 'string' && item.type === 'Índice de Risco' ? (
                 <RiskAssessmentDetails notes={item.notes} />
+            ) : typeof item.notes === 'string' && (item.type === 'Análise do Índice de Qualidade' || item.type === 'Análise do Índice de Risco') ? (
+                item.notes.trim() ? (
+                    <div className="space-y-2">
+                        <p className="font-medium text-sm">Anotações:</p>
+                        <p className="whitespace-pre-wrap text-muted-foreground">{item.notes}</p>
+                    </div>
+                ) : null
             ) : item.type === '1:1' && item.notes ? (
                 <OneOnOneDetails notes={item.notes as OneOnOneNotes} />
             ) : item.type === 'N3 Individual' && isN3IndividualNotes(item.notes) ? (
@@ -341,11 +352,11 @@ export function Timeline({ interactions, isLoading }: { interactions: Interactio
   const monthGroups = groupByMonth(interactions);
   
   // Determinar o mês mais recente (primeiro grupo) para expandir por padrão
-  const defaultOpenMonth = monthGroups.length > 0 ? [monthGroups[0].key] : [];
+  const defaultOpenMonth = monthGroups.length > 0 ? monthGroups[0].key : undefined;
   
   return (
     <div className="space-y-4">
-      <Accordion type="multiple" defaultValue={defaultOpenMonth} className="w-full space-y-4">
+      <Accordion type="single" collapsible defaultValue={defaultOpenMonth} className="w-full space-y-4">
         {monthGroups.map((group) => (
           <AccordionItem key={group.key} value={group.key} className="border rounded-lg">
             <Card>

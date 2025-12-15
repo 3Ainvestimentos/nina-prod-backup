@@ -188,14 +188,35 @@ export default function AdminPage() {
     const { leaders, directors, admins, uniqueValues, employeesWithoutDiagnosis } = useMemo(() => {
         if (!employees) return { leaders: [], directors: [], admins: [], uniqueValues: { names: [], positions: [], axes: [], areas: [], segments: [], leaders: [], cities: [], roles: [] }, employeesWithoutDiagnosis: [] };
         
-        const names = [...new Set(employees.map(e => e.name).filter(Boolean))].sort() as string[];
-        const positions = [...new Set(employees.map(e => e.position).filter(Boolean))].sort() as string[];
-        const axes = [...new Set(employees.map(e => e.axis).filter(Boolean))].sort() as string[];
-        const areas = [...new Set(employees.map(e => e.area).filter(Boolean))].sort() as string[];
-        const segments = [...new Set(employees.map(e => e.segment).filter(Boolean))].sort() as string[];
-        const leaderNames = [...new Set(employees.map(e => e.leader).filter(Boolean))].sort() as string[];
-        const cities = [...new Set(employees.map(e => e.city).filter(Boolean))].sort() as string[];
-        const roleValues = [...new Set(employees.map(e => e.role).filter(Boolean))].sort() as Role[];
+        // Otimização: um único loop ao invés de 8 loops separados
+        const namesSet = new Set<string>();
+        const positionsSet = new Set<string>();
+        const axesSet = new Set<string>();
+        const areasSet = new Set<string>();
+        const segmentsSet = new Set<string>();
+        const leaderNamesSet = new Set<string>();
+        const citiesSet = new Set<string>();
+        const roleValuesSet = new Set<Role>();
+        
+        for (const e of employees) {
+          if (e.name) namesSet.add(e.name);
+          if (e.position) positionsSet.add(e.position);
+          if (e.axis) axesSet.add(e.axis);
+          if (e.area) areasSet.add(e.area);
+          if (e.segment) segmentsSet.add(e.segment);
+          if (e.leader) leaderNamesSet.add(e.leader);
+          if (e.city) citiesSet.add(e.city);
+          if (e.role) roleValuesSet.add(e.role);
+        }
+        
+        const names = [...namesSet].sort() as string[];
+        const positions = [...positionsSet].sort() as string[];
+        const axes = [...axesSet].sort() as string[];
+        const areas = [...areasSet].sort() as string[];
+        const segments = [...segmentsSet].sort() as string[];
+        const leaderNames = [...leaderNamesSet].sort() as string[];
+        const cities = [...citiesSet].sort() as string[];
+        const roleValues = [...roleValuesSet].sort() as Role[];
 
         const leaders = employees.filter(e => !(e as any)._isDeleted && (e.role === 'Líder' || e.role === 'Diretor'));
         const directors = employees.filter(e => !(e as any)._isDeleted && e.isDirector).sort((a,b) => {
@@ -287,21 +308,24 @@ export default function AdminPage() {
   const filteredAndSortedEmployees = useMemo(() => {
     if (!employees) return [];
     
-    let filtered = employees.filter(employee => {
-        // Ignorar registros marcados como deletados (soft delete)
-        if ((employee as any)._isDeleted) return false;
-        
-        return (
-            (filters.name.size === 0 || (employee.name && filters.name.has(employee.name))) &&
-            (filters.position.size === 0 || (employee.position && filters.position.has(employee.position))) &&
-            (filters.axis.size === 0 || (employee.axis && filters.axis.has(employee.axis))) &&
-            (filters.area.size === 0 || (employee.area && filters.area.has(employee.area))) &&
-            (filters.segment.size === 0 || (employee.segment && filters.segment.has(employee.segment))) &&
-            (filters.leader.size === 0 || (employee.leader && filters.leader.has(employee.leader))) &&
-            (filters.city.size === 0 || (employee.city && filters.city.has(employee.city))) &&
-            (filters.role.size === 0 || (employee.role && filters.role.has(employee.role)))
-        );
-    });
+    // Otimização: loop com early return ao invés de filter (mais rápido quando muitos itens são descartados)
+    const filtered: Employee[] = [];
+    for (const employee of employees) {
+      // Ignorar registros marcados como deletados (soft delete)
+      if ((employee as any)._isDeleted) continue;
+      
+      // Early return em cada condição - para assim que uma falhar
+      if (filters.name.size > 0 && (!employee.name || !filters.name.has(employee.name))) continue;
+      if (filters.position.size > 0 && (!employee.position || !filters.position.has(employee.position))) continue;
+      if (filters.axis.size > 0 && (!employee.axis || !filters.axis.has(employee.axis))) continue;
+      if (filters.area.size > 0 && (!employee.area || !filters.area.has(employee.area))) continue;
+      if (filters.segment.size > 0 && (!employee.segment || !filters.segment.has(employee.segment))) continue;
+      if (filters.leader.size > 0 && (!employee.leader || !filters.leader.has(employee.leader))) continue;
+      if (filters.city.size > 0 && (!employee.city || !filters.city.has(employee.city))) continue;
+      if (filters.role.size > 0 && (!employee.role || !filters.role.has(employee.role))) continue;
+      
+      filtered.push(employee);
+    }
 
     if (sortConfig !== null) {
       filtered.sort((a, b) => {

@@ -5,7 +5,7 @@ export type Role = "Colaborador" | "Líder" | "Líder de Projeto" | "Diretor";
 
 export type InteractionStatus = string;
 // PDI is not a direct interaction type, it has its own table.
-export type InteractionType = "1:1" | "Feedback" | "N3 Individual" | "Índice de Risco" | "N2 Individual" | "Índice de Qualidade";
+export type InteractionType = "1:1" | "Feedback" | "N3 Individual" | "Índice de Risco" | "N2 Individual" | "Índice de Qualidade" | "Análise do Índice de Qualidade" | "Análise do Índice de Risco";
 
 export interface User {
   id: string;

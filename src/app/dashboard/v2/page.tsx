@@ -46,7 +46,6 @@ import { Timeline } from "@/components/timeline";
 import { N2IndividualFormDialog } from "@/components/n2-individual-form-dialog";
 import { QualityIndexFormDialog } from "@/components/quality-index-form-dialog";
 import { addDoc } from "firebase/firestore";
-import { useToast } from "@/hooks/use-toast";
 
 export const dynamic = 'force-dynamic';
 
@@ -1310,6 +1309,58 @@ function LeaderTrackingContent({ employees, currentUserEmployee }: { employees: 
     fetchAllLeaderInteractions();
   }, [firestore, availableLeaders]);
 
+  // Buscar interações do diretor atual (para ações globais - apenas visualização)
+  const directorInteractionsCollection = useMemoFirebase(
+    () => (firestore && currentUserEmployee?.id ? collection(firestore, "employees", currentUserEmployee.id, "interactions") : null),
+    [firestore, currentUserEmployee?.id]
+  );
+
+  const { data: directorInteractions } = useCollection<Interaction>(directorInteractionsCollection);
+
+  // Verificar se é diretor/admin para mostrar o card
+  const isDirectorOrAdmin = currentUserEmployee?.isDirector || currentUserEmployee?.isAdmin || (user?.email && adminEmails.includes(user.email));
+
+  // Calcular status e anotações das ações globais do diretor (apenas para visualização)
+  const directorGlobalActionsStatus = useMemo(() => {
+    if (!directorInteractions) {
+      return {
+        'Análise do Índice de Qualidade': { completed: false, notes: '' },
+        'Análise do Índice de Risco': { completed: false, notes: '' },
+      };
+    }
+
+    const now = new Date();
+    
+    const qualityAnalysisInteraction = directorInteractions.find(
+      (interaction) =>
+        interaction.type === 'Análise do Índice de Qualidade' &&
+        isSameMonth(parseISO(interaction.date), now) &&
+        isSameYear(parseISO(interaction.date), now)
+    );
+    
+    const riskAnalysisInteraction = directorInteractions.find(
+      (interaction) =>
+        interaction.type === 'Análise do Índice de Risco' &&
+        isSameMonth(parseISO(interaction.date), now) &&
+        isSameYear(parseISO(interaction.date), now)
+    );
+
+    return {
+      'Análise do Índice de Qualidade': {
+        completed: !!qualityAnalysisInteraction,
+        notes: qualityAnalysisInteraction && typeof qualityAnalysisInteraction.notes === 'string' 
+          ? qualityAnalysisInteraction.notes 
+          : ''
+      },
+      'Análise do Índice de Risco': {
+        completed: !!riskAnalysisInteraction,
+        notes: riskAnalysisInteraction && typeof riskAnalysisInteraction.notes === 'string'
+          ? riskAnalysisInteraction.notes
+          : ''
+      },
+    };
+  }, [directorInteractions]);
+
   // Calcular tracked leaders (similar ao trackedEmployees)
   const trackedLeaders = useMemo((): TrackedEmployee[] => {
     if (!availableLeaders.length || !dateRange?.from || !dateRange?.to || !hasSearched) return [];
@@ -1491,6 +1542,45 @@ function LeaderTrackingContent({ employees, currentUserEmployee }: { employees: 
           </div>
         </CardContent>
       </Card>
+
+      {/* Card Ações Diretor - apenas para Diretores/Admins (visualização apenas) */}
+      {isDirectorOrAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Ações Diretor</CardTitle>
+            <CardDescription>
+              Acompanhe o status das análises mensais dos índices globais.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {(['Análise do Índice de Qualidade', 'Análise do Índice de Risco'] as const).map((actionType) => {
+                const actionStatus = directorGlobalActionsStatus[actionType];
+                const isCompleted = actionStatus.completed;
+                const notes = actionStatus.notes;
+                const status = isCompleted ? "Realizado 1/1" : "Realizado 0/1";
+                
+                return (
+                  <div key={actionType} className="p-4 border rounded-lg space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">{actionType}</span>
+                      <Badge variant={isCompleted ? "default" : "destructive"}>
+                        {status}
+                      </Badge>
+                    </div>
+                    {isCompleted && notes && notes.trim() && (
+                      <div className="pt-2 border-t">
+                        <p className="text-xs font-medium text-muted-foreground mb-1">Anotações:</p>
+                        <p className="text-sm text-foreground whitespace-pre-wrap">{notes}</p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

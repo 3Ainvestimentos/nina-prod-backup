@@ -91,9 +91,17 @@
   html {
     font-size: 75%;
     overflow-y: scroll;
+    /* Prevenir layout shift - reservar espaço para scrollbar sempre */
+    scrollbar-gutter: stable;
   }
   body {
     @apply bg-background text-foreground;
+    overflow-x: hidden;
+  }
+  
+  /* Prevenir layout shift quando seletores abrem */
+  body:has([data-radix-select-content][data-state="open"]) {
+    overflow-y: scroll;
   }
 
   .settings-menu {

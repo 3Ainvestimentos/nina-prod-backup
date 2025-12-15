@@ -2,12 +2,24 @@
  * @description This ruleset enforces a role-based access control model, with special considerations for employee data and related subcollections.
  * Nesta versão, as subcoleções de employees foram deixadas permissivas para qualquer usuário autenticado,
  * para facilitar testes de UI (selecionar usuário e registrar interação).
+ * 
+ * Qualquer usuário autenticado pode criar interações.
+ * Validações de permissão (isDirector, isAdmin) são feitas no frontend.
  */
 
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    /**
+     * /employees - Coleção de employees
+     * - Permite queries (list) na coleção para qualquer usuário autenticado
+     */
+    match /employees {
+      // Permitir listar a coleção employees (queries)
+      allow list: if isSignedIn();
+    }
+
     /**
      * /employees/{employeeId}
      * - leitura pública
@@ -27,6 +39,7 @@ service cloud.firestore {
       // SUBCOLEÇÕES PERMISSIVAS
       // ============================
       match /interactions/{interactionId} {
+        // Qualquer usuário autenticado pode ler e escrever interações
         allow read, write: if isSignedIn();
       }
 
@@ -97,4 +110,5 @@ service cloud.firestore {
   function isAdmin() {
     return isSignedIn() && request.auth.token.isAdmin == true;
   }
+
 }

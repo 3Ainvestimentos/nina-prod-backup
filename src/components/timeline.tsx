@@ -1,12 +1,16 @@
 
 
-import type { Interaction, OneOnOneNotes, N3IndividualNotes } from "@/lib/types";
+import type { Interaction, OneOnOneNotes, N3IndividualNotes, N2IndividualNotes, QualityIndexNotes } from "@/lib/types";
 import {
   MessageSquare,
   Users,
   Calendar,
   ShieldAlert,
   ChevronDown,
+  FileText,
+  Award,
+  BarChart3,
+  TrendingUp,
 } from "lucide-react";
 import { formatDate, cn } from "@/lib/utils";
 import { Skeleton } from "./ui/skeleton";
@@ -24,6 +28,10 @@ const interactionIcons: Record<Interaction["type"], React.ReactNode> = {
   "Feedback": <MessageSquare className="h-4 w-4" />,
   "N3 Individual": <Users className="h-4 w-4" />,
   "Índice de Risco": <ShieldAlert className="h-4 w-4" />,
+  "N2 Individual": <FileText className="h-4 w-4" />,
+  "Índice de Qualidade": <Award className="h-4 w-4" />,
+  "Análise do Índice de Qualidade": <BarChart3 className="h-4 w-4" />,
+  "Análise do Índice de Risco": <TrendingUp className="h-4 w-4" />,
 };
 
 const OneOnOneDetails = ({ notes }: { notes: OneOnOneNotes }) => (
@@ -109,6 +117,124 @@ const OneOnOneDetails = ({ notes }: { notes: OneOnOneNotes }) => (
   function isN3IndividualNotes(notes: any): notes is N3IndividualNotes {
     return notes && (typeof notes.captacao !== 'undefined' || typeof notes.esforcos !== 'undefined');
   }
+
+  function isN2IndividualNotes(notes: any): notes is N2IndividualNotes {
+    return notes && typeof notes.captacaoTIME !== 'undefined' && typeof notes.notaRanking !== 'undefined';
+  }
+
+  function isQualityIndexNotes(notes: any): notes is QualityIndexNotes {
+    return notes && typeof notes.performanceTime !== 'undefined' && typeof notes.qualityScore !== 'undefined';
+  }
+
+  const N2IndividualDetails = ({ notes }: { notes: N2IndividualNotes }) => (
+    <Accordion type="single" collapsible className="w-full">
+      <AccordionItem value="item-1">
+        <AccordionTrigger>Visualizar detalhes do N2 Individual</AccordionTrigger>
+        <AccordionContent>
+            <div className="space-y-4 text-sm text-foreground/90 p-2">
+                <div>
+                    <h4 className="font-semibold mb-2">Indicadores TIME</h4>
+                    <div className="flex flex-wrap gap-x-6 gap-y-2">
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">Captação TIME:</span>
+                            <span className="font-mono font-medium">{formatCurrency(notes.captacaoTIME)}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">Churn PF TIME:</span>
+                            <span className="font-mono font-medium">{formatPercentage(notes.churnPFTIME)}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">ROA TIME:</span>
+                            <span className="font-mono font-medium">{formatPercentage(notes.roaTIME)}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground">Nota Ranking:</span>
+                            <span className="font-mono font-medium">{Math.round(notes.notaRanking)} %</span>
+                        </div>
+                    </div>
+                </div>
+                <Separator />
+                {notes.planoAcao && <div><h4 className="font-semibold mb-1">Plano de Ação</h4><p className="whitespace-pre-wrap">{notes.planoAcao}</p></div>}
+                {notes.anotacoes && <div><h4 className="font-semibold mb-1">Anotações</h4><p className="whitespace-pre-wrap">{notes.anotacoes}</p></div>}
+            </div>
+        </AccordionContent>
+      </AccordionItem>
+    </Accordion>
+  );
+
+  const QualityIndexDetails = ({ notes }: { notes: QualityIndexNotes }) => {
+    const getFlagColor = (flag: "red" | "neutral" | "green") => {
+      if (flag === "red") return "text-destructive";
+      if (flag === "green") return "text-green-600";
+      return "text-muted-foreground";
+    };
+
+    const getFlagLabel = (flag: "red" | "neutral" | "green") => {
+      if (flag === "red") return "Red Flag";
+      if (flag === "green") return "Green Flag";
+      return "Neutro";
+    };
+
+    return (
+      <Accordion type="single" collapsible className="w-full">
+        <AccordionItem value="item-1">
+          <AccordionTrigger>Visualizar detalhes do Índice de Qualidade</AccordionTrigger>
+          <AccordionContent>
+              <div className="space-y-4 text-sm text-foreground/90 p-2">
+                  <div>
+                      <h4 className="font-semibold mb-2">Categorias Avaliadas</h4>
+                      <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                              <span className="text-xs text-muted-foreground">Performance TIME:</span>
+                              <span className={cn("font-medium", getFlagColor(notes.performanceTime))}>
+                                  {getFlagLabel(notes.performanceTime)}
+                              </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                              <span className="text-xs text-muted-foreground">Relacionamento TIME:</span>
+                              <span className={cn("font-medium", getFlagColor(notes.relacionamentoTime))}>
+                                  {getFlagLabel(notes.relacionamentoTime)}
+                              </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                              <span className="text-xs text-muted-foreground">Remuneração:</span>
+                              <span className={cn("font-medium", getFlagColor(notes.remuneracao))}>
+                                  {getFlagLabel(notes.remuneracao)}
+                              </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                              <span className="text-xs text-muted-foreground">Desenvolvimento Técnico:</span>
+                              <span className={cn("font-medium", getFlagColor(notes.desenvolvimentoTecnico))}>
+                                  {getFlagLabel(notes.desenvolvimentoTecnico)}
+                              </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                              <span className="text-xs text-muted-foreground">Processos de Gestão:</span>
+                              <span className={cn("font-medium", getFlagColor(notes.processosGestao))}>
+                                  {getFlagLabel(notes.processosGestao)}
+                              </span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                              <span className="text-xs text-muted-foreground">Aderência a Campanhas:</span>
+                              <span className={cn("font-medium", getFlagColor(notes.aderenciaCampanhas))}>
+                                  {getFlagLabel(notes.aderenciaCampanhas)}
+                              </span>
+                          </div>
+                      </div>
+                  </div>
+                  <Separator />
+                  <div className="flex items-center justify-between">
+                      <span className="font-semibold">Índice de Qualidade Total:</span>
+                      <span className={cn("font-bold text-lg", notes.qualityScore > 0 ? "text-green-600" : notes.qualityScore < 0 ? "text-destructive" : "text-muted-foreground")}>
+                          {notes.qualityScore}
+                      </span>
+                  </div>
+              </div>
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
+    );
+  };
   
   // Função para agrupar interações por mês
   function groupByMonth(interactions: Interaction[]) {
@@ -142,7 +268,7 @@ const OneOnOneDetails = ({ notes }: { notes: OneOnOneNotes }) => (
     <div className="relative flex items-start gap-4">
       <div className="flex h-6 w-6 items-center justify-center rounded-full bg-secondary z-10">
         <span className={cn("flex h-6 w-6 items-center justify-center rounded-full bg-muted text-foreground", item.type === 'Índice de Risco' && "text-destructive")}>
-            {item.type ? interactionIcons[item.type] : null}
+            {item.type && item.type in interactionIcons ? (interactionIcons[item.type] as React.ReactNode) : null}
         </span>
       </div>
       <div className="flex-1 pt-0.5">
@@ -163,22 +289,38 @@ const OneOnOneDetails = ({ notes }: { notes: OneOnOneNotes }) => (
               Pontuação: {item.riskScore}
             </div>
         )}
-        {item.type === 'Feedback' && typeof item.notes === 'object' && item.notes && 'indicator' in item.notes && item.notes.indicator && (
+        {item.type === 'Índice de Qualidade' && typeof item.qualityScore === 'number' && (
+            <div className={cn("text-xs font-bold mt-2", item.qualityScore > 0 ? "text-green-600" : item.qualityScore < 0 ? "text-destructive" : "text-muted-foreground")}>
+              Índice de Qualidade: {item.qualityScore}
+            </div>
+        )}
+        {item.type === 'Feedback' && typeof item.notes === 'object' && item.notes && 'indicator' in item.notes && (item.notes as { indicator: unknown }).indicator && (
             <div className="text-sm font-bold text-foreground mt-2">
-              Indicador: {item.notes.indicator}
+              Indicador: {String(item.notes.indicator)}
             </div>
         )}
         <div className="mt-2 text-sm">
             {typeof item.notes === 'string' && item.type === 'Feedback' ? (
                  <p className="whitespace-pre-wrap">{item.notes}</p>
             ) : typeof item.notes === 'object' && item.type === 'Feedback' && item.notes && 'content' in item.notes ? (
-                 <p className="whitespace-pre-wrap">{item.notes.content}</p>
+                 <p className="whitespace-pre-wrap">{String((item.notes as { content: unknown }).content)}</p>
             ) : typeof item.notes === 'string' && item.type === 'Índice de Risco' ? (
                 <RiskAssessmentDetails notes={item.notes} />
+            ) : typeof item.notes === 'string' && (item.type === 'Análise do Índice de Qualidade' || item.type === 'Análise do Índice de Risco') ? (
+                item.notes.trim() ? (
+                    <div className="space-y-2">
+                        <p className="font-medium text-sm">Anotações:</p>
+                        <p className="whitespace-pre-wrap text-muted-foreground">{item.notes}</p>
+                    </div>
+                ) : null
             ) : item.type === '1:1' && item.notes ? (
                 <OneOnOneDetails notes={item.notes as OneOnOneNotes} />
             ) : item.type === 'N3 Individual' && isN3IndividualNotes(item.notes) ? (
                 <N3IndividualDetails notes={item.notes as N3IndividualNotes} />
+            ) : item.type === 'N2 Individual' && isN2IndividualNotes(item.notes) ? (
+                <N2IndividualDetails notes={item.notes as N2IndividualNotes} />
+            ) : item.type === 'Índice de Qualidade' && isQualityIndexNotes(item.notes) ? (
+                <QualityIndexDetails notes={item.notes as QualityIndexNotes} />
             ) : null}
         </div>
       </div>
@@ -210,11 +352,11 @@ export function Timeline({ interactions, isLoading }: { interactions: Interactio
   const monthGroups = groupByMonth(interactions);
   
   // Determinar o mês mais recente (primeiro grupo) para expandir por padrão
-  const defaultOpenMonth = monthGroups.length > 0 ? [monthGroups[0].key] : [];
+  const defaultOpenMonth = monthGroups.length > 0 ? monthGroups[0].key : undefined;
   
   return (
     <div className="space-y-4">
-      <Accordion type="multiple" defaultValue={defaultOpenMonth} className="w-full space-y-4">
+      <Accordion type="single" collapsible defaultValue={defaultOpenMonth} className="w-full space-y-4">
         {monthGroups.map((group) => (
           <AccordionItem key={group.key} value={group.key} className="border rounded-lg">
             <Card>

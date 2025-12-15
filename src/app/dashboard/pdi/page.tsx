@@ -28,7 +28,7 @@ import { collection } from "firebase/firestore";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DiagnosisFormDialog } from "@/components/diagnosis-form-dialog";
 
-const adminEmails = ['matheus@3ainvestimentos.com.br', 'lucas.nogueira@3ainvestimentos.com.br'];
+const adminEmails = ['matheus@3ainvestimentos.com.br', 'lucas.nogueira@3ainvestimentos.com.br', 'henrique.peixoto@3ainvestimentos.com.br'];
 
 export default function PdiPage() {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
@@ -51,7 +51,8 @@ export default function PdiPage() {
   
   const currentUserEmployee = useMemo(() => {
     if (!user || !employees) return null;
-    
+
+    // Verificar se o email está na lista de admins hardcoded (apenas para isAdmin)
     if (user.email && adminEmails.includes(user.email)) {
         const employeeData = employees.find(e => e.email === user.email) || {};
         return {
@@ -59,24 +60,15 @@ export default function PdiPage() {
             name: user.displayName || 'Admin',
             email: user.email,
             isAdmin: true,
-            isDirector: true,
+            // isDirector vem do documento do Firestore, não hardcoded
             role: 'Líder',
         } as Employee;
     }
 
     const employeeData = employees.find(e => e.email === user.email);
-
     if (!employeeData) return null;
 
-    // Enhance permissions for other admins
-    if (employeeData.isAdmin) {
-      return {
-        ...employeeData,
-        role: 'Líder',
-        isDirector: true,
-      };
-    }
-    
+    // isDirector deve vir apenas do documento do Firestore
     return employeeData;
   }, [user, employees]);
 

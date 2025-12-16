@@ -102,8 +102,9 @@ export function DiagnosisFormDialog({
 
     const docRef = doc(firestore, "employees", employee.id);
     const diagnosisData: Diagnosis = {
-        ...data,
+        status: data.status,
         date: new Date().toISOString(),
+        details: data.details || "",
     };
 
     try {

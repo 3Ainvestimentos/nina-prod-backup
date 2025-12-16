@@ -294,11 +294,14 @@ const OneOnOneDetails = ({ notes }: { notes: OneOnOneNotes }) => (
               Índice de Qualidade: {item.qualityScore}
             </div>
         )}
-        {item.type === 'Feedback' && typeof item.notes === 'object' && item.notes && 'indicator' in item.notes && (item.notes as { indicator: unknown }).indicator && (
+        {item.type === 'Feedback' && typeof item.notes === 'object' && item.notes && 'indicator' in item.notes && (() => {
+          const indicator = (item.notes as { indicator: unknown }).indicator;
+          return indicator ? (
             <div className="text-sm font-bold text-foreground mt-2">
-              Indicador: {String(item.notes.indicator)}
+              Indicador: {String(indicator)}
             </div>
-        )}
+          ) : null;
+        })()}
         <div className="mt-2 text-sm">
             {typeof item.notes === 'string' && item.type === 'Feedback' ? (
                  <p className="whitespace-pre-wrap">{item.notes}</p>

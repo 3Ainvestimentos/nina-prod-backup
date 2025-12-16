@@ -146,7 +146,7 @@ export function ProjectFormDialog({
     });
 
     if (selectedMembers.length !== data.memberIds.length) {
-      logValidationError('memberIds', data.memberIds.length, selectedMembers.length);
+      logValidationError('memberIds', String(data.memberIds.length), String(selectedMembers.length));
       toast({
         variant: "destructive",
         title: ProjectErrors.VALIDATION_MEMBER_NOT_FOUND.title,

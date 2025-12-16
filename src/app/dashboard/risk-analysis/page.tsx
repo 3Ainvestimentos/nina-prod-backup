@@ -52,15 +52,15 @@ export default function RiskAnalysisPage() {
         </TabsList>
         <TabsContent value="assessores">
           <RiskAnalysisContent 
-            employees={employees} 
-            currentUserEmployee={currentUserEmployee}
+            employees={employees ?? undefined} 
+            currentUserEmployee={currentUserEmployee ?? undefined}
             areEmployeesLoading={areEmployeesLoading}
           />
         </TabsContent>
         <TabsContent value="lideres">
           <QualityAnalysisContent 
-            employees={employees}
-            currentUserEmployee={currentUserEmployee}
+            employees={employees ?? undefined}
+            currentUserEmployee={currentUserEmployee ?? undefined}
             areEmployeesLoading={areEmployeesLoading}
           />
         </TabsContent>
@@ -71,8 +71,8 @@ export default function RiskAnalysisPage() {
   // Se for líder, mostra apenas o conteúdo de risco (assessores)
   return (
     <RiskAnalysisContent 
-      employees={employees} 
-      currentUserEmployee={currentUserEmployee}
+      employees={employees ?? undefined} 
+      currentUserEmployee={currentUserEmployee ?? undefined}
       areEmployeesLoading={areEmployeesLoading}
     />
   );

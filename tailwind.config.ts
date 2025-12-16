@@ -16,7 +16,7 @@ export default {
         headline: ['Roboto', 'sans-serif'],
         code: ['monospace'],
       },
-      typography: (theme) => ({
+      typography: (theme: any) => ({
         DEFAULT: {
           css: {
             h1: {

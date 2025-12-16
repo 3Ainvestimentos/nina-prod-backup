@@ -130,7 +130,7 @@ async function generatePDF(firestore: Firestore, selectedEmployeeIds: string[], 
         body: interactions.map(i => [
             new Date(i.date).toLocaleDateString('pt-BR'), 
             i.type, 
-            i.notes,
+            typeof i.notes === 'string' ? i.notes : JSON.stringify(i.notes),
             i.riskScore ?? 'N/A'
         ]),
         startY: 40,

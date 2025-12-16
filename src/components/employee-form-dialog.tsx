@@ -136,6 +136,7 @@ export function EmployeeFormDialog({
 
     const dataToSave: Partial<Employee> = {
         ...data,
+        role: data.role as Role | undefined,
         leaderId: isNoLeader ? "" : selectedLeader?.id || "",
         leader: isNoLeader ? "" : selectedLeader?.name || "",
         leaderEmail: isNoLeader ? "" : selectedLeader?.email || ""

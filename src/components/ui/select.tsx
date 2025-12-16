@@ -149,7 +149,8 @@ const SelectContent = React.forwardRef<
 
   // Combinar refs - usar função inline para evitar problemas com readonly
   const handleRef = React.useCallback((node: HTMLDivElement | null) => {
-    contentRef.current = node;
+    // Usar type assertion para evitar erro de readonly
+    (contentRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
     if (typeof ref === 'function') {
       ref(node);
     }

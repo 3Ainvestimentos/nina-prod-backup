@@ -48,7 +48,7 @@
     "jspdf": "^2.5.1",
     "jspdf-autotable": "^3.8.2",
     "lucide-react": "^0.475.0",
-    "next": "15.3.6",
+    "next": "15.5.9",
     "patch-package": "^8.0.0",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
@@ -61,7 +61,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
-    "@tailwindcss/typography": "^0.5.13",
+    "@tailwindcss/typography": "^0.5.19",
     "@types/cors": "^2.8.17",
     "@types/dotenv": "^6.1.1",
     "@types/jspdf": "^2.0.0",
@@ -72,6 +72,6 @@
     "postcss": "^8",
     "raw-loader": "^4.0.2",
     "tailwindcss": "^3.4.1",
-    "typescript": "^5"
+    "typescript": "5.9.3"
   }
 }

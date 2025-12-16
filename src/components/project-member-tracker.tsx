@@ -56,7 +56,9 @@ export function ProjectMemberTracker({
         id: interaction.id,
         type: "Feedback" as const,
         date: interaction.date,
-        notes: interaction.notes, // Passa o objeto completo com content e indicator
+        notes: typeof interaction.notes === 'object' && interaction.notes !== null && 'content' in interaction.notes
+          ? (interaction.notes as { content: string }).content
+          : JSON.stringify(interaction.notes),
         authorId: interaction.authorId,
       }))
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());

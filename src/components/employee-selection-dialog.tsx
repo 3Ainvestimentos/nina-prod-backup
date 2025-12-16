@@ -59,10 +59,10 @@ export function EmployeeSelectionDialog({
   
   const { uniqueNames, uniqueAreas, uniquePositions, uniqueLeaders } = useMemo(() => {
     if (!allEmployees) return { uniqueNames: [], uniqueAreas: [], uniquePositions: [], uniqueLeaders: [] };
-    const names = [...new Set(allEmployees.map(e => e.name).filter(Boolean))].sort();
-    const areas = [...new Set(allEmployees.map(e => e.area).filter(Boolean))].sort();
-    const positions = [...new Set(allEmployees.map(e => e.position).filter(Boolean))].sort();
-    const leaders = [...new Set(allEmployees.map(e => e.leader).filter(Boolean))].sort();
+    const names = [...new Set(allEmployees.map(e => e.name).filter((n): n is string => Boolean(n)))].sort();
+    const areas = [...new Set(allEmployees.map(e => e.area).filter((a): a is string => Boolean(a)))].sort();
+    const positions = [...new Set(allEmployees.map(e => e.position).filter((p): p is string => Boolean(p)))].sort();
+    const leaders = [...new Set(allEmployees.map(e => e.leader).filter((l): l is string => Boolean(l)))].sort();
     return { uniqueNames: names, uniqueAreas: areas, uniquePositions: positions, uniqueLeaders: leaders };
   }, [allEmployees]);
 

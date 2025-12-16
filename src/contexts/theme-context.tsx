@@ -55,8 +55,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const toggleTheme = useCallback(() => {
-    setTheme((prev) => (prev === "light" ? "dark" : "light"));
-  }, [setTheme]);
+    setThemeState((prev) => (prev === "light" ? "dark" : "light"));
+  }, []);
 
   useIsomorphicLayoutEffect(() => {
     applyTheme(theme);

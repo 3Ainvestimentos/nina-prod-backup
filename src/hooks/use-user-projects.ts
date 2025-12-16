@@ -109,7 +109,7 @@ export function useUserProjects(projects: Project[] | null, currentUser: Employe
  */
 export function canUserCreateProjects(user: Employee | null): boolean {
   if (!user) return false;
-  return user.role === 'Líder' || user.isDirector || user.isAdmin;
+  return user.role === 'Líder' || Boolean(user.isDirector) || Boolean(user.isAdmin);
 }
 
 /**

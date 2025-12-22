@@ -163,7 +163,10 @@ export const googleAuthCallback = functions
                     window.close();
                   } catch(e) {
                     // Se não conseguir fechar (alguns navegadores bloqueiam), mostra mensagem
-                    document.body.innerHTML = '<p>Você pode fechar esta janela agora.</p>';
+                    // CORRIGIDO: Usa textContent ao invés de innerHTML para evitar XSS
+                    const message = document.createElement('p');
+                    message.textContent = 'Você pode fechar esta janela agora.';
+                    document.body.appendChild(message);
                   }
                 }, 500);
                 

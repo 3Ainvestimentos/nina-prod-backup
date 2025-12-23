@@ -6,6 +6,7 @@ import { createCalendarEvent } from "./calendar-events";
 import { googleAuthInit, googleAuthCallback, getOAuth2Client } from "./google-auth";
 import { migrateGoogleAuthTokens } from "./migrations";
 import { setupFirstAdmin } from "./setup-admin";
+import { listAdminClaims } from "./list-admin-claims";
 import { formatN3EmailBody, sendEmail } from "./gmail-service";
 
 // Região única do projeto
@@ -211,4 +212,4 @@ export const onPdiWrite = functions
   });
 
 // Reexporta as HTTPs
-export { setupFirstAdmin, googleAuthInit, googleAuthCallback, migrateGoogleAuthTokens };
+export { setupFirstAdmin, googleAuthInit, googleAuthCallback, migrateGoogleAuthTokens, listAdminClaims };

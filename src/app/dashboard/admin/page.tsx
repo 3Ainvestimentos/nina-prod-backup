@@ -107,6 +107,7 @@ export default function AdminPage() {
   const [loadingReports, setLoadingReports] = useState(true);
   const [newAdminId, setNewAdminId] = useState<string>("");
   const [invalidEmployees, setInvalidEmployees] = useState<Employee[]>([]);
+  const [hasAdminClaim, setHasAdminClaim] = useState(false);
   
   // Estados para Projetos
   const [isProjectFormOpen, setIsProjectFormOpen] = useState(false);
@@ -142,6 +143,26 @@ export default function AdminPage() {
   
   const { data: projects, isLoading: areProjectsLoading } = useCollection<Project>(projectsCollection);
 
+  // Carregar Custom Claim isAdmin na montagem
+  useEffect(() => {
+    let mounted = true;
+    const loadClaim = async () => {
+      if (!user) {
+        setHasAdminClaim(false);
+        return;
+      }
+      try {
+        const idTokenResult = await user.getIdTokenResult(true); // força refresh
+        if (mounted) setHasAdminClaim(idTokenResult.claims.isAdmin === true);
+      } catch (e) {
+        console.error('Erro ao verificar custom claim isAdmin:', e);
+        if (mounted) setHasAdminClaim(false);
+      }
+    };
+    loadClaim();
+    return () => { mounted = false; };
+  }, [user]);
+
   const checkCustomClaim = async()=>{
     if (!user) {
       console.log ('User not logged in');
@@ -160,6 +181,35 @@ export default function AdminPage() {
       });
     } catch (error) {
       console.error('Erro ao verificar claim:', error);
+    }
+  };
+
+  const checkAdminClaims = async () => {
+    if (!firebaseApp) {
+      toast({ variant: "destructive", title: "Erro", description: "Firebase não inicializado." });
+      return;
+    }
+
+    try {
+      const functions = getFunctions(firebaseApp, 'us-central1');
+      const listAdminClaims = httpsCallable(functions, 'listAdminClaims');
+      const result: any = await listAdminClaims({});
+
+      console.log('Usuários com Custom Claim isAdmin:', result.data);
+      const adminEmails = result.data.admins.map((a: any) => a.email).filter(Boolean).join(', ') || 'Nenhum';
+      
+      toast({
+        title: `Encontrados ${result.data.count} admin(s)`,
+        description: adminEmails,
+        duration: 10000,
+      });
+    } catch (error: any) {
+      console.error("Erro:", error);
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: error.message || "Erro ao verificar claims",
+      });
     }
   };
 
@@ -543,12 +593,29 @@ export default function AdminPage() {
   }
 
   const handlePermissionToggle = async (employeeId: string, field: 'isAdmin', value: boolean) => {
+    if (!hasAdminClaim) {
+      toast({
+        variant: 'destructive',
+        title: 'Permissão negada',
+        description: 'Apenas admins com Custom Claim podem alterar permissões de admin.'
+      });
+      return;
+    }
     if (!firestore) return;
     const docRef = doc(firestore, "employees", employeeId);
     try {
         await updateDoc(docRef, { [field]: value });
+        toast({
+          title: "Permissão atualizada",
+          description: `Admin ${value ? 'adicionado' : 'removido'} com sucesso.`,
+        });
     } catch (error) {
         console.error(error);
+        toast({
+          variant: "destructive",
+          title: "Erro ao alterar permissão",
+          description: "Operação não concluída."
+        });
     }
   }
 
@@ -612,7 +679,7 @@ export default function AdminPage() {
     setSetupLoading(prev => ({...prev, [email]: true}));
     
     try {
-        const functions = getFunctions(firebaseApp, 'southamerica-east1');
+        const functions = getFunctions(firebaseApp, 'us-central1');
         const setupFirstAdmin = httpsCallable(functions, 'setupFirstAdmin');
         
         const result: any = await setupFirstAdmin({ email: email });
@@ -1314,7 +1381,6 @@ export default function AdminPage() {
                                 if (newAdminId) {
                                     handlePermissionToggle(newAdminId, 'isAdmin', true);
                                     setNewAdminId("");
-                                    toast({ title: "Admin adicionado", description: "Permissão concedida com sucesso." });
                                 }
                             }}
                             disabled={!newAdminId}
@@ -1419,9 +1485,14 @@ export default function AdminPage() {
               )}
             
               <Card>
-                <Button onClick= {checkCustomClaim} variant="outline">
-                  Verificar Custom Claims
-                </Button>
+                <CardContent className="space-y-2 pt-6">
+                  <Button onClick={checkCustomClaim} variant="outline" className="w-full">
+                    Verificar Meu Custom Claim
+                  </Button>
+                  <Button onClick={checkAdminClaims} variant="outline" className="w-full">
+                    Listar Todos os Admins (Custom Claims)
+                  </Button>
+                </CardContent>
               </Card>
           </CardContent>
         </Card>

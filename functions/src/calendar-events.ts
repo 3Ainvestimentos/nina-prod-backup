@@ -2,6 +2,7 @@
 import * as functions from 'firebase-functions';
 import { admin, db } from "./admin-app";  
 import { google } from 'googleapis';
+import { decrypt, isEncrypted, removeEncryptionMark } from "./kms-utils";
 
 // --- Configuração do OAuth2 Client ---
 // Carregados na inicialização da função para evitar recriação a cada chamada
@@ -100,11 +101,23 @@ export async function createCalendarEvent(interactionData: InteractionData, empl
             return;
         }
         const author = authorQuery.docs[0].data() as EmployeeData | undefined;
-        const refreshToken = author?.googleAuth?.refreshToken;
+        let refreshToken = author?.googleAuth?.refreshToken;
 
         if (!refreshToken) {
             functions.logger.warn(`[Calendar] Autor ${authorEmail} não possui refresh token. É necessário autorizar o app.`);
             return;
+        }
+
+        // Descriptografar token se necessário (compatibilidade com tokens antigos e novos)
+        if (isEncrypted(refreshToken)) {
+            try {
+                functions.logger.log(`[Calendar] Token criptografado detectado, descriptografando...`);
+                refreshToken = await decrypt(removeEncryptionMark(refreshToken));
+                functions.logger.log(`[Calendar] Token descriptografado com sucesso`);
+            } catch (e) {
+                functions.logger.error(`[Calendar] Erro ao descriptografar token:`, e);
+                return; // Falha segura
+            }
         }
 
         functions.logger.log(`[Calendar] Autor encontrado: ${author?.name || authorEmail}. Iniciando autenticação com Google.`);

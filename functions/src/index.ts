@@ -8,6 +8,7 @@ import { migrateGoogleAuthTokens } from "./migrations";
 import { setupFirstAdmin } from "./setup-admin";
 import { listAdminClaims } from "./list-admin-claims";
 import { formatN3EmailBody, sendEmail } from "./gmail-service";
+import { decrypt, isEncrypted, removeEncryptionMark } from "./kms-utils";
 
 // Região única do projeto
 const REGION = process.env.FUNCTIONS_REGION || "us-central1";
@@ -100,8 +101,20 @@ export const onInteractionCreate = functions
           
           const leaderDoc = leaderQuery.docs[0];
           const leaderData = leaderDoc.data();
-          const refreshToken = leaderData?.googleAuth?.refreshToken;
+          let refreshToken = leaderData?.googleAuth?.refreshToken;
           const savedScope = leaderData?.googleAuth?.scope;
+          
+          // Descriptografar token se necessário (compatibilidade com tokens antigos e novos)
+          if (refreshToken && isEncrypted(refreshToken)) {
+            try {
+              functions.logger.log(`[EmailN3] Token criptografado detectado, descriptografando...`);
+              refreshToken = await decrypt(removeEncryptionMark(refreshToken));
+              functions.logger.log(`[EmailN3] Token descriptografado com sucesso`);
+            } catch (e) {
+              functions.logger.error(`[EmailN3] Erro ao descriptografar token:`, e);
+              return; // Falha segura
+            }
+          }
           
           // Verificar se o escopo está presente (pode ser string ou array)
           const scopeString = typeof savedScope === 'string' 

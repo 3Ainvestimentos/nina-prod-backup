@@ -1483,6 +1483,85 @@ export default function AdminPage() {
                   </CardContent>
                 </Card>
               )}
+
+              {superAdminEmails.includes(user?.email || '') && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Migração de Tokens OAuth</CardTitle>
+                    <CardDescription>
+                      Criptografar tokens OAuth existentes usando Cloud KMS
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <Alert>
+                      <ShieldCheck className="h-4 w-4" />
+                      <AlertTitle>Segurança de Dados</AlertTitle>
+                      <AlertDescription>
+                        Esta função criptografa todos os tokens OAuth (refreshToken) existentes no Firestore usando Cloud KMS.
+                        Tokens já criptografados serão automaticamente pulados.
+                      </AlertDescription>
+                    </Alert>
+                    <div className="space-y-3">
+                      <Button 
+                        onClick={async () => {
+                          if (!firebaseApp) return;
+                          setSetupLoading(prev => ({...prev, 'migrate-dry': true}));
+                          try {
+                            const functions = getFunctions(firebaseApp, 'us-central1');
+                            const migrateTokens = httpsCallable(functions, 'migrateTokensToEncrypted');
+                            const result: any = await migrateTokens({ dryRun: true });
+                            toast({
+                              title: "Simulação concluída",
+                              description: `Serão migrados: ${result.data.migrated}, Pulados: ${result.data.skipped}, Erros: ${result.data.errors}`,
+                              duration: 10000,
+                            });
+                          } catch (error: any) {
+                            toast({
+                              variant: "destructive",
+                              title: "Erro na simulação",
+                              description: error.message,
+                            });
+                          } finally {
+                            setSetupLoading(prev => ({...prev, 'migrate-dry': false}));
+                          }
+                        }}
+                        variant="outline"
+                        disabled={setupLoading['migrate-dry']}
+                      >
+                        {setupLoading['migrate-dry'] ? 'Simulando...' : 'Testar Migração (Dry Run)'}
+                      </Button>
+                      <Button 
+                        onClick={async () => {
+                          if (!firebaseApp) return;
+                          if (!confirm('Confirma a migração de todos os tokens OAuth? Esta ação não pode ser desfeita facilmente.')) return;
+                          setSetupLoading(prev => ({...prev, 'migrate-real': true}));
+                          try {
+                            const functions = getFunctions(firebaseApp, 'us-central1');
+                            const migrateTokens = httpsCallable(functions, 'migrateTokensToEncrypted');
+                            const result: any = await migrateTokens({ dryRun: false });
+                            toast({
+                              title: "Migração concluída!",
+                              description: `Migrados: ${result.data.migrated}, Pulados: ${result.data.skipped}, Erros: ${result.data.errors}`,
+                              duration: 10000,
+                            });
+                          } catch (error: any) {
+                            toast({
+                              variant: "destructive",
+                              title: "Erro na migração",
+                              description: error.message,
+                            });
+                          } finally {
+                            setSetupLoading(prev => ({...prev, 'migrate-real': false}));
+                          }
+                        }}
+                        disabled={setupLoading['migrate-real']}
+                      >
+                        {setupLoading['migrate-real'] ? 'Migrando...' : 'Executar Migração Real'}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             
               <Card>
                 <CardContent className="space-y-2 pt-6">

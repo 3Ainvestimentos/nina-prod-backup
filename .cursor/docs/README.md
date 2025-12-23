@@ -4,11 +4,15 @@
 
 ### Segurança de Dados
 
-- **[Fase 1: Criptografia de Tokens OAuth](./fase1-criptografia-tokens.md)**  
+- **[Fase 1: Resumo Executivo](./fase1-resumo-executivo.md)** ⭐  
+  Resumo visual e objetivo dos resultados da Fase 1 (recomendado para leitura rápida)
+  
+- **[Fase 1: Documentação Técnica Completa](./fase1-criptografia-tokens.md)**  
   Documentação completa da implementação de criptografia AES-256-GCM via Cloud KMS para proteção de tokens OAuth armazenados no Firestore.
   - Status: ✅ Concluído (23/12/2025)
   - Tokens migrados: 24
   - Taxa de sucesso: 100%
+  - Custo: ~$0.07/mês
 
 ### Planejamento
 

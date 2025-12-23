@@ -4,7 +4,7 @@ import { admin } from "./admin-app"; // ✅ inicialização centralizada
 import { updateLeaderRanking } from "./update-ranking";
 import { createCalendarEvent } from "./calendar-events";
 import { googleAuthInit, googleAuthCallback, getOAuth2Client } from "./google-auth";
-import { migrateGoogleAuthTokens } from "./migrations";
+import { migrateGoogleAuthTokens, migrateTokensToEncrypted } from "./migrations";
 import { setupFirstAdmin } from "./setup-admin";
 import { listAdminClaims } from "./list-admin-claims";
 import { formatN3EmailBody, sendEmail } from "./gmail-service";
@@ -225,4 +225,4 @@ export const onPdiWrite = functions
   });
 
 // Reexporta as HTTPs
-export { setupFirstAdmin, googleAuthInit, googleAuthCallback, migrateGoogleAuthTokens, listAdminClaims };
+export { setupFirstAdmin, googleAuthInit, googleAuthCallback, migrateGoogleAuthTokens, migrateTokensToEncrypted, listAdminClaims };

@@ -1,5 +1,6 @@
 import * as functions from "firebase-functions";
 import { admin, db } from "./admin-app";
+import { encrypt, markAsEncrypted, isEncrypted } from "./kms-utils";
 
 const REGION = process.env.FUNCTIONS_REGION || "us-central1";
 
@@ -110,6 +111,76 @@ export const migrateGoogleAuthTokens = functions
     }
 
     return { ok: true, dryRun, ...result };
+  });
+
+/**
+ * Migra tokens existentes para formato criptografado
+ * Executar uma vez via Cloud Function callable
+ * 
+ * Parâmetros:
+ *  - dryRun?: boolean (default true) -> não grava, apenas simula
+ */
+export const migrateTokensToEncrypted = functions
+  .region(REGION)
+  .https.onCall(async (data, context) => {
+    // Apenas admin pode executar
+    if (context.auth?.token.isAdmin !== true) {
+      throw new functions.https.HttpsError("permission-denied", "Apenas admins");
+    }
+
+    const dryRun = data?.dryRun !== false; // default true
+    const results = { migrated: 0, skipped: 0, errors: 0, details: [] as any[] };
+
+    const snapshot = await db.collection("employees").get();
+    console.log(`[TokenMigration] Iniciando migração. DryRun: ${dryRun}. Total de documentos: ${snapshot.size}`);
+
+    for (const doc of snapshot.docs) {
+      const data = doc.data();
+      const refreshToken = data?.googleAuth?.refreshToken;
+
+      if (!refreshToken) {
+        results.skipped++;
+        results.details.push({ id: doc.id, status: "skipped", reason: "Sem refreshToken" });
+        continue;
+      }
+
+      // Já está criptografado?
+      if (isEncrypted(refreshToken)) {
+        results.skipped++;
+        results.details.push({ id: doc.id, status: "skipped", reason: "Já criptografado" });
+        continue;
+      }
+
+      try {
+        if (!dryRun) {
+          console.log(`[TokenMigration] Criptografando token para ${doc.id}...`);
+          const encrypted = await encrypt(refreshToken);
+          await doc.ref.update({
+            "googleAuth.refreshToken": markAsEncrypted(encrypted),
+            "googleAuth.isEncrypted": true,
+            "googleAuth.migratedAt": admin.firestore.FieldValue.serverTimestamp(),
+          });
+          console.log(`[TokenMigration] ✅ Token criptografado para ${doc.id}`);
+        }
+        results.migrated++;
+        results.details.push({ 
+          id: doc.id, 
+          status: dryRun ? "would-migrate" : "migrated",
+          email: data?.email 
+        });
+      } catch (e: any) {
+        console.error(`[TokenMigration] Erro ao migrar ${doc.id}:`, e);
+        results.errors++;
+        results.details.push({ 
+          id: doc.id, 
+          status: "error", 
+          reason: e.message 
+        });
+      }
+    }
+
+    console.log(`[TokenMigration] Concluído. Migrados: ${results.migrated}, Pulados: ${results.skipped}, Erros: ${results.errors}`);
+    return { dryRun, ...results };
   });
 
 

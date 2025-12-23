@@ -2,6 +2,7 @@ import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 import { google } from "googleapis";
 import cors from "cors"; // ✅ default import
+import { encrypt, markAsEncrypted } from "./kms-utils";
 
 const REGION = process.env.FUNCTIONS_REGION || "us-central1";
 
@@ -223,18 +224,24 @@ export const googleAuthCallback = functions
           return;
         }
 
-        // Define o payload a ser salvo
+        // Criptografar o refreshToken antes de salvar
+        console.log("[GoogleAuthCallback] Criptografando refresh_token...");
+        const encryptedToken = await encrypt(refreshToken);
+        console.log("[GoogleAuthCallback] Token criptografado com sucesso");
+
+        // Define o payload a ser salvo (com token criptografado)
         const payload = {
           googleAuth: {
-            refreshToken,
+            refreshToken: markAsEncrypted(encryptedToken),
             scope: tokens.scope,
             tokenType: tokens.token_type,
             expiryDate: tokens.expiry_date,
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            isEncrypted: true, // flag para identificar tokens criptografados
           },
         } as const;
 
-        console.log("[GoogleAuthCallback] Salvando refresh_token no Firestore...");
+        console.log("[GoogleAuthCallback] Salvando refresh_token criptografado no Firestore...");
 
         // Tenta identificar o funcionário pelo e-mail do Google (mais estável que UID)
         let updatedAnyDoc = false;

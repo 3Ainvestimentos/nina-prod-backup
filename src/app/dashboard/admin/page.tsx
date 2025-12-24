@@ -105,6 +105,8 @@ export default function AdminPage() {
   const [isExporting, setIsExporting] = useState(false);
   const [setupLoading, setSetupLoading] = useState<{[key: string]: boolean}>({});
   const [loadingReports, setLoadingReports] = useState(true);
+  const [backups, setBackups] = useState<any[]>([]);
+  const [lastBackup, setLastBackup] = useState<any>(null);
   const [newAdminId, setNewAdminId] = useState<string>("");
   const [invalidEmployees, setInvalidEmployees] = useState<Employee[]>([]);
   const [hasAdminClaim, setHasAdminClaim] = useState(false);
@@ -1577,6 +1579,211 @@ export default function AdminPage() {
         </Card>
       </TabsContent>
       <TabsContent value="backup">
+        {/* Card de Backups do Firestore */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Backups do Firestore</CardTitle>
+            <CardDescription>
+              Gerencie backups manuais e visualize todos os backups disponíveis (automáticos e manuais)
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Botões de Ação */}
+            <div className="flex gap-2 flex-wrap">
+              <Button 
+                onClick={async () => {
+                  if (!firebaseApp) return;
+                  setSetupLoading(prev => ({...prev, 'backup-manual': true}));
+                  try {
+                    const functions = getFunctions(firebaseApp, 'us-central1');
+                    const triggerBackup = httpsCallable(functions, 'triggerManualBackup');
+                    const result: any = await triggerBackup({});
+                    toast({
+                      title: "Backup manual agendado",
+                      description: result.data.message || "Backup criado com sucesso",
+                      duration: 10000,
+                    });
+                    // Atualizar lista após criar backup
+                    setTimeout(() => {
+                      const listBackups = httpsCallable(functions, 'listAllBackups');
+                      listBackups({}).then((res: any) => {
+                        if (res.data.success) {
+                          setBackups(res.data.backups || []);
+                          if (res.data.backups && res.data.backups.length > 0) {
+                            setLastBackup(res.data.backups[0]);
+                          }
+                        }
+                      }).catch(() => {});
+                    }, 2000);
+                  } catch (error: any) {
+                    toast({
+                      variant: "destructive",
+                      title: "Erro ao criar backup",
+                      description: error.message,
+                    });
+                  } finally {
+                    setSetupLoading(prev => ({...prev, 'backup-manual': false}));
+                  }
+                }}
+                disabled={setupLoading['backup-manual']}
+              >
+                {setupLoading['backup-manual'] ? 'Criando...' : 'Criar Backup Manual'}
+              </Button>
+              <Button 
+                onClick={async () => {
+                  if (!firebaseApp) return;
+                  setSetupLoading(prev => ({...prev, 'backup-list': true}));
+                  try {
+                    const functions = getFunctions(firebaseApp, 'us-central1');
+                    const listBackups = httpsCallable(functions, 'listAllBackups');
+                    const result: any = await listBackups({});
+                    if (result.data.success) {
+                      setBackups(result.data.backups || []);
+                      if (result.data.backups && result.data.backups.length > 0) {
+                        setLastBackup(result.data.backups[0]);
+                      }
+                      toast({
+                        title: "Lista atualizada",
+                        description: `Encontrados ${result.data.total || 0} backups (${result.data.autoCount || 0} automáticos, ${result.data.manualCount || 0} manuais)`,
+                      });
+                    } else {
+                      toast({
+                        title: "Aviso",
+                        description: result.data.message || "Use o comando gcloud para listar backups",
+                        variant: "default",
+                      });
+                    }
+                  } catch (error: any) {
+                    toast({
+                      variant: "destructive",
+                      title: "Erro ao listar backups",
+                      description: error.message,
+                    });
+                  } finally {
+                    setSetupLoading(prev => ({...prev, 'backup-list': false}));
+                  }
+                }}
+                variant="outline"
+                disabled={setupLoading['backup-list']}
+              >
+                {setupLoading['backup-list'] ? 'Carregando...' : 'Atualizar Lista'}
+              </Button>
+              <Button 
+                onClick={async () => {
+                  if (!firebaseApp) return;
+                  setSetupLoading(prev => ({...prev, 'backup-test': true}));
+                  try {
+                    const functions = getFunctions(firebaseApp, 'us-central1');
+                    const testRestore = httpsCallable(functions, 'testRestore');
+                    const result: any = await testRestore({});
+                    toast({
+                      title: result.data.valid ? "Backup válido" : "Backup inválido",
+                      description: result.data.message || `Backup: ${result.data.backupName}`,
+                      duration: 10000,
+                    });
+                  } catch (error: any) {
+                    toast({
+                      variant: "destructive",
+                      title: "Erro ao testar backup",
+                      description: error.message,
+                    });
+                  } finally {
+                    setSetupLoading(prev => ({...prev, 'backup-test': false}));
+                  }
+                }}
+                variant="secondary"
+                disabled={setupLoading['backup-test']}
+              >
+                {setupLoading['backup-test'] ? 'Testando...' : 'Testar Restauração'}
+              </Button>
+            </div>
+
+            {/* Status do Último Backup */}
+            {lastBackup && (
+              <Alert>
+                <AlertDescription>
+                  <strong>Último backup:</strong> {lastBackup.name}
+                  <br />
+                  <strong>Tamanho:</strong> {lastBackup.size} | <strong>Criado em:</strong> {new Date(lastBackup.createTime).toLocaleString('pt-BR')}
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {/* Lista de Backups */}
+            <div className="space-y-2">
+              <h3 className="font-semibold">Backups Disponíveis</h3>
+              {backups.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nenhum backup encontrado. Clique em "Atualizar Lista" para carregar.</p>
+              ) : (
+                <div className="space-y-2 max-h-96 overflow-y-auto">
+                  {backups.map((backup) => (
+                    <div key={backup.name} className="p-3 border rounded-lg">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-medium">{backup.name}</span>
+                            <Badge variant={backup.type === 'auto' ? 'default' : 'secondary'}>
+                              {backup.type === 'auto' ? 'Automático' : 'Manual'}
+                            </Badge>
+                          </div>
+                          <div className="text-sm text-muted-foreground space-y-1">
+                            <div><strong>Criado:</strong> {new Date(backup.createTime).toLocaleString('pt-BR')}</div>
+                            <div><strong>Tamanho:</strong> {backup.size}</div>
+                            {backup.expireTime && (
+                              <div><strong>Expira em:</strong> {new Date(backup.expireTime).toLocaleString('pt-BR')}</div>
+                            )}
+                            {!backup.expireTime && backup.type === 'manual' && (
+                              <div className="text-muted-foreground italic">Não expira automaticamente</div>
+                            )}
+                          </div>
+                        </div>
+                        {backup.type === 'manual' && (
+                          <Button 
+                            size="sm" 
+                            variant="ghost"
+                            onClick={async () => {
+                              if (!confirm(`Confirma a exclusão do backup ${backup.name}?`)) return;
+                              if (!firebaseApp) return;
+                              setSetupLoading(prev => ({...prev, [`delete-${backup.name}`]: true}));
+                              try {
+                                const functions = getFunctions(firebaseApp, 'us-central1');
+                                const deleteBackup = httpsCallable(functions, 'deleteBackup');
+                                await deleteBackup({ backupName: backup.name });
+                                toast({
+                                  title: "Backup deletado",
+                                  description: `Backup ${backup.name} foi deletado com sucesso`,
+                                });
+                                // Atualizar lista
+                                const listBackups = httpsCallable(functions, 'listAllBackups');
+                                const result: any = await listBackups({});
+                                if (result.data.success) {
+                                  setBackups(result.data.backups || []);
+                                }
+                              } catch (error: any) {
+                                toast({
+                                  variant: "destructive",
+                                  title: "Erro ao deletar backup",
+                                  description: error.message,
+                                });
+                              } finally {
+                                setSetupLoading(prev => ({...prev, [`delete-${backup.name}`]: false}));
+                              }
+                            }}
+                            disabled={setupLoading[`delete-${backup.name}`]}
+                          >
+                            {setupLoading[`delete-${backup.name}`] ? 'Deletando...' : 'Deletar'}
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Card existente de Backup e Importação */}
         <Card>
             <CardHeader>
                 <CardTitle>Backup e Importação</CardTitle>

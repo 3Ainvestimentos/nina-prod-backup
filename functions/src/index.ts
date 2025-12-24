@@ -226,3 +226,4 @@ export const onPdiWrite = functions
 
 // Reexporta as HTTPs
 export { setupFirstAdmin, googleAuthInit, googleAuthCallback, migrateGoogleAuthTokens, migrateTokensToEncrypted, listAdminClaims };
+export { triggerManualBackup, listAllBackups, testRestore, deleteBackup } from "./backup-manager";

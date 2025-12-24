@@ -11,6 +11,7 @@ function getStorage() {
   return new Storage();
 }
 
+
 interface BackupInfo {
   name: string;
   type: "auto" | "manual";
@@ -37,25 +38,57 @@ export const triggerManualBackup = functions
     try {
       functions.logger.log(`[BackupManager] Iniciando backup manual: ${backupName}`);
 
-      // Usar Admin SDK para exportar Firestore
-      // Nota: Firestore Admin SDK não tem método direto de export
-      // Vamos usar a API REST do Firestore via gcloud ou retornar instruções
+      // Obter access token do metadata server (disponível automaticamente nas Cloud Functions)
+      const tokenResponse = await fetch(
+        "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token?scopes=https://www.googleapis.com/auth/cloud-platform",
+        {
+          headers: {
+            "Metadata-Flavor": "Google",
+          },
+        }
+      );
+
+      if (!tokenResponse.ok) {
+        throw new Error(`Erro ao obter token: ${tokenResponse.status}`);
+      }
+
+      const tokenData = await tokenResponse.json();
+      const accessToken = tokenData.access_token;
+
+      // Criar backup via API REST do Firestore
+      const exportUrl = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default):exportDocuments`;
       
-      // Por enquanto, retornamos as instruções e o nome do backup
-      // O backup real será feito via gcloud CLI ou API REST
-      
-      functions.logger.log(`[BackupManager] Backup manual agendado: ${backupName}`);
+      functions.logger.log(`[BackupManager] Chamando API REST do Firestore`);
+      functions.logger.log(`[BackupManager] Output URI: ${outputUri}`);
+
+      const response = await fetch(exportUrl, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          outputUriPrefix: outputUri,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        functions.logger.error(`[BackupManager] Erro na API REST: ${response.status} - ${errorText}`);
+        throw new Error(`Erro ao criar backup: ${response.status} - ${errorText}`);
+      }
+
+      const result = await response.json();
+      functions.logger.log(`[BackupManager] Backup iniciado com sucesso:`, result);
 
       return {
         success: true,
         backupName,
         outputUri,
         timestamp: new Date().toISOString(),
-        message: "Backup manual agendado. Use o comando gcloud para executar.",
-        instructions: [
-          "Para executar o backup, use:",
-          `gcloud firestore export ${outputUri} --database="(default)"`,
-        ],
+        message: "Backup manual criado com sucesso! O backup está sendo processado em segundo plano.",
+        operationName: result.name, // Nome da operação para acompanhar status
+        note: "O backup pode levar alguns minutos. Use 'Atualizar Lista' para verificar quando estiver pronto.",
       };
     } catch (error: any) {
       functions.logger.error("[BackupManager] Erro ao criar backup manual:", error);

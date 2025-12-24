@@ -23,6 +23,7 @@ interface BackupInfo {
 
 /**
  * Cria um backup manual do Firestore
+ * NOTA: Requer permissão "Cloud Datastore Import Export Admin" no service account
  */
 export const triggerManualBackup = functions
   .region(REGION)
@@ -35,65 +36,32 @@ export const triggerManualBackup = functions
     const backupName = `manual-${timestamp}`;
     const outputUri = `gs://${BUCKET_NAME}/${backupName}`;
 
-    try {
-      functions.logger.log(`[BackupManager] Iniciando backup manual: ${backupName}`);
-
-      // Obter access token do metadata server (disponível automaticamente nas Cloud Functions)
-      const tokenResponse = await fetch(
-        "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token?scopes=https://www.googleapis.com/auth/cloud-platform",
-        {
-          headers: {
-            "Metadata-Flavor": "Google",
-          },
-        }
-      );
-
-      if (!tokenResponse.ok) {
-        throw new Error(`Erro ao obter token: ${tokenResponse.status}`);
-      }
-
-      const tokenData = await tokenResponse.json();
-      const accessToken = tokenData.access_token;
-
-      // Criar backup via API REST do Firestore
-      const exportUrl = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default):exportDocuments`;
-      
-      functions.logger.log(`[BackupManager] Chamando API REST do Firestore`);
-      functions.logger.log(`[BackupManager] Output URI: ${outputUri}`);
-
-      const response = await fetch(exportUrl, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          outputUriPrefix: outputUri,
-        }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        functions.logger.error(`[BackupManager] Erro na API REST: ${response.status} - ${errorText}`);
-        throw new Error(`Erro ao criar backup: ${response.status} - ${errorText}`);
-      }
-
-      const result = await response.json();
-      functions.logger.log(`[BackupManager] Backup iniciado com sucesso:`, result);
-
-      return {
-        success: true,
-        backupName,
-        outputUri,
-        timestamp: new Date().toISOString(),
-        message: "Backup manual criado com sucesso! O backup está sendo processado em segundo plano.",
-        operationName: result.name, // Nome da operação para acompanhar status
-        note: "O backup pode levar alguns minutos. Use 'Atualizar Lista' para verificar quando estiver pronto.",
-      };
-    } catch (error: any) {
-      functions.logger.error("[BackupManager] Erro ao criar backup manual:", error);
-      throw new functions.https.HttpsError("internal", `Erro ao criar backup: ${error.message}`);
-    }
+    // Retornar instruções para o usuário executar localmente
+    // Isso evita problemas de permissão na Cloud Function
+    return {
+      success: false,
+      requiresManualExecution: true,
+      backupName,
+      outputUri,
+      timestamp: new Date().toISOString(),
+      message: "Para criar backups manuais, execute o comando abaixo no seu terminal local:",
+      command: `gcloud firestore export ${outputUri} --project=${PROJECT_ID}`,
+      instructions: [
+        "1. Abra o terminal no seu computador",
+        "2. Certifique-se de estar autenticado com: gcloud auth login",
+        "3. Copie e execute o comando acima",
+        "4. Aguarde a conclusão e clique em 'Atualizar Lista'",
+      ],
+      note: "Alternativamente, configure as permissões IAM para permitir backups automáticos.",
+      permissionInstructions: [
+        "Para habilitar backups automáticos via interface:",
+        "1. Acesse: https://console.cloud.google.com/iam-admin/iam?project=" + PROJECT_ID,
+        "2. Encontre: " + PROJECT_ID + "@appspot.gserviceaccount.com",
+        "3. Clique em Editar (ícone de lápis)",
+        "4. Adicione o papel: Cloud Datastore Import Export Admin",
+        "5. Salve e aguarde 2-3 minutos para as permissões propagarem",
+      ],
+    };
   });
 
 /**

@@ -6,7 +6,10 @@ const REGION = process.env.FUNCTIONS_REGION || "us-central1";
 const PROJECT_ID = process.env.GCLOUD_PROJECT || "studio-9152494730-25d31";
 const BUCKET_NAME = `${PROJECT_ID}-backups`;
 
-const storage = new Storage();
+// Lazy initialization do Storage para evitar timeout no deploy
+function getStorage() {
+  return new Storage();
+}
 
 interface BackupInfo {
   name: string;
@@ -80,6 +83,7 @@ export const listAllBackups = functions
       // Vamos usar a API REST ou retornar instruções
       
       // Por enquanto, vamos listar arquivos no bucket do Cloud Storage
+      const storage = getStorage();
       const bucket = storage.bucket(BUCKET_NAME);
       
       try {
@@ -162,6 +166,7 @@ export const testRestore = functions
     try {
       functions.logger.log(`[BackupManager] Validando backup: ${backupName || "mais recente"}`);
 
+      const storage = getStorage();
       const bucket = storage.bucket(BUCKET_NAME);
       
       // Se não especificou backup, pegar o mais recente
@@ -261,6 +266,7 @@ export const deleteBackup = functions
     try {
       functions.logger.log(`[BackupManager] Deletando backup: ${backupName}`);
 
+      const storage = getStorage();
       const bucket = storage.bucket(BUCKET_NAME);
       const file = bucket.file(backupName);
 

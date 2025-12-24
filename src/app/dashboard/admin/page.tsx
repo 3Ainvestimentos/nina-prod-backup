@@ -1582,53 +1582,33 @@ export default function AdminPage() {
         {/* Card de Backups do Firestore */}
         <Card className="mb-6">
           <CardHeader>
-            <CardTitle>Backups do Firestore</CardTitle>
+            <CardTitle>Backups Automáticos do Firestore</CardTitle>
             <CardDescription>
-              Gerencie backups manuais e visualize todos os backups disponíveis (automáticos e manuais)
+              Backups semanais automáticos (todo domingo às 3h AM). Visualize, teste e gerencie os backups disponíveis.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Info sobre backups automáticos */}
+            <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4 space-y-2">
+              <h4 className="font-semibold text-blue-900 dark:text-blue-100 flex items-center gap-2">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Backups Automáticos Configurados
+              </h4>
+              <p className="text-sm text-blue-800 dark:text-blue-200">
+                • <strong>Frequência:</strong> Toda semana, aos domingos às 3h AM (horário de Brasília)
+              </p>
+              <p className="text-sm text-blue-800 dark:text-blue-200">
+                • <strong>Retenção:</strong> 45 dias (backups mais antigos são deletados automaticamente)
+              </p>
+              <p className="text-sm text-blue-800 dark:text-blue-200">
+                • <strong>Localização:</strong> Google Cloud Storage (projeto protegido)
+              </p>
+            </div>
+
             {/* Botões de Ação */}
             <div className="flex gap-2 flex-wrap">
-              <Button 
-                onClick={async () => {
-                  if (!firebaseApp) return;
-                  setSetupLoading(prev => ({...prev, 'backup-manual': true}));
-                  try {
-                    const functions = getFunctions(firebaseApp, 'us-central1');
-                    const triggerBackup = httpsCallable(functions, 'triggerManualBackup');
-                    const result: any = await triggerBackup({});
-                    toast({
-                      title: "Backup manual agendado",
-                      description: result.data.message || "Backup criado com sucesso",
-                      duration: 10000,
-                    });
-                    // Atualizar lista após criar backup
-                    setTimeout(() => {
-                      const listBackups = httpsCallable(functions, 'listAllBackups');
-                      listBackups({}).then((res: any) => {
-                        if (res.data.success) {
-                          setBackups(res.data.backups || []);
-                          if (res.data.backups && res.data.backups.length > 0) {
-                            setLastBackup(res.data.backups[0]);
-                          }
-                        }
-                      }).catch(() => {});
-                    }, 2000);
-                  } catch (error: any) {
-                    toast({
-                      variant: "destructive",
-                      title: "Erro ao criar backup",
-                      description: error.message,
-                    });
-                  } finally {
-                    setSetupLoading(prev => ({...prev, 'backup-manual': false}));
-                  }
-                }}
-                disabled={setupLoading['backup-manual']}
-              >
-                {setupLoading['backup-manual'] ? 'Criando...' : 'Criar Backup Manual'}
-              </Button>
               <Button 
                 onClick={async () => {
                   if (!firebaseApp) return;

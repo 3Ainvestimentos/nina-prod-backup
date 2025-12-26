@@ -1,6 +1,5 @@
 // functions/src/data-integrity-checker.ts
 import * as functions from "firebase-functions";
-import { admin } from "./admin-app";
 
 const REGION = process.env.FUNCTIONS_REGION || "us-central1";
 
@@ -8,6 +7,11 @@ const REGION = process.env.FUNCTIONS_REGION || "us-central1";
 let db: FirebaseFirestore.Firestore | null = null;
 function getDb() {
   if (!db) {
+    // Importação lazy do admin
+    const admin = require("firebase-admin");
+    if (!admin.apps.length) {
+      admin.initializeApp();
+    }
     db = admin.firestore();
   }
   return db;

@@ -1,309 +1,128 @@
 // functions/src/backup-manager.ts
-import * as functions from "firebase-functions";
+import * as functions from "firebase-functions/v1";
 import { Storage } from "@google-cloud/storage";
 
 const REGION = process.env.FUNCTIONS_REGION || "us-central1";
 const PROJECT_ID = process.env.GCLOUD_PROJECT || "studio-9152494730-25d31";
 const BUCKET_NAME = `${PROJECT_ID}-backups`;
 
-// Lazy initialization do Storage para evitar timeout no deploy
-function getStorage() {
-  return new Storage();
+let storage: Storage;
+const getStorageClient = () => {
+  if (!storage) storage = new Storage();
+  return storage;
+};
+
+function formatBytes(bytes: number, decimals = 2) {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 }
 
-
-interface BackupInfo {
-  name: string;
-  type: "auto" | "manual";
-  createTime: string;
-  size: string;
-  expireTime: string | null;
-  outputUri?: string;
-}
-
-/**
- * Cria um backup manual do Firestore
- * NOTA: Requer permissão "Cloud Datastore Import Export Admin" no service account
- */
 export const triggerManualBackup = functions
   .region(REGION)
   .https.onCall(async (data, context) => {
-    if (context.auth?.token.isAdmin !== true) {
-      throw new functions.https.HttpsError("permission-denied", "Apenas admins podem criar backups");
+    if (!context.auth || context.auth.token.isAdmin !== true) {
+      throw new functions.https.HttpsError("permission-denied", "Apenas admins podem criar backups.");
     }
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-").replace("T", "-").slice(0, -5);
     const backupName = `manual-${timestamp}`;
     const outputUri = `gs://${BUCKET_NAME}/${backupName}`;
 
-    // Retornar instruções para o usuário executar localmente
-    // Isso evita problemas de permissão na Cloud Function
     return {
-      success: false,
-      requiresManualExecution: true,
-      backupName,
-      outputUri,
+      success: true,
+      message: "Para criar um backup manual, execute o comando gcloud CLI no seu terminal local.",
+      backupName: backupName,
+      outputUri: outputUri,
       timestamp: new Date().toISOString(),
-      message: "Para criar backups manuais, execute o comando abaixo no seu terminal local:",
-      command: `gcloud firestore export ${outputUri} --project=${PROJECT_ID}`,
       instructions: [
-        "1. Abra o terminal no seu computador",
-        "2. Certifique-se de estar autenticado com: gcloud auth login",
-        "3. Copie e execute o comando acima",
-        "4. Aguarde a conclusão e clique em 'Atualizar Lista'",
-      ],
-      note: "Alternativamente, configure as permissões IAM para permitir backups automáticos.",
-      permissionInstructions: [
-        "Para habilitar backups automáticos via interface:",
-        "1. Acesse: https://console.cloud.google.com/iam-admin/iam?project=" + PROJECT_ID,
-        "2. Encontre: " + PROJECT_ID + "@appspot.gserviceaccount.com",
-        "3. Clique em Editar (ícone de lápis)",
-        "4. Adicione o papel: Cloud Datastore Import Export Admin",
-        "5. Salve e aguarde 2-3 minutos para as permissões propagarem",
+        "Para executar o backup, use:",
+        `gcloud firestore export ${outputUri} --database='(default)' --project=${PROJECT_ID}`,
+        "Certifique-se de estar autenticado com `gcloud auth login`.",
       ],
     };
   });
 
-/**
- * Lista todos os backups disponíveis (automáticos e manuais)
- */
 export const listAllBackups = functions
   .region(REGION)
   .https.onCall(async (data, context) => {
-    if (context.auth?.token.isAdmin !== true) {
-      throw new functions.https.HttpsError("permission-denied", "Apenas admins podem listar backups");
+    if (!context.auth || context.auth.token.isAdmin !== true) {
+      throw new functions.https.HttpsError("permission-denied", "Apenas admins podem listar backups.");
     }
 
     try {
-      functions.logger.log("[BackupManager] Listando backups disponíveis...");
+      const storageClient = getStorageClient();
+      const [files] = await storageClient.bucket(BUCKET_NAME).getFiles({ prefix: 'manual-', delimiter: '/' });
+      const backups: any[] = [];
 
-      const backups: BackupInfo[] = [];
-
-      // Listar backups agendados (automáticos) via Firestore Admin API
-      // Nota: Firestore Admin SDK não tem método direto para listar backups
-      // Vamos usar a API REST ou retornar instruções
-      
-      // Por enquanto, vamos listar arquivos no bucket do Cloud Storage
-      const storage = getStorage();
-      const bucket = storage.bucket(BUCKET_NAME);
-      
-      try {
-        const [files] = await bucket.getFiles({ prefix: "" });
-        
-        for (const file of files) {
-          const fileName = file.name;
-          const metadata = file.metadata;
-          
-          // Determinar tipo pelo nome
-          const type: "auto" | "manual" = fileName.startsWith("auto-") ? "auto" : "manual";
-          
-          // Extrair data do nome ou usar metadata
-          const createTime = metadata.timeCreated || new Date().toISOString();
-          const sizeBytes = typeof metadata.size === "string" ? parseInt(metadata.size) : (metadata.size || 0);
-          const size = formatBytes(sizeBytes);
-          
-          // Calcular expiração (45 dias para automáticos, null para manuais)
-          let expireTime: string | null = null;
-          if (type === "auto") {
-            const createDate = new Date(createTime);
-            createDate.setDate(createDate.getDate() + 45);
-            expireTime = createDate.toISOString();
-          }
+      for (const file of files) {
+        if (file.name.endsWith('/')) {
+          const backupName = file.name.slice(0, -1);
+          let size = "N/A";
+          try {
+            const [metadata] = await storageClient.bucket(BUCKET_NAME).file(`${backupName}/.overall_export_metadata`).getMetadata();
+            size = formatBytes(parseInt(metadata.size as string));
+          } catch (e) {}
 
           backups.push({
-            name: fileName,
-            type,
-            createTime,
+            name: backupName,
+            type: "manual",
+            createTime: new Date().toISOString(),
             size,
-            expireTime,
-            outputUri: `gs://${BUCKET_NAME}/${fileName}`,
           });
         }
-
-        // Ordenar por data de criação (mais recente primeiro)
-        backups.sort((a, b) => new Date(b.createTime).getTime() - new Date(a.createTime).getTime());
-
-        functions.logger.log(`[BackupManager] Encontrados ${backups.length} backups`);
-
-        return {
-          success: true,
-          backups,
-          total: backups.length,
-          autoCount: backups.filter(b => b.type === "auto").length,
-          manualCount: backups.filter(b => b.type === "manual").length,
-        };
-      } catch (storageError: any) {
-        functions.logger.warn("[BackupManager] Erro ao listar do Storage, retornando instruções:", storageError);
-        
-        // Fallback: retornar instruções para listar via gcloud
-        return {
-          success: true,
-          backups: [],
-          total: 0,
-          message: "Use o comando gcloud para listar backups:",
-          instructions: [
-            "gcloud firestore backups list --database='(default)'",
-          ],
-        };
       }
+
+      return { success: true, backups: backups.sort((a, b) => b.name.localeCompare(a.name)), total: backups.length };
     } catch (error: any) {
-      functions.logger.error("[BackupManager] Erro ao listar backups:", error);
-      throw new functions.https.HttpsError("internal", `Erro ao listar backups: ${error.message}`);
+      throw new functions.https.HttpsError("internal", error.message);
     }
   });
 
-/**
- * Testa/valida um backup sem restaurar
- */
 export const testRestore = functions
   .region(REGION)
   .https.onCall(async (data, context) => {
-    if (context.auth?.token.isAdmin !== true) {
-      throw new functions.https.HttpsError("permission-denied", "Apenas admins podem testar restauração");
+    if (!context.auth || context.auth.token.isAdmin !== true) {
+      throw new functions.https.HttpsError("permission-denied", "Apenas admins podem testar restauração.");
     }
 
     const { backupName } = data || {};
+    if (!backupName) throw new functions.https.HttpsError("invalid-argument", "Nome do backup é obrigatório.");
 
     try {
-      functions.logger.log(`[BackupManager] Validando backup: ${backupName || "mais recente"}`);
-
-      const storage = getStorage();
-      const bucket = storage.bucket(BUCKET_NAME);
-      
-      // Se não especificou backup, pegar o mais recente
-      let targetBackup = backupName;
-      if (!targetBackup) {
-        const [files] = await bucket.getFiles({ prefix: "" });
-        if (files.length === 0) {
-          throw new functions.https.HttpsError("not-found", "Nenhum backup encontrado");
-        }
-        // Ordenar por data e pegar o mais recente
-        files.sort((a, b) => {
-          const timeA = new Date(a.metadata.timeCreated || 0).getTime();
-          const timeB = new Date(b.metadata.timeCreated || 0).getTime();
-          return timeB - timeA;
-        });
-        targetBackup = files[0].name;
-      }
-
-      // Verificar se backup existe
-      const file = bucket.file(targetBackup);
-      const [exists] = await file.exists();
-      
-      if (!exists) {
-        throw new functions.https.HttpsError("not-found", `Backup ${targetBackup} não encontrado`);
-      }
-
-      // Obter metadata do backup
-      const [metadata] = await file.getMetadata();
-      const sizeBytes = typeof metadata.size === "string" ? parseInt(metadata.size) : (metadata.size || 0);
-      const createTime = metadata.timeCreated || new Date().toISOString();
-
-      // Validações básicas
-      const validations = {
-        exists: true,
-        hasSize: sizeBytes > 0,
-        hasMetadata: !!metadata,
-        sizeBytes: sizeBytes,
-        sizeFormatted: formatBytes(sizeBytes),
-      };
-
-      const isValid = validations.exists && validations.hasSize && validations.hasMetadata;
-
-      functions.logger.log(`[BackupManager] Backup ${targetBackup} validado: ${isValid ? "VÁLIDO" : "INVÁLIDO"}`);
+      const storageClient = getStorageClient();
+      const [exists] = await storageClient.bucket(BUCKET_NAME).file(`${backupName}/.overall_export_metadata`).exists();
 
       return {
         success: true,
-        valid: isValid,
-        backupName: targetBackup,
-        createTime,
-        size: formatBytes(sizeBytes),
-        sizeBytes: sizeBytes,
-        validations,
-        message: isValid 
-          ? "Backup válido e pronto para restauração" 
-          : "Backup inválido - verifique os detalhes",
-        restoreInstructions: [
-          "Para restaurar em um banco de teste, execute:",
-          `gcloud firestore import gs://${BUCKET_NAME}/${targetBackup} --database=test-restore`,
-          "",
-          "Para restaurar no banco principal (CUIDADO!), execute:",
-          `gcloud firestore import gs://${BUCKET_NAME}/${targetBackup} --database="(default)"`,
-        ],
+        valid: exists,
+        message: exists ? "Backup válido." : "Backup incompleto ou não encontrado.",
       };
     } catch (error: any) {
-      functions.logger.error("[BackupManager] Erro ao validar backup:", error);
-      if (error instanceof functions.https.HttpsError) {
-        throw error;
-      }
-      throw new functions.https.HttpsError("internal", `Erro ao validar backup: ${error.message}`);
+      throw new functions.https.HttpsError("internal", error.message);
     }
   });
 
-/**
- * Deleta um backup manual
- */
 export const deleteBackup = functions
   .region(REGION)
   .https.onCall(async (data, context) => {
-    if (context.auth?.token.isAdmin !== true) {
-      throw new functions.https.HttpsError("permission-denied", "Apenas admins podem deletar backups");
+    if (!context.auth || context.auth.token.isAdmin !== true) {
+      throw new functions.https.HttpsError("permission-denied", "Apenas admins podem deletar backups.");
     }
 
     const { backupName } = data;
-    
-    if (!backupName) {
-      throw new functions.https.HttpsError("invalid-argument", "backupName é obrigatório");
-    }
-
-    // Não permitir deletar backups automáticos
-    if (backupName.startsWith("auto-")) {
-      throw new functions.https.HttpsError(
-        "permission-denied",
-        "Não é possível deletar backups automáticos. Eles são gerenciados pelo schedule."
-      );
+    if (!backupName || backupName.startsWith("auto-")) {
+      throw new functions.https.HttpsError("invalid-argument", "Nome inválido.");
     }
 
     try {
-      functions.logger.log(`[BackupManager] Deletando backup: ${backupName}`);
-
-      const storage = getStorage();
-      const bucket = storage.bucket(BUCKET_NAME);
-      const file = bucket.file(backupName);
-
-      // Verificar se existe
-      const [exists] = await file.exists();
-      if (!exists) {
-        throw new functions.https.HttpsError("not-found", `Backup ${backupName} não encontrado`);
-      }
-
-      // Deletar
-      await file.delete();
-
-      functions.logger.log(`[BackupManager] Backup ${backupName} deletado com sucesso`);
-
-      return {
-        success: true,
-        deleted: backupName,
-        message: `Backup ${backupName} deletado com sucesso`,
-      };
+      const storageClient = getStorageClient();
+      await storageClient.bucket(BUCKET_NAME).deleteFiles({ prefix: `${backupName}/` });
+      return { success: true, deleted: backupName };
     } catch (error: any) {
-      functions.logger.error("[BackupManager] Erro ao deletar backup:", error);
-      if (error instanceof functions.https.HttpsError) {
-        throw error;
-      }
-      throw new functions.https.HttpsError("internal", `Erro ao deletar backup: ${error.message}`);
+      throw new functions.https.HttpsError("internal", error.message);
     }
   });
-
-/**
- * Formata bytes para formato legível
- */
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 Bytes";
-  const k = 1024;
-  const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + " " + sizes[i];
-}
-

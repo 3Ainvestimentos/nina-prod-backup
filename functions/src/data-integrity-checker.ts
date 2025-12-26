@@ -4,6 +4,15 @@ import { admin } from "./admin-app";
 
 const REGION = process.env.FUNCTIONS_REGION || "us-central1";
 
+// Lazy initialization para evitar timeout no deploy
+let db: FirebaseFirestore.Firestore | null = null;
+function getDb() {
+  if (!db) {
+    db = admin.firestore();
+  }
+  return db;
+}
+
 export interface IntegrityIssue {
   type: "broken_reference" | "orphaned_data" | "invalid_data";
   severity: "high" | "medium" | "low";
@@ -74,7 +83,7 @@ export const checkDataIntegrity = functions
     const orphanedProjectInteractions: IntegrityReport["orphanedDataDetails"]["projectInteractions"] = [];
 
     try {
-      const db = admin.firestore();
+      const db = getDb();
 
       // 1. Buscar todos os employees
       const employeesSnapshot = await db.collection("employees").get();

@@ -5,7 +5,7 @@ const REGION = process.env.FUNCTIONS_REGION || "us-central1";
 
 // Lazy initialization para evitar timeout no deploy
 let db: FirebaseFirestore.Firestore | null = null;
-function getDb() {
+function getDb(): FirebaseFirestore.Firestore {
   if (!db) {
     // Importação lazy do admin
     const admin = require("firebase-admin");
@@ -14,7 +14,7 @@ function getDb() {
     }
     db = admin.firestore();
   }
-  return db;
+  return db!; // Non-null assertion: db é sempre definido após a primeira chamada
 }
 
 export interface IntegrityIssue {

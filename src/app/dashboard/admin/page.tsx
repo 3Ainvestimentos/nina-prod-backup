@@ -115,6 +115,10 @@ export default function AdminPage() {
   const [isProjectFormOpen, setIsProjectFormOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   
+  // Estados para Verificação de Integridade
+  const [integrityReport, setIntegrityReport] = useState<any>(null);
+  const [integrityLoading, setIntegrityLoading] = useState(false);
+  
   // Filtros e ordenação
   const initialFilters = useMemo(() => ({
     name: new Set<string>(),
@@ -923,13 +927,14 @@ export default function AdminPage() {
   return (
     <>
     <Tabs defaultValue="employees" className="w-full">
-      <TabsList className="grid w-full grid-cols-6">
+      <TabsList className="grid w-full grid-cols-7">
         <TabsTrigger value="employees">Funcionários</TabsTrigger>
         <TabsTrigger value="teams">Equipes</TabsTrigger>
         <TabsTrigger value="projects">Projetos</TabsTrigger>
         <TabsTrigger value="reports">Relatórios</TabsTrigger>
         <TabsTrigger value="settings">Geral</TabsTrigger>
         <TabsTrigger value="backup">Backup & Import</TabsTrigger>
+        <TabsTrigger value="integrity">Integridade</TabsTrigger>
       </TabsList>
       <TabsContent value="employees">
         <Card>
@@ -1875,6 +1880,200 @@ export default function AdminPage() {
                     </Button>
                 </div>
             </CardContent>
+        </Card>
+      </TabsContent>
+      <TabsContent value="integrity">
+        <Card>
+          <CardHeader>
+            <CardTitle>Verificação de Integridade de Dados</CardTitle>
+            <CardDescription>
+              Verifique referências quebradas, dados órfãos e inconsistências no banco de dados.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4 space-y-2">
+              <h4 className="font-semibold text-blue-900 dark:text-blue-100 flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5" />
+                O que é verificado?
+              </h4>
+              <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1 list-disc list-inside">
+                <li>Referências quebradas (leaderId, memberIds, authorId que não existem)</li>
+                <li>Dados órfãos (interações e PDI actions de employees deletados)</li>
+                <li>Project interactions de projects arquivados</li>
+              </ul>
+            </div>
+
+            <Button
+              onClick={async () => {
+                if (!firebaseApp) return;
+                setIntegrityLoading(true);
+                setIntegrityReport(null);
+                try {
+                  const functions = getFunctions(firebaseApp, 'us-central1');
+                  const checkIntegrity = httpsCallable(functions, 'checkDataIntegrity');
+                  const result: any = await checkIntegrity({});
+                  
+                  if (result.data.success) {
+                    setIntegrityReport(result.data.report);
+                    toast({
+                      title: "Verificação concluída",
+                      description: `Encontrados ${result.data.report.totalIssues} problema(s)`,
+                      duration: 5000,
+                    });
+                  }
+                } catch (error: any) {
+                  toast({
+                    variant: "destructive",
+                    title: "Erro ao verificar integridade",
+                    description: error.message,
+                  });
+                } finally {
+                  setIntegrityLoading(false);
+                }
+              }}
+              disabled={integrityLoading}
+              className="w-full"
+            >
+              {integrityLoading ? 'Verificando...' : 'Verificar Integridade'}
+            </Button>
+
+            {integrityReport && (
+              <div className="space-y-4">
+                <div className="border rounded-lg p-4">
+                  <h3 className="font-semibold mb-3">Resumo</h3>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <div className="text-2xl font-bold text-red-600">{integrityReport.summary.brokenReferences}</div>
+                      <div className="text-sm text-muted-foreground">Referências Quebradas</div>
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold text-orange-600">{integrityReport.summary.orphanedData}</div>
+                      <div className="text-sm text-muted-foreground">Dados Órfãos</div>
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold text-green-600">{integrityReport.fixableCount}</div>
+                      <div className="text-sm text-muted-foreground">Corrigíveis</div>
+                    </div>
+                  </div>
+                </div>
+
+                {integrityReport.issues.length > 0 && (
+                  <div className="border rounded-lg p-4">
+                    <h3 className="font-semibold mb-3">Problemas Encontrados</h3>
+                    <div className="space-y-2 max-h-96 overflow-y-auto">
+                      {integrityReport.issues.map((issue: any, index: number) => (
+                        <div key={index} className="p-3 border rounded-lg">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <Badge variant={issue.severity === 'high' ? 'destructive' : issue.severity === 'medium' ? 'default' : 'secondary'}>
+                                  {issue.severity === 'high' ? 'Alta' : issue.severity === 'medium' ? 'Média' : 'Baixa'}
+                                </Badge>
+                                <Badge variant="outline">{issue.type === 'broken_reference' ? 'Referência Quebrada' : 'Dado Órfão'}</Badge>
+                              </div>
+                              <p className="text-sm font-medium">{issue.issue}</p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {issue.collection} / {issue.documentId}
+                                {issue.field && ` → ${issue.field}: ${issue.referencedId}`}
+                              </p>
+                              {issue.suggestedFix && (
+                                <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                                  💡 {issue.suggestedFix}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {(integrityReport.orphanedDataDetails.interactions.length > 0 ||
+                  integrityReport.orphanedDataDetails.pdiActions.length > 0 ||
+                  integrityReport.orphanedDataDetails.projectInteractions.length > 0) && (
+                  <div className="border rounded-lg p-4">
+                    <h3 className="font-semibold mb-3">Dados Órfãos (Preview do que será deletado)</h3>
+                    
+                    {integrityReport.orphanedDataDetails.interactions.length > 0 && (
+                      <div className="mb-4">
+                        <h4 className="font-medium mb-2">
+                          Interações ({integrityReport.orphanedDataDetails.interactions.length})
+                        </h4>
+                        <div className="space-y-1 max-h-40 overflow-y-auto text-sm">
+                          {integrityReport.orphanedDataDetails.interactions.slice(0, 10).map((item: any, index: number) => (
+                            <div key={index} className="p-2 bg-muted rounded">
+                              • {item.type} - {item.employeeName} ({item.date})
+                            </div>
+                          ))}
+                          {integrityReport.orphanedDataDetails.interactions.length > 10 && (
+                            <div className="text-xs text-muted-foreground italic">
+                              ... e mais {integrityReport.orphanedDataDetails.interactions.length - 10} interações
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {integrityReport.orphanedDataDetails.pdiActions.length > 0 && (
+                      <div className="mb-4">
+                        <h4 className="font-medium mb-2">
+                          PDI Actions ({integrityReport.orphanedDataDetails.pdiActions.length})
+                        </h4>
+                        <div className="space-y-1 max-h-40 overflow-y-auto text-sm">
+                          {integrityReport.orphanedDataDetails.pdiActions.slice(0, 10).map((item: any, index: number) => (
+                            <div key={index} className="p-2 bg-muted rounded">
+                              • {item.description} - {item.employeeName} ({item.status})
+                            </div>
+                          ))}
+                          {integrityReport.orphanedDataDetails.pdiActions.length > 10 && (
+                            <div className="text-xs text-muted-foreground italic">
+                              ... e mais {integrityReport.orphanedDataDetails.pdiActions.length - 10} PDI actions
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {integrityReport.orphanedDataDetails.projectInteractions.length > 0 && (
+                      <div>
+                        <h4 className="font-medium mb-2">
+                          Project Interactions ({integrityReport.orphanedDataDetails.projectInteractions.length})
+                        </h4>
+                        <div className="space-y-1 max-h-40 overflow-y-auto text-sm">
+                          {integrityReport.orphanedDataDetails.projectInteractions.slice(0, 10).map((item: any, index: number) => (
+                            <div key={index} className="p-2 bg-muted rounded">
+                              • {item.type} - {item.projectName} ({item.date})
+                            </div>
+                          ))}
+                          {integrityReport.orphanedDataDetails.projectInteractions.length > 10 && (
+                            <div className="text-xs text-muted-foreground italic">
+                              ... e mais {integrityReport.orphanedDataDetails.projectInteractions.length - 10} project interactions
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    <Alert className="mt-4">
+                      <AlertDescription>
+                        <strong>⚠️ Atenção:</strong> Antes de deletar dados órfãos, certifique-se de criar um backup.
+                        A exclusão será implementada em uma próxima etapa com confirmação e documentação completa.
+                      </AlertDescription>
+                    </Alert>
+                  </div>
+                )}
+
+                {integrityReport.totalIssues === 0 && (
+                  <Alert>
+                    <AlertDescription>
+                      ✅ <strong>Tudo OK!</strong> Nenhum problema de integridade encontrado.
+                    </AlertDescription>
+                  </Alert>
+                )}
+              </div>
+            )}
+          </CardContent>
         </Card>
       </TabsContent>
 

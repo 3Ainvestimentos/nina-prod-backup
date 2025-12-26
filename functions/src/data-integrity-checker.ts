@@ -337,9 +337,10 @@ export const checkDataIntegrity = functions
       };
     } catch (error: any) {
       functions.logger.error("[IntegrityChecker] Erro ao verificar integridade:", error);
+      functions.logger.error("[IntegrityChecker] Stack trace:", error.stack);
       throw new functions.https.HttpsError(
         "internal",
-        `Erro ao verificar integridade: ${error.message}`
+        `Erro ao verificar integridade: ${error.message || 'Erro desconhecido'}`
       );
     }
   });

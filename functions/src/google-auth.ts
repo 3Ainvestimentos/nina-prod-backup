@@ -8,17 +8,22 @@ import { encrypt, markAsEncrypted } from "./kms-utils";
 const REGION = process.env.FUNCTIONS_REGION || "us-central1";
 const corsHandler = cors({ origin: true });
 
-// Usar process.env para compatibilidade com firebase-functions v7
-// As variáveis são definidas via firebase functions:config:set ou secrets
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || process.env.google_client_id;
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || process.env.google_client_secret;
+// Obter credenciais de process.env
+// As variáveis devem ser configuradas via Firebase Secrets ou environment variables
 const REDIRECT_URL = `https://${REGION}-${process.env.GCLOUD_PROJECT}.cloudfunctions.net/googleAuthCallback`;
 
 export const getOAuth2Client = () => {
-  return new google.auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, REDIRECT_URL);
+  // Tentar obter de diferentes fontes (compatibilidade)
+  const clientId = process.env.GOOGLE_CLIENT_ID || process.env.google_client_id;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET || process.env.google_client_secret;
+  
+  if (!clientId || !clientSecret) {
+    throw new Error("GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET is not configured. Configure via Firebase Secrets or environment variables.");
+  }
+  return new google.auth.OAuth2(clientId, clientSecret, REDIRECT_URL);
 };
 
-const oauth2Client = getOAuth2Client();
+// Não inicializar oauth2Client no nível do módulo - criar sob demanda
 const SCOPES = [
   "https://www.googleapis.com/auth/calendar.events",
   "https://www.googleapis.com/auth/userinfo.email",
@@ -53,6 +58,7 @@ export const googleAuthInit = functions
           console.warn("[GoogleAuthInit] Não foi possível obter email do usuário:", e);
         }
 
+        const oauth2Client = getOAuth2Client();
         const authUrl = oauth2Client.generateAuthUrl({
           access_type: "offline",
           scope: SCOPES,
@@ -84,6 +90,7 @@ export const googleAuthCallback = functions
       }
 
       try {
+        const oauth2Client = getOAuth2Client();
         const { tokens } = await oauth2Client.getToken(code);
         const refreshToken = tokens.refresh_token;
 

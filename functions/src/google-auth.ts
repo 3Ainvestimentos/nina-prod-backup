@@ -8,19 +8,23 @@ import { encrypt, markAsEncrypted } from "./kms-utils";
 const REGION = process.env.FUNCTIONS_REGION || "us-central1";
 const corsHandler = cors({ origin: true });
 
-// Obter credenciais de process.env
-// As variáveis devem ser configuradas via Firebase Secrets ou environment variables
+// Obter credenciais de process.env (configurados via Firebase Secrets)
 const REDIRECT_URL = `https://${REGION}-${process.env.GCLOUD_PROJECT}.cloudfunctions.net/googleAuthCallback`;
 
+// Secrets configurados via: firebase functions:secrets:set GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET
 export const getOAuth2Client = () => {
-  // Tentar obter de diferentes fontes (compatibilidade)
-  const clientId = process.env.GOOGLE_CLIENT_ID || process.env.google_client_id;
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET || process.env.google_client_secret;
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   
   if (!clientId || !clientSecret) {
-    throw new Error("GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET is not configured. Configure via Firebase Secrets or environment variables.");
+    throw new Error("GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET is not configured. Configure via Firebase Secrets.");
   }
   return new google.auth.OAuth2(clientId, clientSecret, REDIRECT_URL);
+};
+
+// Configuração de secrets para as funções que precisam
+const secretsConfig = {
+  secrets: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"],
 };
 
 // Não inicializar oauth2Client no nível do módulo - criar sob demanda
@@ -31,6 +35,7 @@ const SCOPES = [
 ];
 
 export const googleAuthInit = functions
+  .runWith(secretsConfig)
   .region(REGION)
   .https.onRequest((req, res) => {
     return corsHandler(req, res, async () => {
@@ -78,6 +83,7 @@ export const googleAuthInit = functions
   });
 
 export const googleAuthCallback = functions
+  .runWith(secretsConfig)
   .region(REGION)
   .https.onRequest((req, res) => {
     return corsHandler(req, res, async () => {

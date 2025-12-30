@@ -357,4 +357,3 @@ Implementar monitoramento proativo e alertas para anomalias.
 ## Testes Necessários
 
 - Testes unitários para funções de criptografia
-- Testes de integração para backup/restore

@@ -9,7 +9,13 @@ import { decrypt, isEncrypted, removeEncryptionMark } from "./kms-utils";
 
 const REGION = process.env.FUNCTIONS_REGION || "us-central1";
 
+// Configuração de secrets para acesso ao Google OAuth
+const secretsConfig = {
+  secrets: ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"],
+};
+
 export const onInteractionCreate = functions
+  .runWith(secretsConfig)
   .region(REGION)
   .firestore.document("/employees/{employeeId}/interactions/{interactionId}")
   .onCreate(async (snap, context) => {

@@ -647,19 +647,19 @@ export function IndividualTrackingContent({
                                     onSelect={handleDateTimeChange}
                                     initialFocus
                                 />
-                                <div className="p-3 border-t border-border flex items-center gap-2">
-                                  <Clock className="h-4 w-4 text-muted-foreground" />
+                                <div className="p-3 border-t border-border flex items-center justify-center gap-2">
+                                  <Clock className="h-4 w-4 text-muted-foreground shrink-0" />
                                   <Label htmlFor="hours" className="sr-only">Horas</Label>
                                   <Input 
                                       id="hours"
                                       type="number" 
                                       min="0" 
                                       max="23" 
-                                      className="w-16"
+                                      className="w-20 text-center"
                                       value={nextInteractionDate ? getHours(nextInteractionDate).toString().padStart(2, '0') : "00"}
                                       onChange={(e) => handleTimeChange('hours', e.target.value)}
                                   />
-                                  <span>:</span>
+                                  <span className="text-lg font-medium">:</span>
                                   <Label htmlFor="minutes" className="sr-only">Minutos</Label>
                                   <Input 
                                       id="minutes"
@@ -667,7 +667,7 @@ export function IndividualTrackingContent({
                                       min="0" 
                                       max="59" 
                                       step="5"
-                                      className="w-16"
+                                      className="w-20 text-center"
                                       value={nextInteractionDate ? getMinutes(nextInteractionDate).toString().padStart(2, '0') : "00"}
                                       onChange={(e) => handleTimeChange('minutes', e.target.value)}
                                   />

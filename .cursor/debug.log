@@ -1,0 +1,11 @@
+{"location":"admin-app.ts:5","message":"Admin app initialization check","data":{"appsLength":0},"timestamp":1767026296901,"sessionId":"debug-session","runId":"run1","hypothesisId":"E"}
+{"location":"admin-app.ts:8","message":"Initializing Firebase Admin","data":{},"timestamp":1767026296915,"sessionId":"debug-session","runId":"run1","hypothesisId":"E"}
+{"location":"admin-app.ts:10","message":"Firebase Admin initialized","data":{"appsLength":1},"timestamp":1767026296919,"sessionId":"debug-session","runId":"run1","hypothesisId":"E"}
+{"location":"admin-app.ts:16","message":"Admin services exported","data":{"hasDb":true,"hasAuth":true},"timestamp":1767026296935,"sessionId":"debug-session","runId":"run1","hypothesisId":"E"}
+{"location":"google-auth.ts:13","message":"GOOGLE_CLIENT_ID check","data":{"hasClientId":false,"hasSecret":false,"region":"us-central1"},"timestamp":1767026304304,"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}
+{"location":"google-auth.ts:18","message":"getOAuth2Client called","data":{"hasClientId":false,"hasSecret":false},"timestamp":1767026304306,"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}
+{"location":"google-auth.ts:21","message":"ERROR: Missing OAuth credentials","data":{"hasClientId":false,"hasSecret":false},"timestamp":1767026304307,"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}
+{"location":"admin-app.ts:5","message":"Admin app initialization check","data":{"appsLength":0},"timestamp":1767026561323,"sessionId":"debug-session","runId":"run1","hypothesisId":"E"}
+{"location":"admin-app.ts:10","message":"Firebase Admin initialized","data":{"appsLength":1},"timestamp":1767026561343,"sessionId":"debug-session","runId":"run1","hypothesisId":"E"}
+{"location":"admin-app.ts:16","message":"Admin services exported","data":{"hasDb":true,"hasAuth":true},"timestamp":1767026561364,"sessionId":"debug-session","runId":"run1","hypothesisId":"E"}
+{"location":"admin-app.ts:8","message":"Initializing Firebase Admin","data":{},"timestamp":1767026561340,"sessionId":"debug-session","runId":"run1","hypothesisId":"E"}

@@ -42,8 +42,7 @@ import { cn } from "@/lib/utils";
 import { setDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
-
-type NewInteraction = Omit<Interaction, "id" | "date" | "authorId" | "notes"> & { notes: string | OneOnOneNotes | N3IndividualNotes };
+import DOMPurify from "dompurify";
 
 const initialOneOnOneNotes: OneOnOneNotes = {
     companyGrowth: "",
@@ -160,10 +159,18 @@ export function IndividualTrackingContent({
     });
   }, [managedEmployees]);
 
-  const selectedEmployee = useMemo(() => {
+    const selectedEmployee = useMemo(() => {
     return employees?.find((employee) => employee.id === selectedEmployeeId);
   }, [employees, selectedEmployeeId]);
   
+  // Função auxiliar para sanitizar strings contra XSS
+  const sanitize = useCallback((text: string | undefined | null) => {
+    if (text === undefined || text === null) return "";
+    if (typeof window === 'undefined') return text;
+    // ALLOWED_TAGS: [] remove todas as tags HTML, preservando apenas o texto
+    return DOMPurify.sanitize(text, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] });
+  }, []);
+
   const isLeaderAuthorizedForCalendar = useMemo(() => {
       if (!currentUserEmployee) return false;
       const leaderData = employees?.find(e => e.id === currentUserEmployee.id);
@@ -310,14 +317,25 @@ export function IndividualTrackingContent({
     let isNotesEmpty = true;
 
     if (interactionType === '1:1') {
-        notesToSave = oneOnOneNotes;
-        isNotesEmpty = Object.values(oneOnOneNotes).every(note => note?.trim() === '');
+        notesToSave = {
+            companyGrowth: sanitize(oneOnOneNotes.companyGrowth),
+            leaderGrowth: sanitize(oneOnOneNotes.leaderGrowth),
+            teamGrowth: sanitize(oneOnOneNotes.teamGrowth),
+            personalLife: sanitize(oneOnOneNotes.personalLife),
+            observations: sanitize(oneOnOneNotes.observations),
+        };
+        isNotesEmpty = Object.values(notesToSave).every(note => note?.trim() === '');
     } else if (interactionType === 'N3 Individual') {
-        notesToSave = n3Notes;
-        isNotesEmpty = Object.values(n3Notes).every(note => note?.trim() === '');
+        notesToSave = {
+            ...n3Notes,
+            esforcos: sanitize(n3Notes.esforcos),
+            planoAcao: sanitize(n3Notes.planoAcao)
+        };
+        // Para N3, verificamos se esforcos ou planoAcao foram preenchidos
+        isNotesEmpty = (n3Notes.esforcos ?? '').trim() === '' && (n3Notes.planoAcao ?? '').trim() === '';
     } else {
-        notesToSave = simpleNotes;
-        isNotesEmpty = simpleNotes.trim() === '';
+        notesToSave = sanitize(simpleNotes);
+        isNotesEmpty = notesToSave.trim() === '';
     }
 
     if (isNotesEmpty) {

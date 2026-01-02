@@ -48,7 +48,7 @@ import {
 import { CsvUploadDialog } from "@/components/csv-upload-dialog";
 import { InteractionCsvUploadDialog } from "@/components/interaction-csv-upload-dialog";
 import { useState, useMemo, useEffect } from "react";
-import { useCollection, useFirestore, useMemoFirebase, useUser, useFirebase } from "@/firebase";
+import { useCollection, useFirestore, useMemoFirebase, useUser, useFirebase, softDeleteDocument } from "@/firebase";
 import { collection, doc, deleteDoc, updateDoc, setDoc } from "firebase/firestore";
 import { setDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -528,13 +528,13 @@ export default function AdminPage() {
   };
 
   const handleDeleteEmployee = async () => {
-    if (!firestore || !employeeToDelete) return;
+    if (!firestore || !employeeToDelete || !user) return;
     const docRef = doc(firestore, "employees", employeeToDelete.id);
     try {
-      await deleteDoc(docRef);
+      await softDeleteDocument(docRef, user.uid);
       toast({
         title: "Funcionário Removido",
-        description: `${employeeToDelete.name} foi removido com sucesso.`,
+        description: `${employeeToDelete.name} foi removido com sucesso (Soft Delete).`,
       });
     } catch (error) {
       console.error("Error deleting employee:", error);

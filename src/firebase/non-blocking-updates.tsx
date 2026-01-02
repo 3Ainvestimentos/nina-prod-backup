@@ -9,9 +9,39 @@ import {
   CollectionReference,
   DocumentReference,
   SetOptions,
+  serverTimestamp,
 } from 'firebase/firestore';
 import { errorEmitter } from '@/firebase/error-emitter';
 import {FirestorePermissionError} from '@/firebase/errors';
+
+/**
+ * Performs a "soft delete" by marking the document as deleted instead of removing it.
+ * Adds metadata about who deleted it and when.
+ */
+export function softDeleteDocument(docRef: DocumentReference, userUid: string): Promise<void> {
+  const data = {
+    _isDeleted: true,
+    _deletedAt: serverTimestamp(),
+    _deletedBy: userUid,
+  };
+
+  const promise = updateDoc(docRef, data);
+  
+  return promise.catch(error => {
+    if (error && error.code === 'permission-denied') {
+        errorEmitter.emit(
+          'permission-error',
+          new FirestorePermissionError({
+            path: docRef.path,
+            operation: 'update',
+            requestResourceData: data,
+          })
+        )
+    } else {
+        throw error;
+    }
+  });
+}
 
 /**
  * Initiates a setDoc operation for a document reference.

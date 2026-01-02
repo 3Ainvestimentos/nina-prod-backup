@@ -40,6 +40,12 @@ import { doc, collection } from "firebase/firestore";
 import { setDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 import { useToast } from "@/hooks/use-toast";
 import type { PDIAction } from "@/lib/types";
+import DOMPurify from "dompurify";
+
+const sanitize = (text: string) => {
+  if (typeof window === 'undefined') return text;
+  return DOMPurify.sanitize(text, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] });
+};
 
 const actionSchema = z.object({
   description: z.string().min(1, "A descrição da ação é obrigatória."),
@@ -126,6 +132,7 @@ export function PdiActionFormDialog({
 
     const actionData: PDIAction = {
         ...data,
+        description: sanitize(data.description),
         id: docId,
         employeeId: employeeId,
         startDate: data.startDate.toISOString(),

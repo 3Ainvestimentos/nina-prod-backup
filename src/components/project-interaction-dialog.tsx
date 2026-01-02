@@ -37,6 +37,12 @@ import { useToast } from "@/hooks/use-toast";
 import type { Employee, Project, ProjectInteractionNotes } from "@/lib/types";
 import { ProjectErrors, mapFirestoreError, logValidationError, logProjectSuccess } from "@/lib/project-errors";
 import { isProjectLeader } from "@/hooks/use-user-projects";
+import DOMPurify from "dompurify";
+
+const sanitize = (text: string) => {
+  if (typeof window === 'undefined') return text;
+  return DOMPurify.sanitize(text, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] });
+};
 
 const formSchema = z.object({
   type: z.enum(["1:1"]),
@@ -131,8 +137,8 @@ export function ProjectInteractionDialog({
 
       // Construir notas da interação
       const notes: ProjectInteractionNotes = {
-        content: data.content,
-        indicator: data.indicator || undefined,
+        content: sanitize(data.content),
+        indicator: data.indicator ? sanitize(data.indicator) : undefined,
       };
 
       const interactionData = {
@@ -167,7 +173,7 @@ export function ProjectInteractionDialog({
           const employeeInteractionData = {
             type: "Feedback" as const, // Interações de projetos são Feedback
             date: interactionData.date,
-            notes: data.content, // Usar string simples para compatibilidade com Interaction
+            notes: sanitize(data.content), // Usar string simples para compatibilidade com Interaction
             authorId: currentUser.id,
             source: "project", // Marcar origem como projeto
             projectId: project.id, // Referência ao projeto (opcional, mas útil para rastreabilidade)

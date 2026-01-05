@@ -478,19 +478,19 @@ export default function RankingPage() {
           ? leaders 
           : leaders.filter(leader => leader.axis === axisFilter);
 
-        // Gerar array dos meses a partir de setembro de 2025
+        // Gerar array dos meses a partir de outubro de 2025
         const currentDate = new Date();
-        const september2025 = new Date(2025, 8, 1); // Setembro é mês 8 (0-indexed)
+        const october2025 = new Date(2025, 9, 1); // Outubro é mês 9 (0-indexed)
         
-        // Calcular quantos meses desde setembro até hoje
-        const monthsSinceSeptember = differenceInMonths(currentDate, september2025) + 1;
-        const totalMonths = Math.max(1, Math.min(monthsSinceSeptember, 12)); // Máximo 12 meses, mínimo 1
+        // Calcular quantos meses desde outubro até hoje
+        const monthsSinceOctober = differenceInMonths(currentDate, october2025) + 1;
+        const totalMonths = Math.max(1, Math.min(monthsSinceOctober, 12)); // Máximo 12 meses, mínimo 1
         
         console.log(`📊 [HISTÓRICO] ${filteredLeaders.length} líderes x ${totalMonths} meses = ${filteredLeaders.length * totalMonths} cálculos`);
         
         const months = Array.from({ length: totalMonths }, (_, i) => {
-          const monthDate = new Date(september2025);
-          monthDate.setMonth(september2025.getMonth() + i);
+          const monthDate = new Date(october2025);
+          monthDate.setMonth(october2025.getMonth() + i);
           return {
             date: monthDate,
             start: startOfMonth(monthDate),

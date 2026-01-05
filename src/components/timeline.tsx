@@ -264,7 +264,7 @@ const OneOnOneDetails = ({ notes }: { notes: OneOnOneNotes }) => (
   }
 
   // Componente para renderizar uma interação individual
-  const InteractionItem = ({ item }: { item: Interaction }) => (
+  const InteractionItem = ({ item }: { item: Interaction & { actions?: React.ReactNode } }) => (
     <div className="relative flex items-start gap-4">
       <div className="flex h-6 w-6 items-center justify-center rounded-full bg-secondary z-10">
         <span className={cn("flex h-6 w-6 items-center justify-center rounded-full bg-muted text-foreground", item.type === 'Índice de Risco' && "text-destructive")}>
@@ -272,8 +272,15 @@ const OneOnOneDetails = ({ notes }: { notes: OneOnOneNotes }) => (
         </span>
       </div>
       <div className="flex-1 pt-0.5">
-        <div className="flex items-center gap-3">
-          <p className="text-sm font-medium">{item.type}</p>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <p className="text-sm font-medium">{item.type}</p>
+          </div>
+          {item.actions && (
+            <div className="flex items-center">
+              {item.actions}
+            </div>
+          )}
         </div>
         <div className="flex items-center text-xs text-muted-foreground gap-2">
             <span>{item.date ? formatDate(item.date) : 'Data indisponível'}</span>
@@ -330,7 +337,7 @@ const OneOnOneDetails = ({ notes }: { notes: OneOnOneNotes }) => (
     </div>
   );
 
-export function Timeline({ interactions, isLoading }: { interactions: Interaction[]; isLoading: boolean }) {
+export function Timeline({ interactions, isLoading }: { interactions: (Interaction & { actions?: React.ReactNode })[]; isLoading: boolean }) {
   if (isLoading) {
     return (
       <div className="space-y-6">

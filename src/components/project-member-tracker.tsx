@@ -14,8 +14,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ProjectInteractionDialog } from "@/components/project-interaction-dialog";
+import { ProjectInteractionEditDialog } from "@/components/project-interaction-edit-dialog";
 import { isProjectLeader } from "@/hooks/use-user-projects";
-import { PlusCircle } from "lucide-react";
+import { PlusCircle, Pencil } from "lucide-react";
 import { Timeline } from "@/components/timeline";
 
 interface ProjectMemberTrackerProps {
@@ -32,6 +33,8 @@ export function ProjectMemberTracker({
   const firestore = useFirestore();
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const [isInteractionDialogOpen, setIsInteractionDialogOpen] = useState(false);
+  const [isEditInteractionDialogOpen, setIsEditInteractionDialogOpen] = useState(false);
+  const [interactionToEdit, setInteractionToEdit] = useState<ProjectInteraction | null>(null);
 
   // Filtrar membros do projeto
   const projectMembers = useMemo(
@@ -47,9 +50,14 @@ export function ProjectMemberTracker({
   const { data: allInteractions, isLoading: isLoadingInteractions } =
     useCollection<ProjectInteraction>(interactionsCollection);
 
+  const isLeader = isProjectLeader(project, currentUser);
+
   // Filtrar interações do membro selecionado para a timeline
   const memberInteractions = useMemo(() => {
     if (!selectedMemberId || !allInteractions) return [];
+    
+    const isAdmin = currentUser.isAdmin === true;
+
     return allInteractions
       .filter((i) => i.type === "1:1" && i.targetMemberId === selectedMemberId)
       .map(interaction => ({
@@ -60,16 +68,29 @@ export function ProjectMemberTracker({
           ? (interaction.notes as { content: string }).content
           : JSON.stringify(interaction.notes),
         authorId: interaction.authorId,
+        // Adicionar botão de edição na timeline
+        actions: (isLeader || isAdmin) ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 px-2 text-muted-foreground hover:text-primary"
+            onClick={() => {
+              setInteractionToEdit(interaction);
+              setIsEditInteractionDialogOpen(true);
+            }}
+          >
+            <Pencil className="h-3.5 w-3.5 mr-1" />
+            Editar
+          </Button>
+        ) : undefined
       }))
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [selectedMemberId, allInteractions]);
+  }, [selectedMemberId, allInteractions, isLeader, currentUser.isAdmin]);
 
   const selectedMember = useMemo(
     () => projectMembers.find((m) => m.id === selectedMemberId),
     [projectMembers, selectedMemberId]
   );
-
-  const isLeader = isProjectLeader(project, currentUser);
 
   return (
     <div className="space-y-6">
@@ -132,6 +153,17 @@ export function ProjectMemberTracker({
           projectMembers={projectMembers}
           currentUser={currentUser}
           preSelectedMemberId={selectedMemberId || undefined}
+        />
+      )}
+
+      {/* Dialog de Edição de Interação */}
+      {(isLeader || currentUser.isAdmin) && interactionToEdit && (
+        <ProjectInteractionEditDialog
+          open={isEditInteractionDialogOpen}
+          onOpenChange={setIsEditInteractionDialogOpen}
+          project={project}
+          interaction={interactionToEdit}
+          currentUser={currentUser}
         />
       )}
     </div>

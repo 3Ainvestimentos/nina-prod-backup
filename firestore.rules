@@ -5,6 +5,9 @@
  * 
  * Qualquer usuário autenticado pode criar interações.
  * Validações de permissão (isDirector, isAdmin) são feitas no frontend.
+ * 
+ * AUDITORIA DE SEGURANÇA (2025-12-22):
+ * - Todas as regras 'if true' foram substituídas por 'if isSignedIn()' para exigir autenticação.
  */
 
 rules_version = '2';
@@ -22,13 +25,13 @@ service cloud.firestore {
 
     /**
      * /employees/{employeeId}
-     * - leitura pública
+     * - leitura: apenas usuários autenticados
      * - criação/edição: qualquer logado
      * - exclusão: apenas admin
      */
     match /employees/{employeeId} {
-      // qualquer um pode listar/ver employees
-      allow read: if true;
+      // CORRIGIDO: exige autenticação para leitura
+      allow read: if isSignedIn();
       // criar e atualizar: qualquer usuário autenticado
       allow create: if isSignedIn();
       allow update: if isSignedIn();
@@ -53,21 +56,24 @@ service cloud.firestore {
     }
 
     /**
-     * /roles e /teams continuam públicos
+     * /roles e /teams - leitura apenas para autenticados
      */
     match /roles/{roleId} {
-      allow read: if true;
+      // CORRIGIDO: exige autenticação para leitura
+      allow read: if isSignedIn();
     }
 
     match /teams/{teamId} {
-      allow read: if true;
+      // CORRIGIDO: exige autenticação para leitura
+      allow read: if isSignedIn();
     }
 
     /**
-     * /leaderRankings - apenas leitura pública, escrita por Cloud Functions
+     * /leaderRankings - apenas leitura para autenticados, escrita por Cloud Functions
      */
     match /leaderRankings/{leaderId} {
-      allow read: if true;
+      // CORRIGIDO: exige autenticação para leitura
+      allow read: if isSignedIn();
       allow write: if false; // Protege contra escrita client-side
     }
 

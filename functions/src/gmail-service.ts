@@ -102,7 +102,7 @@ export async function sendEmail(
   try {
     console.log(`[EmailService] Iniciando montagem do email para: ${to.join(", ")}`);
     
-    const gmail = google.gmail({ version: "v1", auth });
+    const gmail = google.gmail({ version: "v1", auth: auth as any });
     
     // Codificação Base64URL para RFC 2822
     const utf8Subject = `=?utf-8?B?${Buffer.from(subject).toString("base64")}?=`;

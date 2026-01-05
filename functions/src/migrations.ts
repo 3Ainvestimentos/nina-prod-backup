@@ -1,5 +1,7 @@
-import * as functions from "firebase-functions";
-import { admin, db } from "./admin-app";
+// functions/src/migrations.ts
+import * as functions from "firebase-functions/v1";
+import { auth, db, FieldValue } from "./admin-app";
+import { encrypt, markAsEncrypted, isEncrypted } from "./kms-utils";
 
 const REGION = process.env.FUNCTIONS_REGION || "us-central1";
 
@@ -12,21 +14,14 @@ interface MigrationResult {
   details: Array<{ sourceId: string; targetId?: string; action: string; reason?: string }>;
 }
 
-/**
- * Migra googleAuth.refreshToken salvo em docs `employees/{uid}` para o doc do funcionário encontrado por e-mail.
- * Requer usuário autenticado com claim `isAdmin`.
- * Parâmetros:
- *  - dryRun?: boolean (default true) -> não grava, apenas simula
- *  - limit?: number (default 500)   -> quantidade máxima de docs a escanear por chamada
- */
 export const migrateGoogleAuthTokens = functions
   .region(REGION)
-  .https.onCall(async (data: { dryRun?: boolean; limit?: number } | undefined, context) => {
+  .https.onCall(async (data, context) => {
     if (!context.auth || context.auth.token.isAdmin !== true) {
       throw new functions.https.HttpsError("permission-denied", "Somente administradores podem rodar a migração.");
     }
 
-    const dryRun = data?.dryRun !== false; // default true
+    const dryRun = data?.dryRun !== false;
     const limit = Math.min(Math.max(Number(data?.limit ?? 500), 1), 2000);
 
     const result: MigrationResult = {
@@ -41,16 +36,13 @@ export const migrateGoogleAuthTokens = functions
     const snapshot = await db.collection("employees").limit(limit).get();
     for (const doc of snapshot.docs) {
       result.scanned += 1;
-      const data = doc.data() as any;
-      const googleAuth = data?.googleAuth;
-      if (!googleAuth?.refreshToken) {
-        continue; // não é candidato
-      }
+      const docData = doc.data() as any;
+      const googleAuth = docData?.googleAuth;
+      if (!googleAuth?.refreshToken) continue;
 
-      // Detecta se o docId parece ser um UID válido (existe no auth)
-      let userRecord: admin.auth.UserRecord | null = null;
+      let userRecord: any = null;
       try {
-        userRecord = await admin.auth().getUser(doc.id);
+        userRecord = await auth.getUser(doc.id);
       } catch (_e) {
         userRecord = null;
       }
@@ -62,8 +54,6 @@ export const migrateGoogleAuthTokens = functions
       }
 
       result.candidates += 1;
-
-      // Encontra destino por e-mail
       const targetSnaps = await db.collection("employees").where("email", "==", userRecord.email).get();
       if (targetSnaps.empty) {
         result.skipped += 1;
@@ -71,7 +61,6 @@ export const migrateGoogleAuthTokens = functions
         continue;
       }
 
-      // Usa o primeiro (esperado ser único)
       const targetDoc = targetSnaps.docs[0];
       const targetId = targetDoc.id;
 
@@ -92,24 +81,61 @@ export const migrateGoogleAuthTokens = functions
                 scope: googleAuth.scope ?? null,
                 tokenType: googleAuth.tokenType ?? null,
                 expiryDate: googleAuth.expiryDate ?? null,
-                updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+                updatedAt: FieldValue.serverTimestamp(),
               },
             },
             { merge: true }
           );
-          // Remove do doc de origem para evitar duplicidade
-          batch.set(doc.ref, { googleAuth: admin.firestore.FieldValue.delete() }, { merge: true });
+          batch.update(doc.ref, { googleAuth: FieldValue.delete() });
           await batch.commit();
         }
         result.moved += 1;
-        result.details.push({ sourceId: doc.id, targetId, action: dryRun ? "would-move" : "moved" });
-      } catch (e) {
+        result.details.push({ sourceId: doc.id, targetId, action: "moved" });
+      } catch (e: any) {
         result.errors += 1;
-        result.details.push({ sourceId: doc.id, targetId, action: "error", reason: String(e) });
+        result.details.push({ sourceId: doc.id, action: "error", reason: e?.message });
       }
     }
-
-    return { ok: true, dryRun, ...result };
+    return { dryRun, limit, ...result };
   });
 
+export const migrateTokensToEncrypted = functions
+  .region(REGION)
+  .https.onCall(async (data, context) => {
+    if (!context.auth || context.auth.token.isAdmin !== true) {
+      throw new functions.https.HttpsError("permission-denied", "Apenas admins podem rodar migração de segurança.");
+    }
 
+    const dryRun = data?.dryRun !== false;
+    try {
+      const snapshot = await db.collection("employees").get();
+      const results = { scanned: snapshot.size, migrated: 0, skipped: 0, errors: 0 };
+
+      for (const doc of snapshot.docs) {
+        const docData = doc.data();
+        const refreshToken = docData?.googleAuth?.refreshToken;
+
+        if (!refreshToken || isEncrypted(refreshToken)) {
+          results.skipped++;
+          continue;
+        }
+
+        try {
+          if (!dryRun) {
+            const encrypted = await encrypt(refreshToken);
+            await doc.ref.update({
+              "googleAuth.refreshToken": markAsEncrypted(encrypted),
+              "googleAuth.isEncrypted": true,
+              "googleAuth.migratedAt": FieldValue.serverTimestamp(),
+            });
+          }
+          results.migrated++;
+        } catch (e) {
+          results.errors++;
+        }
+      }
+      return { dryRun, ...results };
+    } catch (error: any) {
+      throw new functions.https.HttpsError("internal", error.message);
+    }
+  });

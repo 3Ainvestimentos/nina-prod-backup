@@ -42,8 +42,7 @@ import { cn } from "@/lib/utils";
 import { setDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
-
-type NewInteraction = Omit<Interaction, "id" | "date" | "authorId" | "notes"> & { notes: string | OneOnOneNotes | N3IndividualNotes };
+import DOMPurify from "dompurify";
 
 const initialOneOnOneNotes: OneOnOneNotes = {
     companyGrowth: "",
@@ -160,10 +159,18 @@ export function IndividualTrackingContent({
     });
   }, [managedEmployees]);
 
-  const selectedEmployee = useMemo(() => {
+    const selectedEmployee = useMemo(() => {
     return employees?.find((employee) => employee.id === selectedEmployeeId);
   }, [employees, selectedEmployeeId]);
   
+  // Função auxiliar para sanitizar strings contra XSS
+  const sanitize = useCallback((text: string | undefined | null) => {
+    if (text === undefined || text === null) return "";
+    if (typeof window === 'undefined') return text;
+    // ALLOWED_TAGS: [] remove todas as tags HTML, preservando apenas o texto
+    return DOMPurify.sanitize(text, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] });
+  }, []);
+
   const isLeaderAuthorizedForCalendar = useMemo(() => {
       if (!currentUserEmployee) return false;
       const leaderData = employees?.find(e => e.id === currentUserEmployee.id);
@@ -310,14 +317,25 @@ export function IndividualTrackingContent({
     let isNotesEmpty = true;
 
     if (interactionType === '1:1') {
-        notesToSave = oneOnOneNotes;
-        isNotesEmpty = Object.values(oneOnOneNotes).every(note => note?.trim() === '');
+        notesToSave = {
+            companyGrowth: sanitize(oneOnOneNotes.companyGrowth),
+            leaderGrowth: sanitize(oneOnOneNotes.leaderGrowth),
+            teamGrowth: sanitize(oneOnOneNotes.teamGrowth),
+            personalLife: sanitize(oneOnOneNotes.personalLife),
+            observations: sanitize(oneOnOneNotes.observations),
+        };
+        isNotesEmpty = Object.values(notesToSave).every(note => note?.trim() === '');
     } else if (interactionType === 'N3 Individual') {
-        notesToSave = n3Notes;
-        isNotesEmpty = Object.values(n3Notes).every(note => note?.trim() === '');
+        notesToSave = {
+            ...n3Notes,
+            esforcos: sanitize(n3Notes.esforcos),
+            planoAcao: sanitize(n3Notes.planoAcao)
+        };
+        // Para N3, verificamos se esforcos ou planoAcao foram preenchidos
+        isNotesEmpty = (n3Notes.esforcos ?? '').trim() === '' && (n3Notes.planoAcao ?? '').trim() === '';
     } else {
-        notesToSave = simpleNotes;
-        isNotesEmpty = simpleNotes.trim() === '';
+        notesToSave = sanitize(simpleNotes);
+        isNotesEmpty = notesToSave.trim() === '';
     }
 
     if (isNotesEmpty) {
@@ -647,19 +665,19 @@ export function IndividualTrackingContent({
                                     onSelect={handleDateTimeChange}
                                     initialFocus
                                 />
-                                <div className="p-3 border-t border-border flex items-center gap-2">
-                                  <Clock className="h-4 w-4 text-muted-foreground" />
+                                <div className="p-3 border-t border-border flex items-center justify-center gap-2">
+                                  <Clock className="h-4 w-4 text-muted-foreground shrink-0" />
                                   <Label htmlFor="hours" className="sr-only">Horas</Label>
                                   <Input 
                                       id="hours"
                                       type="number" 
                                       min="0" 
                                       max="23" 
-                                      className="w-16"
+                                      className="w-20 text-center"
                                       value={nextInteractionDate ? getHours(nextInteractionDate).toString().padStart(2, '0') : "00"}
                                       onChange={(e) => handleTimeChange('hours', e.target.value)}
                                   />
-                                  <span>:</span>
+                                  <span className="text-lg font-medium">:</span>
                                   <Label htmlFor="minutes" className="sr-only">Minutos</Label>
                                   <Input 
                                       id="minutes"
@@ -667,7 +685,7 @@ export function IndividualTrackingContent({
                                       min="0" 
                                       max="59" 
                                       step="5"
-                                      className="w-16"
+                                      className="w-20 text-center"
                                       value={nextInteractionDate ? getMinutes(nextInteractionDate).toString().padStart(2, '0') : "00"}
                                       onChange={(e) => handleTimeChange('minutes', e.target.value)}
                                   />

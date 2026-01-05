@@ -48,7 +48,7 @@ import {
 import { CsvUploadDialog } from "@/components/csv-upload-dialog";
 import { InteractionCsvUploadDialog } from "@/components/interaction-csv-upload-dialog";
 import { useState, useMemo, useEffect } from "react";
-import { useCollection, useFirestore, useMemoFirebase, useUser, useFirebase } from "@/firebase";
+import { useCollection, useFirestore, useMemoFirebase, useUser, useFirebase, softDeleteDocument } from "@/firebase";
 import { collection, doc, deleteDoc, updateDoc, setDoc } from "firebase/firestore";
 import { setDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -107,6 +107,7 @@ export default function AdminPage() {
   const [loadingReports, setLoadingReports] = useState(true);
   const [newAdminId, setNewAdminId] = useState<string>("");
   const [invalidEmployees, setInvalidEmployees] = useState<Employee[]>([]);
+  const [hasAdminClaim, setHasAdminClaim] = useState(false);
   
   // Estados para Projetos
   const [isProjectFormOpen, setIsProjectFormOpen] = useState(false);
@@ -142,6 +143,26 @@ export default function AdminPage() {
   
   const { data: projects, isLoading: areProjectsLoading } = useCollection<Project>(projectsCollection);
 
+  // Carregar Custom Claim isAdmin na montagem
+  useEffect(() => {
+    let mounted = true;
+    const loadClaim = async () => {
+      if (!user) {
+        setHasAdminClaim(false);
+        return;
+      }
+      try {
+        const idTokenResult = await user.getIdTokenResult(true); // força refresh
+        if (mounted) setHasAdminClaim(idTokenResult.claims.isAdmin === true);
+      } catch (e) {
+        console.error('Erro ao verificar custom claim isAdmin:', e);
+        if (mounted) setHasAdminClaim(false);
+      }
+    };
+    loadClaim();
+    return () => { mounted = false; };
+  }, [user]);
+
   const checkCustomClaim = async()=>{
     if (!user) {
       console.log ('User not logged in');
@@ -160,6 +181,35 @@ export default function AdminPage() {
       });
     } catch (error) {
       console.error('Erro ao verificar claim:', error);
+    }
+  };
+
+  const checkAdminClaims = async () => {
+    if (!firebaseApp) {
+      toast({ variant: "destructive", title: "Erro", description: "Firebase não inicializado." });
+      return;
+    }
+
+    try {
+      const functions = getFunctions(firebaseApp, 'us-central1');
+      const listAdminClaims = httpsCallable(functions, 'listAdminClaims');
+      const result: any = await listAdminClaims({});
+
+      console.log('Usuários com Custom Claim isAdmin:', result.data);
+      const adminEmails = result.data.admins.map((a: any) => a.email).filter(Boolean).join(', ') || 'Nenhum';
+      
+      toast({
+        title: `Encontrados ${result.data.count} admin(s)`,
+        description: adminEmails,
+        duration: 10000,
+      });
+    } catch (error: any) {
+      console.error("Erro:", error);
+      toast({
+        variant: "destructive",
+        title: "Erro",
+        description: error.message || "Erro ao verificar claims",
+      });
     }
   };
 
@@ -476,13 +526,13 @@ export default function AdminPage() {
   };
 
   const handleDeleteEmployee = async () => {
-    if (!firestore || !employeeToDelete) return;
+    if (!firestore || !employeeToDelete || !user) return;
     const docRef = doc(firestore, "employees", employeeToDelete.id);
     try {
-      await deleteDoc(docRef);
+      await softDeleteDocument(docRef, user.uid);
       toast({
         title: "Funcionário Removido",
-        description: `${employeeToDelete.name} foi removido com sucesso.`,
+        description: `${employeeToDelete.name} foi removido com sucesso (Soft Delete).`,
       });
     } catch (error) {
       console.error("Error deleting employee:", error);
@@ -543,12 +593,29 @@ export default function AdminPage() {
   }
 
   const handlePermissionToggle = async (employeeId: string, field: 'isAdmin', value: boolean) => {
+    if (!hasAdminClaim) {
+      toast({
+        variant: 'destructive',
+        title: 'Permissão negada',
+        description: 'Apenas admins com Custom Claim podem alterar permissões de admin.'
+      });
+      return;
+    }
     if (!firestore) return;
     const docRef = doc(firestore, "employees", employeeId);
     try {
         await updateDoc(docRef, { [field]: value });
+        toast({
+          title: "Permissão atualizada",
+          description: `Admin ${value ? 'adicionado' : 'removido'} com sucesso.`,
+        });
     } catch (error) {
         console.error(error);
+        toast({
+          variant: "destructive",
+          title: "Erro ao alterar permissão",
+          description: "Operação não concluída."
+        });
     }
   }
 
@@ -612,7 +679,7 @@ export default function AdminPage() {
     setSetupLoading(prev => ({...prev, [email]: true}));
     
     try {
-        const functions = getFunctions(firebaseApp, 'southamerica-east1');
+        const functions = getFunctions(firebaseApp, 'us-central1');
         const setupFirstAdmin = httpsCallable(functions, 'setupFirstAdmin');
         
         const result: any = await setupFirstAdmin({ email: email });
@@ -1314,7 +1381,6 @@ export default function AdminPage() {
                                 if (newAdminId) {
                                     handlePermissionToggle(newAdminId, 'isAdmin', true);
                                     setNewAdminId("");
-                                    toast({ title: "Admin adicionado", description: "Permissão concedida com sucesso." });
                                 }
                             }}
                             disabled={!newAdminId}
@@ -1419,14 +1485,50 @@ export default function AdminPage() {
               )}
             
               <Card>
-                <Button onClick= {checkCustomClaim} variant="outline">
-                  Verificar Custom Claims
-                </Button>
+                <CardContent className="space-y-2 pt-6">
+                  <Button onClick={checkCustomClaim} variant="outline" className="w-full">
+                    Verificar Meu Custom Claim
+                  </Button>
+                  <Button onClick={checkAdminClaims} variant="outline" className="w-full">
+                    Listar Todos os Admins (Custom Claims)
+                  </Button>
+                </CardContent>
               </Card>
           </CardContent>
         </Card>
       </TabsContent>
       <TabsContent value="backup">
+        {/* Card de Backups do Firestore */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Backups Automáticos do Firestore</CardTitle>
+            <CardDescription>
+              Backups semanais automáticos (todo domingo às 3h AM). Visualize, teste e gerencie os backups disponíveis.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Info sobre backups automáticos */}
+            <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4 space-y-2">
+              <h4 className="font-semibold text-blue-900 dark:text-blue-100 flex items-center gap-2">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Backups Automáticos Configurados
+              </h4>
+              <p className="text-sm text-blue-800 dark:text-blue-200">
+                • <strong>Frequência:</strong> Toda semana, aos domingos às 3h AM (horário de Brasília)
+              </p>
+              <p className="text-sm text-blue-800 dark:text-blue-200">
+                • <strong>Retenção:</strong> 45 dias (backups mais antigos são deletados automaticamente)
+              </p>
+              <p className="text-sm text-blue-800 dark:text-blue-200">
+                • <strong>Localização:</strong> Google Cloud Storage (projeto protegido)
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Card existente de Backup e Importação */}
         <Card>
             <CardHeader>
                 <CardTitle>Backup e Importação</CardTitle>

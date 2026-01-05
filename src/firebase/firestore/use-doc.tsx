@@ -62,10 +62,11 @@ export function useDoc<T = any>(
     const unsubscribe = onSnapshot(
       memoizedDocRef,
       (snapshot: DocumentSnapshot<DocumentData>) => {
-        if (snapshot.exists()) {
-          setData({ ...(snapshot.data() as T), id: snapshot.id });
+        const docData = snapshot.data();
+        if (snapshot.exists() && (docData as any)?._isDeleted !== true) {
+          setData({ ...(docData as T), id: snapshot.id });
         } else {
-          // Document does not exist
+          // Document does not exist or is soft-deleted
           setData(null);
         }
         setError(null); // Clear any previous error on successful snapshot (even if doc doesn't exist)

@@ -21,8 +21,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { PdiActionFormDialog } from "./pdi-action-form-dialog";
-import { useFirestore } from "@/firebase";
-import { deleteDoc, doc } from "firebase/firestore";
+import { useFirestore, useUser, softDeleteDocument } from "@/firebase";
+import { doc } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 
 type PdiTableProps = {
@@ -36,6 +36,8 @@ export function PdiTable({ pdiActions, employeeId }: PdiTableProps) {
     const firestore = useFirestore();
     const { toast } = useToast();
 
+    const { user } = useUser();
+
     const handleAdd = () => {
         setSelectedAction(undefined);
         setIsFormOpen(true);
@@ -47,13 +49,13 @@ export function PdiTable({ pdiActions, employeeId }: PdiTableProps) {
     };
 
     const handleDelete = async (actionId: string) => {
-        if (!firestore) return;
+        if (!firestore || !user) return;
         const docRef = doc(firestore, "employees", employeeId, "pdiActions", actionId);
         try {
-            await deleteDoc(docRef);
+            await softDeleteDocument(docRef, user.uid);
             toast({
                 title: "Ação Removida",
-                description: "A ação do PDI foi removida com sucesso.",
+                description: "A ação do PDI foi removida com sucesso (Soft Delete).",
             });
         } catch (error) {
             console.error("Error deleting PDI action:", error);

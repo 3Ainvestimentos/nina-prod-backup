@@ -39,6 +39,12 @@ import { ProjectErrors, mapFirestoreError, logValidationError, logProjectSuccess
 import { canUserCreateProjects } from "@/hooks/use-user-projects";
 import { EmployeeSelectionDialog } from "@/components/employee-selection-dialog";
 import { Users } from "lucide-react";
+import DOMPurify from "dompurify";
+
+const sanitize = (text: string) => {
+  if (typeof window === 'undefined') return text;
+  return DOMPurify.sanitize(text, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] });
+};
 
 const formSchema = z.object({
   name: z.string().min(3, "O nome deve ter pelo menos 3 caracteres."),
@@ -182,8 +188,8 @@ export function ProjectFormDialog({
       }
 
       const projectData = {
-        name: data.name,
-        description: data.description,
+        name: sanitize(data.name),
+        description: sanitize(data.description),
         leaderId: leaderData.id,
         leaderName: leaderData.name,
         leaderEmail: leaderData.email,

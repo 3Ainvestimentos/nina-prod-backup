@@ -1,7 +1,7 @@
 
 "use client";
 
-import type { Employee, Role, Interaction, PDIAction, Project } from "@/lib/types";
+import type { Employee, Role, Interaction, PDIAction, Project, PremissasConfig } from "@/lib/types";
 import {
   Card,
   CardContent,
@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { MoreHorizontal, PlusCircle, Upload, ArrowUpDown, X, Filter, User, ShieldCheck, FileDown, HelpCircle, Copy, Pen, Trash, Briefcase } from "lucide-react";
 import { 
   DropdownMenu, 
@@ -83,6 +84,7 @@ type SortConfig = {
 
 import { useIsConfigAdmin } from "@/hooks/use-is-config-admin";
 import { useAppConfig } from "@/hooks/use-app-config";
+import { usePremissasConfig } from "@/hooks/use-premissas-config";
 
 export default function AdminPage() {
   // ========================================
@@ -94,6 +96,7 @@ export default function AdminPage() {
   const { user, isUserLoading } = useUser();
   const { toast } = useToast();
   const { rankingBonusEnabled, maintenanceMode, isLoading: isConfigLoading } = useAppConfig();
+  const { config: premissasConfigFromDB, isLoading: isPremissasConfigLoading } = usePremissasConfig();
   
   const [isCsvDialogOpen, setIsCsvDialogOpen] = useState(false);
   const [isInteractionCsvDialogOpen, setIsInteractionCsvDialogOpen] = useState(false);
@@ -112,6 +115,15 @@ export default function AdminPage() {
   // Estados para Projetos
   const [isProjectFormOpen, setIsProjectFormOpen] = useState(false);
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  
+  // Estados para Configurações de Premissas
+  const [premissasConfig, setPremissasConfig] = useState<PremissasConfig>({
+    cdiAnual: 15,
+    impostoRepasse: 19.33,
+    multiplicadorB2B: 0.50,
+    multiplicadorMINST: 0.25,
+  });
+  const [premissasLoading, setPremissasLoading] = useState(false);
   
   // Filtros e ordenação
   const initialFilters = useMemo(() => ({
@@ -718,6 +730,37 @@ export default function AdminPage() {
             title: "Erro ao Atualizar",
             description: "Não foi possível atualizar a configuração.",
         });
+    }
+  };
+
+  // Atualizar estado local quando as configurações de premissas carregarem do DB
+  useEffect(() => {
+    if (!isPremissasConfigLoading && premissasConfigFromDB) {
+      setPremissasConfig(premissasConfigFromDB);
+    }
+  }, [premissasConfigFromDB, isPremissasConfigLoading]);
+
+  const handleSavePremissasConfig = async () => {
+    if (!firestore) return;
+    
+    setPremissasLoading(true);
+    const configRef = doc(firestore, "configs", "premissas");
+    
+    try {
+      await setDoc(configRef, premissasConfig, { merge: true });
+      toast({
+        title: "Configurações Salvas",
+        description: "As configurações de premissas foram atualizadas com sucesso.",
+      });
+    } catch (error) {
+      console.error("Erro ao salvar configurações de premissas:", error);
+      toast({
+        variant: "destructive",
+        title: "Erro ao Salvar",
+        description: "Não foi possível salvar as configurações de premissas.",
+      });
+    } finally {
+      setPremissasLoading(false);
     }
   };
 
@@ -1345,6 +1388,89 @@ export default function AdminPage() {
                   disabled={isConfigLoading}
                 />
             </div>
+
+            {/* Configurações de Premissas */}
+            <Card className="border-2">
+              <CardHeader>
+                <CardTitle className="text-lg">Configurações de Premissas</CardTitle>
+                <CardDescription>
+                  Configure os parâmetros para cálculos de projeções anuais (AUC e Receita).
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">CDI Anual (%)</label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={premissasConfig.cdiAnual}
+                      onChange={(e) => setPremissasConfig(prev => ({ ...prev, cdiAnual: parseFloat(e.target.value) || 0 }))}
+                      placeholder="15.00"
+                      disabled={isPremissasConfigLoading || premissasLoading}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Taxa CDI usada nos cálculos de projeção de AUC
+                    </p>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Imposto Repasse (%)</label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={premissasConfig.impostoRepasse}
+                      onChange={(e) => setPremissasConfig(prev => ({ ...prev, impostoRepasse: parseFloat(e.target.value) || 0 }))}
+                      placeholder="19.33"
+                      disabled={isPremissasConfigLoading || premissasLoading}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Porcentagem de imposto sobre o repasse
+                    </p>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Multiplicador B2B</label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={premissasConfig.multiplicadorB2B}
+                      onChange={(e) => setPremissasConfig(prev => ({ ...prev, multiplicadorB2B: parseFloat(e.target.value) || 0 }))}
+                      placeholder="0.50"
+                      disabled={isPremissasConfigLoading || premissasLoading}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Multiplicador para assessores B2B (padrão: 0.50)
+                    </p>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Multiplicador MINST</label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={premissasConfig.multiplicadorMINST}
+                      onChange={(e) => setPremissasConfig(prev => ({ ...prev, multiplicadorMINST: parseFloat(e.target.value) || 0 }))}
+                      placeholder="0.25"
+                      disabled={isPremissasConfigLoading || premissasLoading}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Multiplicador para assessores MINST (padrão: 0.25)
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-4 border-t">
+                  <Button 
+                    onClick={handleSavePremissasConfig}
+                    disabled={isPremissasConfigLoading || premissasLoading}
+                  >
+                    {premissasLoading ? 'Salvando...' : 'Salvar Configurações'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
             <Card>
                 <CardHeader>
                     <div className="flex items-center justify-between">

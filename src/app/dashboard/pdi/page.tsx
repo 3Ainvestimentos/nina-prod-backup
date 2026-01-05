@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import type { Employee, Diagnosis, PDIAction } from "@/lib/types";
+import type { Employee, Diagnosis, PDIAction, Premissas, Interaction } from "@/lib/types";
 import {
   Card,
   CardContent,
@@ -21,7 +21,10 @@ import { Separator } from "@/components/ui/separator";
 import { PdiTable } from "@/components/pdi-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Pen } from "lucide-react";
+import { Pen, Plus } from "lucide-react";
+import { PremissasFormDialog } from "@/components/premissas-form-dialog";
+import { PremissasCard } from "@/components/premissas-card";
+import { usePremissasConfig } from "@/hooks/use-premissas-config";
 import { formatDate, cn } from "@/lib/utils";
 import { useCollection, useFirestore, useMemoFirebase, useUser } from "@/firebase";
 import { collection } from "firebase/firestore";
@@ -33,9 +36,11 @@ const adminEmails = ['matheus@3ainvestimentos.com.br', 'lucas.nogueira@3ainvesti
 export default function PdiPage() {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string | null>(null);
   const [isDiagnosisFormOpen, setIsDiagnosisFormOpen] = useState(false);
+  const [isPremissasFormOpen, setIsPremissasFormOpen] = useState(false);
   
   const firestore = useFirestore();
   const { user } = useUser();
+  const { config: premissasConfig, isLoading: isPremissasConfigLoading } = usePremissasConfig();
 
   const employeesCollection = useMemoFirebase(
     () => (firestore && user ? collection(firestore, "employees") : null),
@@ -48,6 +53,27 @@ export default function PdiPage() {
     [firestore, selectedEmployeeId]
   );
   const { data: pdiActions, isLoading: arePdiActionsLoading } = useCollection<PDIAction>(pdiActionsCollection);
+
+  // Premissas do colaborador selecionado
+  const premissasCollection = useMemoFirebase(
+    () => (firestore && selectedEmployeeId ? collection(firestore, "employees", selectedEmployeeId, "premissas") : null),
+    [firestore, selectedEmployeeId]
+  );
+  const { data: premissasList, isLoading: arePremissasLoading } = useCollection<Premissas>(premissasCollection);
+
+  // Interações N3 do colaborador (para cálculo do realizado)
+  const interactionsCollection = useMemoFirebase(
+    () => (firestore && selectedEmployeeId ? collection(firestore, "employees", selectedEmployeeId, "interactions") : null),
+    [firestore, selectedEmployeeId]
+  );
+  const { data: interactions, isLoading: areInteractionsLoading } = useCollection<Interaction>(interactionsCollection);
+
+  // Pegar premissas do ano atual
+  const currentYear = new Date().getFullYear();
+  const premissasAnoAtual = useMemo(() => {
+    if (!premissasList) return null;
+    return premissasList.find(p => p.year === currentYear) || null;
+  }, [premissasList, currentYear]);
   
   const currentUserEmployee = useMemo(() => {
     if (!user || !employees) return null;
@@ -212,15 +238,69 @@ export default function PdiPage() {
                     )}
                 </CardContent>
             </Card>
+
+            {/* Seção de Premissas e Projeções */}
+            {arePremissasLoading || isPremissasConfigLoading ? (
+                <div className="space-y-6">
+                    <Skeleton className="h-[400px] w-full" />
+                    <Skeleton className="h-[400px] w-full" />
+                </div>
+            ) : premissasAnoAtual ? (
+                <>
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <h2 className="text-2xl font-bold tracking-tight">Premissas e Projeções</h2>
+                            <p className="text-muted-foreground">
+                                Acompanhe as metas anuais e projeções de AUC e Receita de {selectedEmployee?.name}.
+                            </p>
+                        </div>
+                    </div>
+                    <PremissasCard 
+                        premissas={premissasAnoAtual}
+                        config={premissasConfig}
+                        interactions={interactions ?? []}
+                    />
+                </>
+            ) : (
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between">
+                        <div>
+                            <CardTitle>Premissas e Projeções</CardTitle>
+                            <CardDescription>
+                                Acompanhe as metas anuais e projeções de AUC e Receita de {selectedEmployee?.name}.
+                            </CardDescription>
+                        </div>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-center py-12 text-muted-foreground">
+                            <p className="mb-4">Nenhuma premissa definida para {currentYear}.</p>
+                            <Button 
+                                variant="outline" 
+                                onClick={() => setIsPremissasFormOpen(true)}
+                            >
+                                <Plus className="mr-2 h-4 w-4"/>
+                                Criar Premissas
+                            </Button>
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
         </>
       )}
 
       {selectedEmployee && (
-        <DiagnosisFormDialog 
-            open={isDiagnosisFormOpen}
-            onOpenChange={setIsDiagnosisFormOpen}
-            employee={selectedEmployee}
-        />
+        <>
+          <DiagnosisFormDialog 
+              open={isDiagnosisFormOpen}
+              onOpenChange={setIsDiagnosisFormOpen}
+              employee={selectedEmployee}
+          />
+          <PremissasFormDialog
+              open={isPremissasFormOpen}
+              onOpenChange={setIsPremissasFormOpen}
+              employee={selectedEmployee}
+          />
+        </>
       )}
     </div>
   );

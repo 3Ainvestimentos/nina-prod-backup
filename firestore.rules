@@ -53,6 +53,11 @@ service cloud.firestore {
       match /meetings/{meetingId} {
         allow read, write: if isSignedIn();
       }
+
+      match /premissas/{premissaId} {
+        // Premissas anuais do colaborador (metas de AUC, Captação, Churn, ROA)
+        allow read, write: if isSignedIn();
+      }
     }
 
     /**

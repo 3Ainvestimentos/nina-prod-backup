@@ -165,3 +165,27 @@ export interface ProjectInteractionNotes {
   indicator?: string; // Indicador de posição (1º, 2º, 3º, etc)
   customData?: { [key: string]: any }; // Dados customizados
 }
+
+// ============================
+// PREMISSAS E PROJEÇÕES
+// ============================
+
+export interface PremissasConfig {
+  cdiAnual: number; // Taxa CDI anual (%)
+  impostoRepasse: number; // Imposto sobre repasse (%)
+  multiplicadorB2B: number; // Multiplicador para assessores B2B (padrão: 0.50)
+  multiplicadorMINST: number; // Multiplicador para assessores MINST (padrão: 0.25)
+}
+
+export interface Premissas {
+  id: string;
+  employeeId: string;
+  year: number; // Ano da premissa (ex: 2026)
+  aucInicial: number; // AUC inicial (Assets Under Custody)
+  captacaoPrevista: number; // Captação prevista anual
+  churnPrevisto: number; // Churn previsto anual
+  roaPrevisto: number; // ROA previsto (%)
+  tipoAssessor: "B2B" | "MINST"; // Tipo de assessor (detectado ou manual)
+  createdAt: string; // ISO 8601
+  createdBy: string; // Email do líder que criou
+}

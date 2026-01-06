@@ -143,7 +143,7 @@ export default function PdiPage() {
   const diagnosis = selectedEmployee?.diagnosis;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full overflow-hidden">
       <Card>
         <CardHeader>
           <CardTitle>Seleção de Colaborador</CardTitle>
@@ -249,9 +249,9 @@ export default function PdiPage() {
                 <>
                     <div className="flex items-center justify-between">
                         <div>
-                            <h2 className="text-2xl font-bold tracking-tight">Premissas e Projeções</h2>
+                            <h2 className="text-2xl font-bold tracking-tight">Plano Comercial</h2>
                             <p className="text-muted-foreground">
-                                Acompanhe as metas anuais e projeções de AUC e Receita de {selectedEmployee?.name}.
+                                Acompanhe as metas anuais e projeções de AUC e Repasse de {selectedEmployee?.name}.
                             </p>
                         </div>
                     </div>
@@ -265,9 +265,9 @@ export default function PdiPage() {
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between">
                         <div>
-                            <CardTitle>Premissas e Projeções</CardTitle>
+                            <CardTitle>Plano Comercial</CardTitle>
                             <CardDescription>
-                                Acompanhe as metas anuais e projeções de AUC e Receita de {selectedEmployee?.name}.
+                                Acompanhe as metas anuais e projeções de AUC e Repasse de {selectedEmployee?.name}.
                             </CardDescription>
                         </div>
                     </CardHeader>

@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, ResponsiveContainer } from "recharts";
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend } from "recharts";
 import type { Premissas, PremissasConfig, Interaction } from "@/lib/types";
 
 interface PremissasCardProps {
@@ -286,111 +286,107 @@ export function PremissasCard({ premissas, config, interactions }: PremissasCard
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 w-full">
       {/* Card de AUC */}
-      <Card>
+      <Card className="w-full overflow-hidden">
         <CardHeader>
           <CardTitle>AUC</CardTitle>
           <CardDescription>
             Projeção vs Realizado - {premissas.year}
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-4">
           <ChartContainer
             config={{
               projetado: {
                 label: "Projetado",
-                color: "hsl(var(--chart-1))",
+                color: "hsl(220, 9%, 60%)",
               },
               realizado: {
                 label: "Realizado",
-                color: "hsl(var(--chart-2))",
+                color: "hsl(170, 60%, 50%)",
               },
             }}
-            className="h-[300px]"
+            className="h-[300px] w-full"
           >
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={dadosAUC}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="mes" />
-                <YAxis tickFormatter={(value) => formatarMoeda(value)} />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <Legend 
-                  payload={[
-                    { value: 'Projetado', type: 'line', color: 'hsl(var(--chart-1))' },
-                    { value: 'Realizado', type: 'line', color: 'hsl(var(--chart-2))' }
-                  ]}
-                />
+            <LineChart data={dadosAUC} margin={{ left: 20, right: 10 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="mes" />
+              <YAxis tickFormatter={(value) => formatarMoeda(value)} width={100} />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              <Legend 
+                payload={[
+                  { value: 'Projetado', type: 'line', color: 'hsl(220, 9%, 60%)' },
+                  { value: 'Realizado', type: 'line', color: 'hsl(170, 60%, 50%)' }
+                ]}
+              />
+              <Line
+                type="monotone"
+                dataKey="projetado"
+                stroke="hsl(220, 9%, 60%)"
+                strokeWidth={2}
+                name="Projetado"
+              />
+              {temDadosReaisAUC && (
                 <Line
                   type="monotone"
-                  dataKey="projetado"
-                  stroke="hsl(var(--chart-1))"
+                  dataKey="realizado"
+                  stroke="hsl(170, 60%, 50%)"
                   strokeWidth={2}
-                  name="Projetado"
+                  name="Realizado"
                 />
-                {temDadosReaisAUC && (
-                  <Line
-                    type="monotone"
-                    dataKey="realizado"
-                    stroke="hsl(var(--chart-2))"
-                    strokeWidth={2}
-                    name="Realizado"
-                  />
-                )}
-              </LineChart>
-            </ResponsiveContainer>
+              )}
+            </LineChart>
           </ChartContainer>
         </CardContent>
       </Card>
 
       {/* Card de Receita */}
-      <Card>
+      <Card className="w-full overflow-hidden">
         <CardHeader>
-          <CardTitle>Receita / Repasse</CardTitle>
+          <CardTitle>Repasse</CardTitle>
           <CardDescription>
             Projeção vs Realizado - {premissas.year} (Tipo: {premissas.tipoAssessor})
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="p-4">
           <ChartContainer
             config={{
               projetado: {
                 label: "Projetado",
-                color: "hsl(var(--chart-3))",
+                color: "hsl(220, 9%, 60%)",
               },
               realizado: {
                 label: "Realizado",
-                color: "hsl(var(--chart-4))",
+                color: "hsl(170, 60%, 50%)",
               },
             }}
-            className="h-[300px]"
+            className="h-[300px] w-full"
           >
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={dadosReceita}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="mes" />
-                <YAxis tickFormatter={(value) => formatarMoeda(value)} />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <Legend 
-                  payload={[
-                    { value: 'Projetado', type: 'rect', color: 'hsl(var(--chart-3))' },
-                    { value: 'Realizado', type: 'rect', color: 'hsl(var(--chart-4))' }
-                  ]}
-                />
+            <BarChart data={dadosReceita} margin={{ left: 20, right: 10 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="mes" />
+              <YAxis tickFormatter={(value) => formatarMoeda(value)} width={100} />
+              <ChartTooltip content={<ChartTooltipContent />} />
+              <Legend 
+                payload={[
+                  { value: 'Projetado', type: 'rect', color: 'hsl(220, 9%, 60%)' },
+                  { value: 'Realizado', type: 'rect', color: 'hsl(170, 60%, 50%)' }
+                ]}
+              />
+              <Bar
+                dataKey="projetado"
+                fill="hsl(220, 9%, 60%)"
+                name="Projetado"
+              />
+              {temDadosReaisReceita && (
                 <Bar
-                  dataKey="projetado"
-                  fill="hsl(var(--chart-3))"
-                  name="Projetado"
+                  dataKey="realizado"
+                  fill="hsl(170, 60%, 50%)"
+                  name="Realizado"
                 />
-                {temDadosReaisReceita && (
-                  <Bar
-                    dataKey="realizado"
-                    fill="hsl(var(--chart-4))"
-                    name="Realizado"
-                  />
-                )}
-              </BarChart>
-            </ResponsiveContainer>
+              )}
+            </BarChart>
           </ChartContainer>
         </CardContent>
       </Card>

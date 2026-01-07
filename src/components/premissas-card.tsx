@@ -26,15 +26,17 @@ function calcularCDIMensal(cdiAnual: number): number {
 function calcularProjecaoAUC(premissas: Premissas, cdiMensal: number): Array<{ mes: string; projetado: number }> {
   const meses = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
   const captacaoMensal = premissas.captacaoPrevista / 12;
-  const churnMensal = premissas.churnPrevisto / 12;
+  const churnAnualPercentual = premissas.churnPrevisto; // Churn anual em %
+  const churnMensalPercentual = churnAnualPercentual / 12; // Churn mensal em %
   
   let aucAtual = premissas.aucInicial;
   const projecao: Array<{ mes: string; projetado: number }> = [];
 
   for (let i = 0; i < 12; i++) {
-    // AUC = AUC_anterior + (CDI_mensal × AUC_anterior / 100) - Churn_mensal + Captação_mensal
+    // AUC = AUC_anterior + (CDI_mensal × AUC_anterior / 100) - (Churn_mensal% × AUC_anterior / 100) + Captação_mensal
     const rendimentoCDI = (aucAtual * cdiMensal) / 100;
-    aucAtual = aucAtual + rendimentoCDI - churnMensal + captacaoMensal;
+    const churnMes = (aucAtual * churnMensalPercentual) / 100; // Churn como % do AUC atual
+    aucAtual = aucAtual + rendimentoCDI - churnMes + captacaoMensal;
     
     projecao.push({
       mes: meses[i],
@@ -202,9 +204,10 @@ function calcularRealizadoReceita(
       const roaString = (notes?.roa || "0").toString().replace(',', '.');
       const roaRealizado = parseFloat(roaString) || 0;
       
-      // ROA já vem em % (ex: 0.4 = 0.4%)
+      // ROA da N3 é anual (ex: 0.4 = 0.4% ao ano)
+      // Dividir por 12 para obter o ROA mensal
       const roaAnualDecimal = roaRealizado / 100;
-      const roaMensalDecimal = roaAnualDecimal / 12; // ROA mensal
+      const roaMensalDecimal = roaAnualDecimal / 12;
       
       // Calcular receita: (ROA_mensal × AUC) × (1 - imposto) × multiplicador
       const receitaBruta = roaMensalDecimal * aucDoMes;

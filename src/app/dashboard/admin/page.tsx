@@ -125,6 +125,9 @@ export default function AdminPage() {
   });
   const [premissasLoading, setPremissasLoading] = useState(false);
   
+  // Estado para controlar aba ativa (permite trocar antes de carregar)
+  const [activeTab, setActiveTab] = useState<string>("employees");
+
   // Filtros e ordenação
   const initialFilters = useMemo(() => ({
     name: new Set<string>(),
@@ -963,7 +966,7 @@ export default function AdminPage() {
 
   return (
     <>
-    <Tabs defaultValue="employees" className="w-full">
+    <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
       <TabsList className="grid w-full grid-cols-6">
         <TabsTrigger value="employees">Funcionários</TabsTrigger>
         <TabsTrigger value="teams">Equipes</TabsTrigger>
@@ -973,6 +976,7 @@ export default function AdminPage() {
         <TabsTrigger value="backup">Backup & Import</TabsTrigger>
       </TabsList>
       <TabsContent value="employees">
+        {activeTab === "employees" && (
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -1145,8 +1149,10 @@ export default function AdminPage() {
             </div>
           </CardContent>
         </Card>
+        )}
       </TabsContent>
        <TabsContent value="teams">
+        {activeTab === "teams" && (
         <div className="space-y-4">
             <Card>
                 <CardHeader>
@@ -1237,10 +1243,12 @@ export default function AdminPage() {
             </CardContent>
             </Card>
         </div>
+        )}
       </TabsContent>
       
       {/* TAB DE PROJETOS */}
       <TabsContent value="projects">
+        {activeTab === "projects" && (
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -1338,9 +1346,11 @@ export default function AdminPage() {
             )}
           </CardContent>
         </Card>
+        )}
       </TabsContent>
       
       <TabsContent value="reports">
+        {activeTab === "reports" && (
         <div className="space-y-6">
             <ReportTable
                 title="Colaboradores Sem Diagnóstico Profissional"
@@ -1349,8 +1359,10 @@ export default function AdminPage() {
                 isLoading={isLoading}
             />
         </div>
+        )}
       </TabsContent>
       <TabsContent value="settings">
+        {activeTab === "settings" && (
         <Card>
           <CardHeader>
             <CardTitle>Configurações Gerais</CardTitle>
@@ -1622,8 +1634,11 @@ export default function AdminPage() {
               </Card>
           </CardContent>
         </Card>
+        )}
       </TabsContent>
       <TabsContent value="backup">
+        {activeTab === "backup" && (
+        <>
         {/* Card de Backups do Firestore */}
         <Card className="mb-6">
           <CardHeader>
@@ -1767,6 +1782,8 @@ export default function AdminPage() {
                 </div>
             </CardContent>
         </Card>
+        </>
+        )}
       </TabsContent>
 
     </Tabs>

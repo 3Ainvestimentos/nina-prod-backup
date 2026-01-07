@@ -184,7 +184,7 @@ export function PremissasFormDialog({ open, onOpenChange, employee }: PremissasF
 
             {/* Churn Previsto */}
             <div className="grid gap-2">
-              <Label htmlFor="churnPrevisto">Churn Previsto Anual (R$)</Label>
+              <Label htmlFor="churnPrevisto">Churn Previsto Anual (%)</Label>
               <Input
                 id="churnPrevisto"
                 type="number"
@@ -193,7 +193,7 @@ export function PremissasFormDialog({ open, onOpenChange, employee }: PremissasF
                 onChange={(e) => setFormData(prev => ({ ...prev, churnPrevisto: e.target.value }))}
               />
               <p className="text-xs text-muted-foreground">
-                Expectativa de saída de recursos no ano
+                Expectativa de saída de recursos no ano (em % do AUC)
               </p>
             </div>
 

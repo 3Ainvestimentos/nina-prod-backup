@@ -65,8 +65,10 @@ export function ProjectMemberTracker({
         type: "Feedback" as const,
         date: interaction.date,
         notes: typeof interaction.notes === 'object' && interaction.notes !== null && 'content' in interaction.notes
-          ? (interaction.notes as { content: string }).content
-          : JSON.stringify(interaction.notes),
+          ? interaction.notes as { content: string; indicator?: string }  // Preserva estrutura completa com indicator
+          : typeof interaction.notes === 'string' 
+            ? interaction.notes 
+            : JSON.stringify(interaction.notes),
         authorId: interaction.authorId,
         // Adicionar botão de edição na timeline
         actions: (isLeader || isAdmin) ? (

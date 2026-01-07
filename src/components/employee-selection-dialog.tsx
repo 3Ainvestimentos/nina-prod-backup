@@ -44,18 +44,22 @@ export function EmployeeSelectionDialog({
   isLoading,
   title = "Selecionar Colaboradores",
 }: EmployeeSelectionDialogProps) {
-    const initialFilters = {
+    const [filters, setFilters] = useState(() => ({
         name: new Set<string>(),
         area: new Set<string>(),
         position: new Set<string>(),
         leader: new Set<string>(),
-    };
-    const [filters, setFilters] = useState(initialFilters);
+    }));
     const [localSelectedIds, setLocalSelectedIds] = useState(selectedIds);
 
+  // Sincronizar apenas quando o dialog ABRE (não a cada mudança de selectedIds)
+  // para evitar loop infinito de re-renders
   useEffect(() => {
-    setLocalSelectedIds(selectedIds);
-  }, [selectedIds, open]);
+    if (open) {
+      setLocalSelectedIds(selectedIds);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
   
   const { uniqueNames, uniqueAreas, uniquePositions, uniqueLeaders } = useMemo(() => {
     if (!allEmployees) return { uniqueNames: [], uniqueAreas: [], uniquePositions: [], uniqueLeaders: [] };
@@ -119,7 +123,12 @@ export function EmployeeSelectionDialog({
 
     const isFilterActive = Object.values(filters).some(s => s.size > 0);
 
-    const clearFilters = () => setFilters(initialFilters);
+    const clearFilters = () => setFilters({
+        name: new Set<string>(),
+        area: new Set<string>(),
+        position: new Set<string>(),
+        leader: new Set<string>(),
+    });
 
     const FilterComponent = ({ title, filterKey, options }: { title: string, filterKey: keyof typeof filters, options: string[]}) => (
         <div className="flex items-center gap-1">
@@ -218,6 +227,15 @@ export function EmployeeSelectionDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancelar
           </Button>
+          <Button onClick={handleConfirm}>
+            Confirmar ({localSelectedIds.length} selecionado(s))
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
           <Button onClick={handleConfirm}>
             Confirmar ({localSelectedIds.length} selecionado(s))
           </Button>

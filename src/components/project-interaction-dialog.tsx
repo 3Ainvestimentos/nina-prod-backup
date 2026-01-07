@@ -173,7 +173,9 @@ export function ProjectInteractionDialog({
           const employeeInteractionData = {
             type: "Feedback" as const, // Interações de projetos são Feedback
             date: interactionData.date,
-            notes: sanitize(data.content), // Usar string simples para compatibilidade com Interaction
+            notes: data.indicator 
+              ? { content: sanitize(data.content), indicator: sanitize(data.indicator) }  // Objeto com indicador
+              : sanitize(data.content), // String simples se não tem indicador
             authorId: currentUser.id,
             source: "project", // Marcar origem como projeto
             projectId: project.id, // Referência ao projeto (opcional, mas útil para rastreabilidade)
@@ -344,4 +346,6 @@ export function ProjectInteractionDialog({
     </Dialog>
   );
 }
+
+
 

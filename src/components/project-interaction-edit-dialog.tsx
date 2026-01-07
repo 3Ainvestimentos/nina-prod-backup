@@ -147,11 +147,13 @@ export function ProjectInteractionEditDialog({
         if (!querySnapshot.empty) {
           const syncPromises = querySnapshot.docs.map(syncDoc => {
             console.log('📝 [PROJECT_INTERACTION_EDIT] Atualizando documento espelho:', syncDoc.id);
+            // Salvar notes como objeto quando há indicador, string simples caso contrário
+            const notesForEmployee = updatedNotes.indicator
+              ? { content: updatedNotes.content, indicator: updatedNotes.indicator }
+              : updatedNotes.content;
+            
             return updateDoc(syncDoc.ref, {
-              notes: updatedNotes.content, // Dashboard individual usa string simples em 'notes' para Feedback
-              // Se o dashboard suportar objetos em notes futuramente, poderíamos passar o objeto todo
-              // No momento, src/components/timeline.tsx suporta tanto string quanto objeto
-              indicator: updatedNotes.indicator,
+              notes: notesForEmployee,
               updatedAt: new Date().toISOString()
             });
           });
@@ -270,4 +272,6 @@ export function ProjectInteractionEditDialog({
     </Dialog>
   );
 }
+
+
 

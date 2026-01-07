@@ -975,7 +975,7 @@ export default function AdminPage() {
         <TabsTrigger value="settings">Geral</TabsTrigger>
         <TabsTrigger value="backup">Backup & Import</TabsTrigger>
       </TabsList>
-      <TabsContent value="employees">
+      <TabsContent value="employees" forceMount className={activeTab !== "employees" ? "hidden" : ""}>
         {activeTab === "employees" && (
         <Card>
           <CardHeader>
@@ -1151,7 +1151,7 @@ export default function AdminPage() {
         </Card>
         )}
       </TabsContent>
-       <TabsContent value="teams">
+       <TabsContent value="teams" forceMount className={activeTab !== "teams" ? "hidden" : ""}>
         {activeTab === "teams" && (
         <div className="space-y-4">
             <Card>
@@ -1247,7 +1247,7 @@ export default function AdminPage() {
       </TabsContent>
       
       {/* TAB DE PROJETOS */}
-      <TabsContent value="projects">
+      <TabsContent value="projects" forceMount className={activeTab !== "projects" ? "hidden" : ""}>
         {activeTab === "projects" && (
         <Card>
           <CardHeader>
@@ -1349,7 +1349,7 @@ export default function AdminPage() {
         )}
       </TabsContent>
       
-      <TabsContent value="reports">
+      <TabsContent value="reports" forceMount className={activeTab !== "reports" ? "hidden" : ""}>
         {activeTab === "reports" && (
         <div className="space-y-6">
             <ReportTable
@@ -1361,7 +1361,7 @@ export default function AdminPage() {
         </div>
         )}
       </TabsContent>
-      <TabsContent value="settings">
+      <TabsContent value="settings" forceMount className={activeTab !== "settings" ? "hidden" : ""}>
         {activeTab === "settings" && (
         <Card>
           <CardHeader>
@@ -1636,7 +1636,7 @@ export default function AdminPage() {
         </Card>
         )}
       </TabsContent>
-      <TabsContent value="backup">
+      <TabsContent value="backup" forceMount className={activeTab !== "backup" ? "hidden" : ""}>
         {activeTab === "backup" && (
         <>
         {/* Card de Backups do Firestore */}
@@ -1813,6 +1813,23 @@ export default function AdminPage() {
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Você tem certeza?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Essa ação não pode ser desfeita. Isso irá remover permanentemente o funcionário
+            "{employeeToDelete?.name}" do banco de dados.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+          <AlertDialogAction onClick={handleDeleteEmployee} className="bg-destructive hover:bg-destructive/90">
+            Remover
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
+  );
+}
+
           <AlertDialogDescription>
             Essa ação não pode ser desfeita. Isso irá remover permanentemente o funcionário
             "{employeeToDelete?.name}" do banco de dados.

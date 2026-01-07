@@ -1,6 +1,6 @@
 
 
-import type { Interaction, OneOnOneNotes, N3IndividualNotes, N2IndividualNotes, QualityIndexNotes } from "@/lib/types";
+import type { Interaction, OneOnOneNotes, N3IndividualNotes, N2IndividualNotes, QualityIndexNotes, FeedbackNotes } from "@/lib/types";
 import {
   MessageSquare,
   Users,
@@ -124,6 +124,10 @@ const OneOnOneDetails = ({ notes }: { notes: OneOnOneNotes }) => (
 
   function isQualityIndexNotes(notes: any): notes is QualityIndexNotes {
     return notes && typeof notes.performanceTime !== 'undefined' && typeof notes.qualityScore !== 'undefined';
+  }
+
+  function isFeedbackNotes(notes: any): notes is FeedbackNotes {
+    return notes && typeof notes === 'object' && typeof notes.content === 'string';
   }
 
   const N2IndividualDetails = ({ notes }: { notes: N2IndividualNotes }) => (
@@ -301,19 +305,16 @@ const OneOnOneDetails = ({ notes }: { notes: OneOnOneNotes }) => (
               Índice de Qualidade: {item.qualityScore}
             </div>
         )}
-        {item.type === 'Feedback' && typeof item.notes === 'object' && item.notes && 'indicator' in item.notes && (() => {
-          const indicator = (item.notes as { indicator: unknown }).indicator;
-          return indicator ? (
-            <div className="text-sm font-bold text-foreground mt-2">
-              Indicador: {String(indicator)}
-            </div>
-          ) : null;
-        })()}
+        {item.type === 'Feedback' && typeof item.notes === 'object' && item.notes && 'indicator' in item.notes && (item.notes as { indicator?: string }).indicator && (
+          <div className="text-sm font-bold text-foreground mt-2">
+            {(item.notes as { indicator: string }).indicator}
+          </div>
+        )}
         <div className="mt-2 text-sm">
             {typeof item.notes === 'string' && item.type === 'Feedback' ? (
                  <p className="whitespace-pre-wrap">{item.notes}</p>
-            ) : typeof item.notes === 'object' && item.type === 'Feedback' && item.notes && 'content' in item.notes ? (
-                 <p className="whitespace-pre-wrap">{String((item.notes as { content: unknown }).content)}</p>
+            ) : item.type === 'Feedback' && typeof item.notes === 'object' && item.notes && 'content' in item.notes ? (
+                 <p className="whitespace-pre-wrap">{(item.notes as any).content}</p>
             ) : typeof item.notes === 'string' && item.type === 'Índice de Risco' ? (
                 <RiskAssessmentDetails notes={item.notes} />
             ) : typeof item.notes === 'string' && (item.type === 'Análise do Índice de Qualidade' || item.type === 'Análise do Índice de Risco') ? (
@@ -403,3 +404,4 @@ export function Timeline({ interactions, isLoading }: { interactions: (Interacti
     </div>
   );
 }
+

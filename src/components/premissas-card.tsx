@@ -21,13 +21,20 @@ function calcularCDIMensal(cdiAnual: number): number {
 }
 
 /**
+ * Calcula o ROA mensal a partir do ROA anual (juros compostos)
+ */
+function calcularROAMensal(roaAnual: number): number {
+  // Fórmula: (1 + ROA_anual/100)^(1/12) - 1
+  return (Math.pow(1 + roaAnual / 100, 1 / 12) - 1) * 100;
+}
+
+/**
  * Calcula a projeção mensal de AUC
  */
 function calcularProjecaoAUC(premissas: Premissas, cdiMensal: number): Array<{ mes: string; projetado: number }> {
   const meses = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
   const captacaoMensal = premissas.captacaoPrevista / 12;
-  const churnAnualPercentual = premissas.churnPrevisto; // Churn anual em %
-  const churnMensalPercentual = churnAnualPercentual / 12; // Churn mensal em %
+  const churnMensalPercentual = premissas.churnPrevisto; // Churn mensal em % (já vem como mensal)
   
   let aucAtual = premissas.aucInicial;
   const projecao: Array<{ mes: string; projetado: number }> = [];
@@ -60,8 +67,8 @@ function calcularProjecaoReceita(
     : config.multiplicadorMINST;
   
   const impostoDecimal = config.impostoRepasse / 100;
-  const roaAnualDecimal = premissas.roaPrevisto / 100;
-  const roaMensalDecimal = roaAnualDecimal / 12; // ROA mensal
+  const roaMensalPercentual = calcularROAMensal(premissas.roaPrevisto); // ROA mensal (juros compostos)
+  const roaMensalDecimal = roaMensalPercentual / 100;
 
   return projecaoAUC.map(({ mes, projetado: auc }) => {
     // Receita = (ROA_mensal × AUC) × (1 - imposto) × multiplicador
@@ -205,9 +212,9 @@ function calcularRealizadoReceita(
       const roaRealizado = parseFloat(roaString) || 0;
       
       // ROA da N3 é anual (ex: 0.4 = 0.4% ao ano)
-      // Dividir por 12 para obter o ROA mensal
-      const roaAnualDecimal = roaRealizado / 100;
-      const roaMensalDecimal = roaAnualDecimal / 12;
+      // Converter para mensal usando juros compostos: (1 + ROA_anual)^(1/12) - 1
+      const roaMensalPercentual = calcularROAMensal(roaRealizado);
+      const roaMensalDecimal = roaMensalPercentual / 100;
       
       // Calcular receita: (ROA_mensal × AUC) × (1 - imposto) × multiplicador
       const receitaBruta = roaMensalDecimal * aucDoMes;

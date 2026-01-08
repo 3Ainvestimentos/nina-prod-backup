@@ -1830,19 +1830,3 @@ export default function AdminPage() {
   );
 }
 
-          <AlertDialogDescription>
-            Essa ação não pode ser desfeita. Isso irá remover permanentemente o funcionário
-            "{employeeToDelete?.name}" do banco de dados.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-          <AlertDialogAction onClick={handleDeleteEmployee} className="bg-destructive hover:bg-destructive/90">
-            Remover
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-    </>
-  );
-}

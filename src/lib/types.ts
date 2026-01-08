@@ -187,7 +187,7 @@ export interface Premissas {
   year: number; // Ano da premissa (ex: 2026)
   aucInicial: number; // AUC inicial (Assets Under Custody)
   captacaoPrevista: number; // Captação prevista anual
-  churnPrevisto: number; // Churn previsto anual
+  churnPrevisto: number; // Churn previsto mensal (%)
   roaPrevisto: number; // ROA previsto (%)
   tipoAssessor: "B2B" | "MINST"; // Tipo de assessor (detectado ou manual)
   createdAt: string; // ISO 8601

@@ -236,11 +236,3 @@ export function EmployeeSelectionDialog({
   );
 }
 
-          <Button onClick={handleConfirm}>
-            Confirmar ({localSelectedIds.length} selecionado(s))
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}

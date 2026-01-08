@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,13 +8,14 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useFirestore, useUser } from "@/firebase";
 import { useToast } from "@/hooks/use-toast";
-import { collection, addDoc, Timestamp } from "firebase/firestore";
+import { collection, addDoc, doc, updateDoc, Timestamp } from "firebase/firestore";
 import type { Employee, Premissas } from "@/lib/types";
 
 interface PremissasFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   employee: Employee;
+  premissas?: Premissas; // Se passado, entra em modo edição
 }
 
 /**
@@ -31,23 +32,78 @@ function detectarTipoAssessor(position?: string): "B2B" | "MINST" | null {
   return null; // Não é assessor (ex: Operador)
 }
 
-export function PremissasFormDialog({ open, onOpenChange, employee }: PremissasFormDialogProps) {
+/**
+ * Formata número com separadores de milhar (ex: 1000000 → 1.000.000)
+ * Funciona durante a digitação
+ */
+function formatarNumeroComSeparador(valor: string | number): string {
+  if (valor === "" || valor === null || valor === undefined) return "";
+  
+  // Remove tudo que não for número
+  const apenasNumeros = valor.toString().replace(/\D/g, '');
+  
+  if (!apenasNumeros) return "";
+  
+  // Formata com pontos como separador de milhar
+  return apenasNumeros.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
+
+/**
+ * Remove formatação e converte para número
+ */
+function parseNumeroFormatado(valor: string): number {
+  if (!valor) return 0;
+  // Remove pontos (separador de milhar)
+  const limpo = valor.replace(/\./g, '');
+  return parseFloat(limpo) || 0;
+}
+
+export function PremissasFormDialog({ open, onOpenChange, employee, premissas }: PremissasFormDialogProps) {
   const firestore = useFirestore();
   const { user } = useUser();
   const { toast } = useToast();
   
   const tipoDetectado = detectarTipoAssessor(employee.position);
   const currentYear = new Date().getFullYear();
+  const isEditMode = !!premissas;
   
   const [formData, setFormData] = useState({
-    aucInicial: "" as string | number,
-    captacaoPrevista: "" as string | number,
-    churnPrevisto: "" as string | number,
-    roaPrevisto: "" as string | number,
-    tipoAssessor: tipoDetectado || "B2B",
+    aucInicial: "",
+    captacaoPrevista: "",
+    churnPrevisto: "",
+    roaPrevisto: "",
+    tipoAssessor: tipoDetectado || "B2B" as "B2B" | "MINST",
   });
   
   const [isSaving, setIsSaving] = useState(false);
+
+  // Preencher form com dados existentes quando em modo edição
+  useEffect(() => {
+    if (open && premissas) {
+      setFormData({
+        aucInicial: formatarNumeroComSeparador(premissas.aucInicial),
+        captacaoPrevista: formatarNumeroComSeparador(premissas.captacaoPrevista),
+        churnPrevisto: premissas.churnPrevisto?.toString() || "",
+        roaPrevisto: premissas.roaPrevisto?.toString() || "",
+        tipoAssessor: premissas.tipoAssessor || tipoDetectado || "B2B",
+      });
+    } else if (open && !premissas) {
+      // Reset form quando abre em modo criação
+      setFormData({
+        aucInicial: "",
+        captacaoPrevista: "",
+        churnPrevisto: "",
+        roaPrevisto: "",
+        tipoAssessor: tipoDetectado || "B2B",
+      });
+    }
+  }, [open, premissas, tipoDetectado]);
+
+  const handleCurrencyChange = (field: 'aucInicial' | 'captacaoPrevista', value: string) => {
+    // Formata enquanto digita - remove não-numéricos e adiciona pontos
+    const formatado = formatarNumeroComSeparador(value);
+    setFormData(prev => ({ ...prev, [field]: formatado }));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,8 +118,8 @@ export function PremissasFormDialog({ open, onOpenChange, employee }: PremissasF
     }
 
     // Validações básicas
-    const aucValue = typeof formData.aucInicial === 'string' ? parseFloat(formData.aucInicial) : formData.aucInicial;
-    const roaValue = typeof formData.roaPrevisto === 'string' ? parseFloat(formData.roaPrevisto) : formData.roaPrevisto;
+    const aucValue = parseNumeroFormatado(formData.aucInicial);
+    const roaValue = parseFloat(formData.roaPrevisto) || 0;
     
     if (!aucValue || aucValue <= 0) {
       toast({
@@ -86,29 +142,48 @@ export function PremissasFormDialog({ open, onOpenChange, employee }: PremissasF
     setIsSaving(true);
 
     try {
-      const premissasCollection = collection(
-        firestore,
-        `employees/${employee.id}/premissas`
-      );
-
       const premissasData = {
         employeeId: employee.id,
-        year: currentYear,
-        aucInicial: typeof formData.aucInicial === 'string' ? parseFloat(formData.aucInicial) : formData.aucInicial,
-        captacaoPrevista: typeof formData.captacaoPrevista === 'string' ? parseFloat(formData.captacaoPrevista) || 0 : formData.captacaoPrevista,
-        churnPrevisto: typeof formData.churnPrevisto === 'string' ? parseFloat(formData.churnPrevisto) || 0 : formData.churnPrevisto,
-        roaPrevisto: typeof formData.roaPrevisto === 'string' ? parseFloat(formData.roaPrevisto) : formData.roaPrevisto,
+        year: premissas?.year || currentYear,
+        aucInicial: parseNumeroFormatado(formData.aucInicial),
+        captacaoPrevista: parseNumeroFormatado(formData.captacaoPrevista),
+        churnPrevisto: parseFloat(formData.churnPrevisto) || 0,
+        roaPrevisto: parseFloat(formData.roaPrevisto),
         tipoAssessor: formData.tipoAssessor,
-        createdAt: Timestamp.now().toDate().toISOString(),
-        createdBy: user.email || "",
+        updatedAt: Timestamp.now().toDate().toISOString(),
+        updatedBy: user.email || "",
       };
 
-      await addDoc(premissasCollection, premissasData);
+      if (isEditMode && premissas?.id) {
+        // Modo edição: atualizar documento existente
+        const premissasDocRef = doc(
+          firestore,
+          `employees/${employee.id}/premissas/${premissas.id}`
+        );
+        await updateDoc(premissasDocRef, premissasData);
 
-      toast({
-        title: "Premissas Criadas",
-        description: `As premissas de ${employee.name} para ${currentYear} foram salvas.`,
-      });
+        toast({
+          title: "Plano Comercial Atualizado",
+          description: `O plano comercial de ${employee.name} foi atualizado.`,
+        });
+      } else {
+        // Modo criação: adicionar novo documento
+        const premissasCollection = collection(
+          firestore,
+          `employees/${employee.id}/premissas`
+        );
+        
+        await addDoc(premissasCollection, {
+          ...premissasData,
+          createdAt: Timestamp.now().toDate().toISOString(),
+          createdBy: user.email || "",
+        });
+
+        toast({
+          title: "Plano Comercial Criado",
+          description: `O plano comercial de ${employee.name} para ${currentYear} foi salvo.`,
+        });
+      }
 
       onOpenChange(false);
       
@@ -121,11 +196,11 @@ export function PremissasFormDialog({ open, onOpenChange, employee }: PremissasF
         tipoAssessor: tipoDetectado || "B2B",
       });
     } catch (error) {
-      console.error("Erro ao salvar premissas:", error);
+      console.error("Erro ao salvar plano comercial:", error);
       toast({
         variant: "destructive",
         title: "Erro ao Salvar",
-        description: "Não foi possível salvar as premissas. Tente novamente.",
+        description: "Não foi possível salvar o plano comercial. Tente novamente.",
       });
     } finally {
       setIsSaving(false);
@@ -136,9 +211,11 @@ export function PremissasFormDialog({ open, onOpenChange, employee }: PremissasF
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Definir Premissas - {employee.name}</DialogTitle>
+          <DialogTitle>
+            {isEditMode ? "Editar Plano Comercial" : "Criar Plano Comercial"} - {employee.name}
+          </DialogTitle>
           <DialogDescription>
-            Configure as premissas e metas anuais para {currentYear}.
+            Configure as premissas e metas anuais para {premissas?.year || currentYear}.
             {tipoDetectado && (
               <span className="block mt-1 text-sm font-medium text-primary">
                 Tipo detectado: {tipoDetectado}
@@ -156,11 +233,12 @@ export function PremissasFormDialog({ open, onOpenChange, employee }: PremissasF
               </Label>
               <Input
                 id="aucInicial"
-                type="number"
-                step="0.01"
+                type="text"
+                inputMode="numeric"
+                placeholder="Ex: 1.000.000"
                 required
                 value={formData.aucInicial}
-                onChange={(e) => setFormData(prev => ({ ...prev, aucInicial: e.target.value }))}
+                onChange={(e) => handleCurrencyChange('aucInicial', e.target.value)}
               />
               <p className="text-xs text-muted-foreground">
                 Assets Under Custody - Valor total de ativos sob gestão
@@ -172,10 +250,11 @@ export function PremissasFormDialog({ open, onOpenChange, employee }: PremissasF
               <Label htmlFor="captacaoPrevista">Captação Prevista Anual (R$)</Label>
               <Input
                 id="captacaoPrevista"
-                type="number"
-                step="0.01"
+                type="text"
+                inputMode="numeric"
+                placeholder="Ex: 500.000"
                 value={formData.captacaoPrevista}
-                onChange={(e) => setFormData(prev => ({ ...prev, captacaoPrevista: e.target.value }))}
+                onChange={(e) => handleCurrencyChange('captacaoPrevista', e.target.value)}
               />
               <p className="text-xs text-muted-foreground">
                 Meta de captação de novos recursos para o ano
@@ -184,34 +263,36 @@ export function PremissasFormDialog({ open, onOpenChange, employee }: PremissasF
 
             {/* Churn Previsto */}
             <div className="grid gap-2">
-              <Label htmlFor="churnPrevisto">Churn Previsto Anual (%)</Label>
+              <Label htmlFor="churnPrevisto">Churn Previsto Mensal (%)</Label>
               <Input
                 id="churnPrevisto"
                 type="number"
                 step="0.01"
+                placeholder="Ex: 2"
                 value={formData.churnPrevisto}
                 onChange={(e) => setFormData(prev => ({ ...prev, churnPrevisto: e.target.value }))}
               />
               <p className="text-xs text-muted-foreground">
-                Expectativa de saída de recursos no ano (em % do AUC)
+                Expectativa de saída de recursos mensal (em % do AUC)
               </p>
             </div>
 
             {/* ROA Previsto */}
             <div className="grid gap-2">
               <Label htmlFor="roaPrevisto">
-                ROA Previsto (%) <span className="text-destructive">*</span>
+                ROA Previsto Anual (%) <span className="text-destructive">*</span>
               </Label>
               <Input
                 id="roaPrevisto"
                 type="number"
                 step="0.01"
+                placeholder="Ex: 0.4"
                 required
                 value={formData.roaPrevisto}
                 onChange={(e) => setFormData(prev => ({ ...prev, roaPrevisto: e.target.value }))}
               />
               <p className="text-xs text-muted-foreground">
-                Return on Assets esperado (%)
+                Return on Assets esperado anual (%)
               </p>
             </div>
 
@@ -250,7 +331,7 @@ export function PremissasFormDialog({ open, onOpenChange, employee }: PremissasF
               Cancelar
             </Button>
             <Button type="submit" disabled={isSaving}>
-              {isSaving ? "Salvando..." : "Salvar Premissas"}
+              {isSaving ? "Salvando..." : isEditMode ? "Salvar Alterações" : "Criar Plano Comercial"}
             </Button>
           </DialogFooter>
         </form>
@@ -258,4 +339,3 @@ export function PremissasFormDialog({ open, onOpenChange, employee }: PremissasF
     </Dialog>
   );
 }
-

@@ -21,7 +21,7 @@ import { Separator } from "@/components/ui/separator";
 import { PdiTable } from "@/components/pdi-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Pen, Plus } from "lucide-react";
+import { Pen, Pencil, Plus } from "lucide-react";
 import { PremissasFormDialog } from "@/components/premissas-form-dialog";
 import { PremissasCard } from "@/components/premissas-card";
 import { usePremissasConfig } from "@/hooks/use-premissas-config";
@@ -254,6 +254,14 @@ export default function PdiPage() {
                                 Acompanhe as metas anuais e projeções de AUC e Repasse de {selectedEmployee?.name}.
                             </p>
                         </div>
+                        <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => setIsPremissasFormOpen(true)}
+                        >
+                            <Pencil className="mr-2 h-4 w-4"/>
+                            Editar
+                        </Button>
                     </div>
                     <PremissasCard 
                         premissas={premissasAnoAtual}
@@ -273,13 +281,12 @@ export default function PdiPage() {
                     </CardHeader>
                     <CardContent>
                         <div className="text-center py-12 text-muted-foreground">
-                            <p className="mb-4">Nenhuma premissa definida para {currentYear}.</p>
+                            <p className="mb-4">Nenhum plano comercial definido para {currentYear}.</p>
                             <Button 
-                                variant="outline" 
                                 onClick={() => setIsPremissasFormOpen(true)}
                             >
                                 <Plus className="mr-2 h-4 w-4"/>
-                                Criar Premissas
+                                Criar Plano Comercial
                             </Button>
                         </div>
                     </CardContent>
@@ -299,6 +306,7 @@ export default function PdiPage() {
               open={isPremissasFormOpen}
               onOpenChange={setIsPremissasFormOpen}
               employee={selectedEmployee}
+              premissas={premissasAnoAtual || undefined}
           />
         </>
       )}

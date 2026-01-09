@@ -247,7 +247,7 @@ export function PremissasFormDialog({ open, onOpenChange, employee, premissas }:
 
             {/* Captação Prevista */}
             <div className="grid gap-2">
-              <Label htmlFor="captacaoPrevista">Captação Prevista Anual (R$)</Label>
+              <Label htmlFor="captacaoPrevista">Captação Prevista Mensal (R$)</Label>
               <Input
                 id="captacaoPrevista"
                 type="text"
@@ -257,23 +257,23 @@ export function PremissasFormDialog({ open, onOpenChange, employee, premissas }:
                 onChange={(e) => handleCurrencyChange('captacaoPrevista', e.target.value)}
               />
               <p className="text-xs text-muted-foreground">
-                Meta de captação de novos recursos para o ano
+                Meta de captação mensal de novos recursos
               </p>
             </div>
 
             {/* Churn Previsto */}
             <div className="grid gap-2">
-              <Label htmlFor="churnPrevisto">Churn Previsto Mensal (%)</Label>
+              <Label htmlFor="churnPrevisto">Churn Previsto Anual (%)</Label>
               <Input
                 id="churnPrevisto"
                 type="number"
                 step="0.01"
-                placeholder="Ex: 2"
+                placeholder="Ex: 24"
                 value={formData.churnPrevisto}
                 onChange={(e) => setFormData(prev => ({ ...prev, churnPrevisto: e.target.value }))}
               />
               <p className="text-xs text-muted-foreground">
-                Expectativa de saída de recursos mensal (em % do AUC)
+                Expectativa de saída de recursos anual (em % do AUC)
               </p>
             </div>
 

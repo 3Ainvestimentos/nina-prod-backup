@@ -1,6 +1,6 @@
 
 
-import type { Interaction, OneOnOneNotes, N3IndividualNotes, N2IndividualNotes, QualityIndexNotes } from "@/lib/types";
+import type { Interaction, OneOnOneNotes, N3IndividualNotes, N2IndividualNotes, QualityIndexNotes, FeedbackNotes } from "@/lib/types";
 import {
   MessageSquare,
   Users,
@@ -124,6 +124,10 @@ const OneOnOneDetails = ({ notes }: { notes: OneOnOneNotes }) => (
 
   function isQualityIndexNotes(notes: any): notes is QualityIndexNotes {
     return notes && typeof notes.performanceTime !== 'undefined' && typeof notes.qualityScore !== 'undefined';
+  }
+
+  function isFeedbackNotes(notes: any): notes is FeedbackNotes {
+    return notes && typeof notes === 'object' && typeof notes.content === 'string';
   }
 
   const N2IndividualDetails = ({ notes }: { notes: N2IndividualNotes }) => (
@@ -264,7 +268,7 @@ const OneOnOneDetails = ({ notes }: { notes: OneOnOneNotes }) => (
   }
 
   // Componente para renderizar uma interação individual
-  const InteractionItem = ({ item }: { item: Interaction }) => (
+  const InteractionItem = ({ item }: { item: Interaction & { actions?: React.ReactNode } }) => (
     <div className="relative flex items-start gap-4">
       <div className="flex h-6 w-6 items-center justify-center rounded-full bg-secondary z-10">
         <span className={cn("flex h-6 w-6 items-center justify-center rounded-full bg-muted text-foreground", item.type === 'Índice de Risco' && "text-destructive")}>
@@ -272,8 +276,15 @@ const OneOnOneDetails = ({ notes }: { notes: OneOnOneNotes }) => (
         </span>
       </div>
       <div className="flex-1 pt-0.5">
-        <div className="flex items-center gap-3">
-          <p className="text-sm font-medium">{item.type}</p>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <p className="text-sm font-medium">{item.type}</p>
+          </div>
+          {item.actions && (
+            <div className="flex items-center">
+              {item.actions}
+            </div>
+          )}
         </div>
         <div className="flex items-center text-xs text-muted-foreground gap-2">
             <span>{item.date ? formatDate(item.date) : 'Data indisponível'}</span>
@@ -294,19 +305,16 @@ const OneOnOneDetails = ({ notes }: { notes: OneOnOneNotes }) => (
               Índice de Qualidade: {item.qualityScore}
             </div>
         )}
-        {item.type === 'Feedback' && typeof item.notes === 'object' && item.notes && 'indicator' in item.notes && (() => {
-          const indicator = (item.notes as { indicator: unknown }).indicator;
-          return indicator ? (
-            <div className="text-sm font-bold text-foreground mt-2">
-              Indicador: {String(indicator)}
-            </div>
-          ) : null;
-        })()}
+        {item.type === 'Feedback' && typeof item.notes === 'object' && item.notes && 'indicator' in item.notes && (item.notes as { indicator?: string }).indicator && (
+          <div className="text-sm font-bold text-foreground mt-2">
+            {(item.notes as { indicator: string }).indicator}
+          </div>
+        )}
         <div className="mt-2 text-sm">
             {typeof item.notes === 'string' && item.type === 'Feedback' ? (
                  <p className="whitespace-pre-wrap">{item.notes}</p>
-            ) : typeof item.notes === 'object' && item.type === 'Feedback' && item.notes && 'content' in item.notes ? (
-                 <p className="whitespace-pre-wrap">{String((item.notes as { content: unknown }).content)}</p>
+            ) : item.type === 'Feedback' && typeof item.notes === 'object' && item.notes && 'content' in item.notes ? (
+                 <p className="whitespace-pre-wrap">{(item.notes as any).content}</p>
             ) : typeof item.notes === 'string' && item.type === 'Índice de Risco' ? (
                 <RiskAssessmentDetails notes={item.notes} />
             ) : typeof item.notes === 'string' && (item.type === 'Análise do Índice de Qualidade' || item.type === 'Análise do Índice de Risco') ? (
@@ -330,7 +338,7 @@ const OneOnOneDetails = ({ notes }: { notes: OneOnOneNotes }) => (
     </div>
   );
 
-export function Timeline({ interactions, isLoading }: { interactions: Interaction[]; isLoading: boolean }) {
+export function Timeline({ interactions, isLoading }: { interactions: (Interaction & { actions?: React.ReactNode })[]; isLoading: boolean }) {
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -396,3 +404,4 @@ export function Timeline({ interactions, isLoading }: { interactions: Interactio
     </div>
   );
 }
+

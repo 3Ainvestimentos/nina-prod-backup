@@ -19,6 +19,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { ProjectInteractionDialog } from "@/components/project-interaction-dialog";
+import { ProjectInteractionEditDialog } from "@/components/project-interaction-edit-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { isProjectLeader, isProjectMember } from "@/hooks/use-user-projects";
 import { ProjectErrors, mapFirestoreError } from "@/lib/project-errors";
@@ -31,6 +32,7 @@ import {
   MessageSquare,
   User,
   Edit,
+  Pencil,
   Crown,
   Medal,
   Trophy,
@@ -50,6 +52,8 @@ export default function ProjectDetailsPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [isLoadingProject, setIsLoadingProject] = useState(true);
   const [isInteractionDialogOpen, setIsInteractionDialogOpen] = useState(false);
+  const [isEditInteractionDialogOpen, setIsEditInteractionDialogOpen] = useState(false);
+  const [interactionToEdit, setInteractionToEdit] = useState<ProjectInteraction | null>(null);
 
   console.log('🎯 [PROJECT_DETAILS] Página carregada', { projectId });
 
@@ -172,6 +176,11 @@ export default function ProjectDetailsPage() {
   const handleViewMemberTimeline = (memberId: string) => {
     console.log('👁️ [PROJECT_DETAILS] Visualizar timeline do membro', { memberId });
     router.push(`/dashboard/projects/${projectId}/timeline/${memberId}`);
+  };
+
+  const handleOpenEditDialog = (interaction: ProjectInteraction) => {
+    setInteractionToEdit(interaction);
+    setIsEditInteractionDialogOpen(true);
   };
 
   if (isLoadingProject) {
@@ -387,19 +396,36 @@ export default function ProjectDetailsPage() {
                   </AccordionTrigger>
                   <AccordionContent>
                     <div className="pt-2 pb-4 space-y-2">
-                      {interaction.notes.indicator && (
-                        <div>
-                          <p className="text-sm font-bold text-foreground">
-                            Indicador: {interaction.notes.indicator}
-                          </p>
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1 space-y-2">
+                          {interaction.notes.indicator && (
+                            <div>
+                              <p className="text-sm font-bold text-foreground">
+                                Indicador: {interaction.notes.indicator}
+                              </p>
+                            </div>
+                          )}
+                          <div>
+                            <h4 className="text-sm font-semibold mb-1">Anotações</h4>
+                            <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                              {interaction.notes.content}
+                            </p>
+                          </div>
                         </div>
-                      )}
-                      <div>
-                        <h4 className="text-sm font-semibold mb-1">Anotações</h4>
-                        <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                          {interaction.notes.content}
-                        </p>
+                        
+                        {(isLeader || currentUserEmployee?.isAdmin) && (
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            onClick={() => handleOpenEditDialog(interaction)}
+                            className="text-muted-foreground hover:text-primary"
+                          >
+                            <Pencil className="h-4 w-4 mr-2" />
+                            Editar
+                          </Button>
+                        )}
                       </div>
+
                       {interaction.type === "1:1" && (
                         <div className="text-xs text-muted-foreground pt-2 border-t">
                           Membro: {interaction.targetMemberName} ({interaction.targetMemberEmail})
@@ -427,6 +453,17 @@ export default function ProjectDetailsPage() {
           onOpenChange={setIsInteractionDialogOpen}
           project={project}
           projectMembers={projectMembers}
+          currentUser={currentUserEmployee}
+        />
+      )}
+
+      {/* Dialog de Edição de Interação */}
+      {(isLeader || currentUserEmployee?.isAdmin) && project && interactionToEdit && currentUserEmployee && (
+        <ProjectInteractionEditDialog
+          open={isEditInteractionDialogOpen}
+          onOpenChange={setIsEditInteractionDialogOpen}
+          project={project}
+          interaction={interactionToEdit}
           currentUser={currentUserEmployee}
         />
       )}

@@ -74,12 +74,16 @@ export interface QualityIndexNotes {
     qualityScore: number; // calculado: Red=-1, Neutro=0, Green=+1 (range -6 a +6)
 }
 
+export interface FeedbackNotes {
+    content: string;
+    indicator?: string;
+}
 
 export interface Interaction {
   id: string;
   type: InteractionType;
   date: string; // ISO 8601 string
-  notes: string | OneOnOneNotes | N3IndividualNotes | N2IndividualNotes | QualityIndexNotes;
+  notes: string | OneOnOneNotes | N3IndividualNotes | N2IndividualNotes | QualityIndexNotes | FeedbackNotes;
   authorId: string;
   riskScore?: number; // Add riskScore to interaction
   qualityScore?: number; // Add qualityScore to interaction (para Índice de Qualidade)
@@ -164,4 +168,32 @@ export interface ProjectInteractionNotes {
   score?: number; // Pontuação (se configurado)
   indicator?: string; // Indicador de posição (1º, 2º, 3º, etc)
   customData?: { [key: string]: any }; // Dados customizados
+}
+
+// ============================
+// PREMISSAS E PROJEÇÕES
+// ============================
+
+export interface PremissasConfig {
+  cdiAnual: number; // Taxa CDI anual (%)
+  impostoRepasse: number; // Imposto sobre repasse (%)
+  multiplicadorB2B: number; // Multiplicador para assessores B2B (padrão: 0.50)
+  multiplicadorMINST: number; // Multiplicador para assessores MINST (padrão: 0.25)
+}
+
+export interface Premissas {
+  id: string;
+  employeeId: string;
+  year: number; // Ano da premissa (ex: 2026)
+  aucInicial: number; // AUC inicial (Assets Under Custody)
+  captacaoPrevista: number; // Captação prevista mensal
+  churnPrevisto: number; // Churn previsto anual (%)
+  roaPrevisto: number; // ROA previsto (%)
+  tipoAssessor: "B2B" | "MINST"; // Tipo de assessor (detectado ou manual)
+  createdAt: string; // ISO 8601
+  createdBy: string; // Email do líder que criou
+}
+  tipoAssessor: "B2B" | "MINST"; // Tipo de assessor (detectado ou manual)
+  createdAt: string; // ISO 8601
+  createdBy: string; // Email do líder que criou
 }

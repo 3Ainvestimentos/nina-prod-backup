@@ -11,6 +11,7 @@ import {
   Award,
   BarChart3,
   TrendingUp,
+  Target,
 } from "lucide-react";
 import { formatDate, cn } from "@/lib/utils";
 import { Skeleton } from "./ui/skeleton";
@@ -32,6 +33,7 @@ const interactionIcons: Record<Interaction["type"], React.ReactNode> = {
   "Índice de Qualidade": <Award className="h-4 w-4" />,
   "Análise do Índice de Qualidade": <BarChart3 className="h-4 w-4" />,
   "Análise do Índice de Risco": <TrendingUp className="h-4 w-4" />,
+  "Plano Comercial": <Target className="h-4 w-4" />,
 };
 
 const OneOnOneDetails = ({ notes }: { notes: OneOnOneNotes }) => (
@@ -324,6 +326,8 @@ const OneOnOneDetails = ({ notes }: { notes: OneOnOneNotes }) => (
                         <p className="whitespace-pre-wrap text-muted-foreground">{item.notes}</p>
                     </div>
                 ) : null
+            ) : typeof item.notes === 'string' && item.type === 'Plano Comercial' ? (
+                <p className="whitespace-pre-wrap text-muted-foreground">{item.notes}</p>
             ) : item.type === '1:1' && item.notes ? (
                 <OneOnOneDetails notes={item.notes as OneOnOneNotes} />
             ) : item.type === 'N3 Individual' && isN3IndividualNotes(item.notes) ? (

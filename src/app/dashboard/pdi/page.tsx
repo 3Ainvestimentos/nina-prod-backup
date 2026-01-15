@@ -51,24 +51,35 @@ function detectarTipoAssessor(position?: string): "B2B" | "MINST" | null {
 
 /**
  * Formata número com separadores de milhar (ex: 1000000 → 1.000.000)
+ * @param valor - Valor a ser formatado
+ * @param permitirNegativo - Se true, permite valores negativos (ex: -500.000)
  */
-function formatarNumeroComSeparador(valor: string | number): string {
+function formatarNumeroComSeparador(valor: string | number, permitirNegativo = false): string {
   if (valor === "" || valor === null || valor === undefined) return "";
   
-  const apenasNumeros = valor.toString().replace(/\D/g, '');
+  const valorStr = valor.toString();
+  const isNegativo = permitirNegativo && valorStr.startsWith('-');
   
-  if (!apenasNumeros) return "";
+  // Remove tudo que não for número
+  const apenasNumeros = valorStr.replace(/[^\d]/g, '');
   
-  return apenasNumeros.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  if (!apenasNumeros) return isNegativo ? "-" : "";
+  
+  // Formata com pontos como separador de milhar
+  const formatado = apenasNumeros.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return isNegativo ? `-${formatado}` : formatado;
 }
 
 /**
- * Remove formatação e converte para número
+ * Remove formatação e converte para número (suporta negativos)
  */
 function parseNumeroFormatado(valor: string): number {
   if (!valor) return 0;
-  const limpo = valor.replace(/\./g, '');
-  return parseFloat(limpo) || 0;
+  const isNegativo = valor.startsWith('-');
+  // Remove tudo que não for número
+  const limpo = valor.replace(/[^\d]/g, '');
+  const numero = parseFloat(limpo) || 0;
+  return isNegativo ? -numero : numero;
 }
 
 export default function PdiPage() {
@@ -177,7 +188,8 @@ export default function PdiPage() {
       const tipoDetectado = detectarTipoAssessor(selectedEmployee?.position);
       setPremissasFormData({
         aucInicial: formatarNumeroComSeparador(premissasAnoAtual.aucInicial),
-        captacaoPrevista: formatarNumeroComSeparador(premissasAnoAtual.captacaoPrevista),
+        // Captação pode ser negativa, então preserva o sinal
+        captacaoPrevista: formatarNumeroComSeparador(premissasAnoAtual.captacaoPrevista, true),
         churnPrevisto: premissasAnoAtual.churnPrevisto?.toString() || "",
         roaPrevisto: premissasAnoAtual.roaPrevisto?.toString() || "",
         tipoAssessor: premissasAnoAtual.tipoAssessor || tipoDetectado || "B2B",
@@ -214,7 +226,9 @@ export default function PdiPage() {
   };
 
   const handleCurrencyChange = (field: 'aucInicial' | 'captacaoPrevista', value: string) => {
-    const formatado = formatarNumeroComSeparador(value);
+    // Captação permite valores negativos
+    const permitirNegativo = field === 'captacaoPrevista';
+    const formatado = formatarNumeroComSeparador(value, permitirNegativo);
     setPremissasFormData(prev => ({ ...prev, [field]: formatado }));
   };
 
@@ -224,7 +238,8 @@ export default function PdiPage() {
       const tipoDetectado = detectarTipoAssessor(selectedEmployee?.position);
       setPremissasFormData({
         aucInicial: formatarNumeroComSeparador(premissasAnoAtual.aucInicial),
-        captacaoPrevista: formatarNumeroComSeparador(premissasAnoAtual.captacaoPrevista),
+        // Captação pode ser negativa, então preserva o sinal
+        captacaoPrevista: formatarNumeroComSeparador(premissasAnoAtual.captacaoPrevista, true),
         churnPrevisto: premissasAnoAtual.churnPrevisto?.toString() || "",
         roaPrevisto: premissasAnoAtual.roaPrevisto?.toString() || "",
         tipoAssessor: premissasAnoAtual.tipoAssessor || tipoDetectado || "B2B",
@@ -280,7 +295,10 @@ export default function PdiPage() {
         updatedBy: user.email || "",
       };
 
-      if (premissasAnoAtual?.id) {
+      const isEditMode = !!premissasAnoAtual?.id;
+      const year = premissasAnoAtual?.year || currentYear;
+
+      if (isEditMode) {
         // Modo edição: atualizar documento existente
         const premissasDocRef = doc(
           firestore,
@@ -310,6 +328,28 @@ export default function PdiPage() {
           description: `O plano comercial de ${selectedEmployee.name} para ${currentYear} foi salvo.`,
         });
       }
+
+      // Registrar interação do tipo "Plano Comercial" no histórico do colaborador
+      const interactionsCollection = collection(
+        firestore,
+        `employees/${selectedEmployee.id}/interactions`
+      );
+      
+      // Formatar valores para exibição na timeline
+      const formatCurrency = (val: number) => val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
+      const notesDetalhadas = `${isEditMode ? 'Plano comercial atualizado' : 'Plano comercial criado'} para ${year}
+• AUC Inicial: ${formatCurrency(premissasData.aucInicial)}
+• Captação Mensal: ${formatCurrency(premissasData.captacaoPrevista)}
+• Churn Anual: ${premissasData.churnPrevisto}%
+• ROA Anual: ${premissasData.roaPrevisto}%
+• Tipo: ${premissasData.tipoAssessor}`;
+      
+      await addDoc(interactionsCollection, {
+        type: "Plano Comercial",
+        date: new Date().toISOString(),
+        notes: notesDetalhadas,
+        authorId: user.email || "",
+      });
 
       setIsEditingPremissas(false);
     } catch (error) {

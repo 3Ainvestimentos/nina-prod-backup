@@ -35,27 +35,35 @@ function detectarTipoAssessor(position?: string): "B2B" | "MINST" | null {
 /**
  * Formata número com separadores de milhar (ex: 1000000 → 1.000.000)
  * Funciona durante a digitação
+ * @param valor - Valor a ser formatado
+ * @param permitirNegativo - Se true, permite valores negativos (ex: -500.000)
  */
-function formatarNumeroComSeparador(valor: string | number): string {
+function formatarNumeroComSeparador(valor: string | number, permitirNegativo = false): string {
   if (valor === "" || valor === null || valor === undefined) return "";
   
-  // Remove tudo que não for número
-  const apenasNumeros = valor.toString().replace(/\D/g, '');
+  const valorStr = valor.toString();
+  const isNegativo = permitirNegativo && valorStr.startsWith('-');
   
-  if (!apenasNumeros) return "";
+  // Remove tudo que não for número
+  const apenasNumeros = valorStr.replace(/[^\d]/g, '');
+  
+  if (!apenasNumeros) return isNegativo ? "-" : "";
   
   // Formata com pontos como separador de milhar
-  return apenasNumeros.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  const formatado = apenasNumeros.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return isNegativo ? `-${formatado}` : formatado;
 }
 
 /**
- * Remove formatação e converte para número
+ * Remove formatação e converte para número (suporta negativos)
  */
 function parseNumeroFormatado(valor: string): number {
   if (!valor) return 0;
-  // Remove pontos (separador de milhar)
-  const limpo = valor.replace(/\./g, '');
-  return parseFloat(limpo) || 0;
+  const isNegativo = valor.startsWith('-');
+  // Remove tudo que não for número
+  const limpo = valor.replace(/[^\d]/g, '');
+  const numero = parseFloat(limpo) || 0;
+  return isNegativo ? -numero : numero;
 }
 
 export function PremissasFormDialog({ open, onOpenChange, employee, premissas }: PremissasFormDialogProps) {
@@ -82,7 +90,8 @@ export function PremissasFormDialog({ open, onOpenChange, employee, premissas }:
     if (open && premissas) {
       setFormData({
         aucInicial: formatarNumeroComSeparador(premissas.aucInicial),
-        captacaoPrevista: formatarNumeroComSeparador(premissas.captacaoPrevista),
+        // Captação pode ser negativa, então preserva o sinal
+        captacaoPrevista: formatarNumeroComSeparador(premissas.captacaoPrevista, true),
         churnPrevisto: premissas.churnPrevisto?.toString() || "",
         roaPrevisto: premissas.roaPrevisto?.toString() || "",
         tipoAssessor: premissas.tipoAssessor || tipoDetectado || "B2B",
@@ -101,7 +110,9 @@ export function PremissasFormDialog({ open, onOpenChange, employee, premissas }:
 
   const handleCurrencyChange = (field: 'aucInicial' | 'captacaoPrevista', value: string) => {
     // Formata enquanto digita - remove não-numéricos e adiciona pontos
-    const formatado = formatarNumeroComSeparador(value);
+    // Captação permite valores negativos
+    const permitirNegativo = field === 'captacaoPrevista';
+    const formatado = formatarNumeroComSeparador(value, permitirNegativo);
     setFormData(prev => ({ ...prev, [field]: formatado }));
   };
 
@@ -154,6 +165,8 @@ export function PremissasFormDialog({ open, onOpenChange, employee, premissas }:
         updatedBy: user.email || "",
       };
 
+      const year = premissas?.year || currentYear;
+
       if (isEditMode && premissas?.id) {
         // Modo edição: atualizar documento existente
         const premissasDocRef = doc(
@@ -184,6 +197,28 @@ export function PremissasFormDialog({ open, onOpenChange, employee, premissas }:
           description: `O plano comercial de ${employee.name} para ${currentYear} foi salvo.`,
         });
       }
+
+      // Registrar interação do tipo "Plano Comercial" no histórico do colaborador
+      const interactionsCollection = collection(
+        firestore,
+        `employees/${employee.id}/interactions`
+      );
+      
+      // Formatar valores para exibição na timeline
+      const formatCurrency = (val: number) => val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
+      const notesDetalhadas = `${isEditMode ? 'Plano comercial atualizado' : 'Plano comercial criado'} para ${year}
+• AUC Inicial: ${formatCurrency(premissasData.aucInicial)}
+• Captação Mensal: ${formatCurrency(premissasData.captacaoPrevista)}
+• Churn Anual: ${premissasData.churnPrevisto}%
+• ROA Anual: ${premissasData.roaPrevisto}%
+• Tipo: ${premissasData.tipoAssessor}`;
+      
+      await addDoc(interactionsCollection, {
+        type: "Plano Comercial",
+        date: new Date().toISOString(),
+        notes: notesDetalhadas,
+        authorId: user.email || "",
+      });
 
       onOpenChange(false);
       

@@ -48,9 +48,15 @@ import {
 } from "@/components/ui/alert-dialog";
 import { CsvUploadDialog } from "@/components/csv-upload-dialog";
 import { InteractionCsvUploadDialog } from "@/components/interaction-csv-upload-dialog";
-import { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { useCollection, useFirestore, useMemoFirebase, useUser, useFirebase, softDeleteDocument } from "@/firebase";
-import { collection, doc, deleteDoc, updateDoc, setDoc } from "firebase/firestore";
+import { collection, doc, deleteDoc, updateDoc, setDoc, getDocs, query } from "firebase/firestore";
+import { Progress } from "@/components/ui/progress";
+import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, differenceInMonths, differenceInWeeks, getMonth, getYear, parseISO, isWithinInterval, format } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { DateRangePicker } from "@/components/ui/date-range-picker";
+import { DateRange } from "react-day-picker";
+import { BarChart3, TrendingUp, Users, Target, ChevronDown, ChevronUp } from "lucide-react";
 import { setDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -128,6 +134,41 @@ export default function AdminPage() {
   // Estado para controlar aba ativa (permite trocar antes de carregar)
   const [activeTab, setActiveTab] = useState<string>("employees");
 
+  // ========================================
+  // ESTADOS PARA ABA DE MÉTRICAS
+  // ========================================
+  const [metricsInteractions, setMetricsInteractions] = useState<Map<string, Interaction[]>>(new Map());
+  const [metricsPdiActions, setMetricsPdiActions] = useState<Map<string, PDIAction[]>>(new Map());
+  const [metricsLoading, setMetricsLoading] = useState(false);
+  const [metricsDateRange, setMetricsDateRange] = useState<DateRange | undefined>({
+    from: startOfMonth(new Date()),
+    to: endOfMonth(new Date()),
+  });
+  const [expandedLeaders, setExpandedLeaders] = useState<Set<string>>(new Set());
+  const [expandedDirectors, setExpandedDirectors] = useState<Set<string>>(new Set());
+
+  // Constantes para cálculo de métricas (mesmo padrão do ranking)
+  const METRICS_GOAL = 80; // Meta de 80%
+  
+  const n3IndividualSchedule: { [key: string]: number } = {
+    'Alfa': 4,
+    'Beta': 2,
+    'Senior': 1,
+  };
+
+  const interactionSchedules: { [key: string]: number[] } = {
+    'PDI': [0, 6], // Janeiro e Julho
+    '1:1': [2, 5, 8, 11], // Março, Junho, Setembro, Dezembro
+    'Índice de Risco': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], // Todos os meses
+  };
+
+  // Frequência de N2 Individual para diretores (baseado no líder)
+  const getLeaderN2Frequency = (leaderName: string): number => {
+    // Lógica simplificada - pode ser customizada
+    // Retorna número de N2s esperados por mês
+    return 1; // Padrão: 1 por mês
+  };
+
   // Filtros e ordenação
   const initialFilters = useMemo(() => ({
     name: new Set<string>(),
@@ -177,6 +218,74 @@ export default function AdminPage() {
     loadClaim();
     return () => { mounted = false; };
   }, [user]);
+
+  // ========================================
+  // CARREGAR DADOS DE MÉTRICAS (quando aba ativa)
+  // ========================================
+  const loadMetricsData = useCallback(async () => {
+    if (!firestore || !employees || activeTab !== 'metrics') return;
+    
+    setMetricsLoading(true);
+    console.time('📊 [METRICS] Carregamento de dados');
+    
+    // Pegar todos os colaboradores sob gestão
+    const allManagedEmployeeIds = employees
+      .filter(e => e.isUnderManagement && !(e as any)._isDeleted)
+      .map(e => e.id);
+    
+    // Também pegar os líderes para interações de diretores
+    const allLeaderIds = employees
+      .filter(e => (e.role === 'Líder' || e.role === 'Diretor') && !(e as any)._isDeleted)
+      .map(e => e.id);
+    
+    const allIdsToFetch = [...new Set([...allManagedEmployeeIds, ...allLeaderIds])];
+    
+    console.log(`📊 [METRICS] Carregando dados de ${allIdsToFetch.length} pessoas...`);
+    
+    try {
+      const allPromises = allIdsToFetch.map(async (id) => {
+        const interactionsQuery = query(collection(firestore, "employees", id, "interactions"));
+        const pdiActionsQuery = query(collection(firestore, "employees", id, "pdiActions"));
+        
+        const [interactionsSnapshot, pdiActionsSnapshot] = await Promise.all([
+          getDocs(interactionsQuery),
+          getDocs(pdiActionsQuery)
+        ]);
+
+        return {
+          id,
+          interactions: interactionsSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }) as Interaction),
+          pdiActions: pdiActionsSnapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }) as PDIAction),
+        };
+      });
+
+      const results = await Promise.all(allPromises);
+
+      const interactionsMap = new Map<string, Interaction[]>();
+      const pdiMap = new Map<string, PDIAction[]>();
+
+      results.forEach(({ id, interactions, pdiActions }) => {
+        interactionsMap.set(id, interactions);
+        pdiMap.set(id, pdiActions);
+      });
+      
+      setMetricsInteractions(interactionsMap);
+      setMetricsPdiActions(pdiMap);
+      
+      console.timeEnd('📊 [METRICS] Carregamento de dados');
+      console.log(`✅ [METRICS] ${results.length} pessoas carregadas com sucesso`);
+    } catch (error) {
+      console.error('❌ [METRICS] Erro ao carregar dados:', error);
+    } finally {
+      setMetricsLoading(false);
+    }
+  }, [firestore, employees, activeTab]);
+
+  useEffect(() => {
+    if (activeTab === 'metrics' && employees && metricsInteractions.size === 0) {
+      loadMetricsData();
+    }
+  }, [activeTab, employees, metricsInteractions.size, loadMetricsData]);
 
   const checkCustomClaim = async()=>{
     if (!user) {
@@ -329,6 +438,366 @@ export default function AdminPage() {
         };
     }, [employees]);
 
+    // ========================================
+    // CÁLCULOS DE MÉTRICAS PARA LÍDERES
+    // ========================================
+    interface LeaderMetrics {
+      leader: Employee;
+      teamSize: number;
+      totalInteractionsWeek: number;
+      totalInteractionsMonth: number;
+      adherenceScore: number;
+      completedCount: number;
+      requiredCount: number;
+      byType: {
+        n3: { completed: number; required: number; adherence: number };
+        risco: { completed: number; required: number; adherence: number };
+        oneOnOne: { completed: number; required: number; adherence: number };
+        pdi: { completed: number; required: number; adherence: number };
+        feedback: { completed: number; required: number };
+      };
+    }
+
+    interface DirectorMetrics {
+      director: Employee;
+      leadersCount: number;
+      totalInteractionsWeek: number;
+      totalInteractionsMonth: number;
+      adherenceScore: number;
+      completedCount: number;
+      requiredCount: number;
+      byType: {
+        n2: { completed: number; required: number; adherence: number };
+        qualidade: { completed: number; required: number; adherence: number };
+        feedback: { completed: number; required: number };
+      };
+    }
+
+    const leaderMetrics = useMemo((): LeaderMetrics[] => {
+      if (!employees || !metricsDateRange?.from || !metricsDateRange?.to || metricsLoading) {
+        return [];
+      }
+
+      const range = { start: metricsDateRange.from, end: metricsDateRange.to };
+      const fromMonth = getMonth(range.start);
+      const fromYear = getYear(range.start);
+      const toMonth = getMonth(range.end);
+      const toYear = getYear(range.end);
+      const monthsInRange = Math.max(1, differenceInMonths(range.end, range.start) + 1);
+      const weeksInRange = Math.max(1, differenceInWeeks(range.end, range.start) + 1);
+
+      // Filtrar apenas líderes (não diretores)
+      const leadersList = employees.filter(e => 
+        !(e as any)._isDeleted && 
+        e.role === 'Líder' && 
+        !e.isDirector
+      );
+
+      return leadersList.map(leader => {
+        const teamMembers = employees.filter(e => 
+          e.leaderId === leader.id && 
+          e.isUnderManagement && 
+          !(e as any)._isDeleted
+        );
+
+        if (teamMembers.length === 0) {
+          return {
+            leader,
+            teamSize: 0,
+            totalInteractionsWeek: 0,
+            totalInteractionsMonth: 0,
+            adherenceScore: 0,
+            completedCount: 0,
+            requiredCount: 0,
+            byType: {
+              n3: { completed: 0, required: 0, adherence: 0 },
+              risco: { completed: 0, required: 0, adherence: 0 },
+              oneOnOne: { completed: 0, required: 0, adherence: 0 },
+              pdi: { completed: 0, required: 0, adherence: 0 },
+              feedback: { completed: 0, required: 0 },
+            },
+          };
+        }
+
+        let totalCompleted = 0;
+        let totalRequired = 0;
+        let totalInteractions = 0;
+
+        // Acumuladores por tipo
+        let n3Completed = 0, n3Required = 0;
+        let riscoCompleted = 0, riscoRequired = 0;
+        let oneOnOneCompleted = 0, oneOnOneRequired = 0;
+        let pdiCompleted = 0, pdiRequired = 0;
+        let feedbackCount = 0;
+
+        teamMembers.forEach(member => {
+          const memberInteractions = metricsInteractions.get(member.id) || [];
+          const memberPdiActions = metricsPdiActions.get(member.id) || [];
+
+          // Contar todas as interações no período
+          const interactionsInRange = memberInteractions.filter(i => 
+            isWithinInterval(parseISO(i.date), range)
+          );
+          totalInteractions += interactionsInRange.length;
+
+          // N3 Individual
+          const n3Segment = member.segment as string | undefined;
+          if (n3Segment && n3IndividualSchedule[n3Segment]) {
+            const required = n3IndividualSchedule[n3Segment] * monthsInRange;
+            const completed = memberInteractions.filter(i => 
+              i.type === 'N3 Individual' && isWithinInterval(parseISO(i.date), range)
+            ).length;
+            n3Required += required;
+            n3Completed += Math.min(completed, required);
+            totalRequired += required;
+            totalCompleted += Math.min(completed, required);
+          }
+
+          // Índice de Risco (mensal)
+          const riscoSchedule = interactionSchedules['Índice de Risco'] || [];
+          const requiredRiscoMonths = riscoSchedule.filter(month => {
+            for (let y = fromYear; y <= toYear; y++) {
+              const startM = (y === fromYear) ? fromMonth : 0;
+              const endM = (y === toYear) ? toMonth : 11;
+              if (month >= startM && month <= endM) return true;
+            }
+            return false;
+          });
+          riscoRequired += requiredRiscoMonths.length;
+          totalRequired += requiredRiscoMonths.length;
+
+          const executedRiscoMonths = new Set<number>();
+          memberInteractions.forEach(i => {
+            const intDate = parseISO(i.date);
+            if (i.type === 'Índice de Risco' && isWithinInterval(intDate, range) && requiredRiscoMonths.includes(getMonth(intDate))) {
+              executedRiscoMonths.add(getMonth(intDate));
+            }
+          });
+          riscoCompleted += executedRiscoMonths.size;
+          totalCompleted += executedRiscoMonths.size;
+
+          // 1:1 (trimestral)
+          const oneOnOneSchedule = interactionSchedules['1:1'] || [];
+          const requiredOneOnOneMonths = oneOnOneSchedule.filter(month => {
+            for (let y = fromYear; y <= toYear; y++) {
+              const startM = (y === fromYear) ? fromMonth : 0;
+              const endM = (y === toYear) ? toMonth : 11;
+              if (month >= startM && month <= endM) return true;
+            }
+            return false;
+          });
+          oneOnOneRequired += requiredOneOnOneMonths.length;
+          totalRequired += requiredOneOnOneMonths.length;
+
+          const executedOneOnOneMonths = new Set<number>();
+          memberInteractions.forEach(i => {
+            const intDate = parseISO(i.date);
+            if (i.type === '1:1' && isWithinInterval(intDate, range) && requiredOneOnOneMonths.includes(getMonth(intDate))) {
+              executedOneOnOneMonths.add(getMonth(intDate));
+            }
+          });
+          oneOnOneCompleted += executedOneOnOneMonths.size;
+          totalCompleted += executedOneOnOneMonths.size;
+
+          // PDI (semestral)
+          const pdiSchedule = interactionSchedules['PDI'] || [];
+          const requiredPdiMonths = pdiSchedule.filter(month => {
+            for (let y = fromYear; y <= toYear; y++) {
+              const startM = (y === fromYear) ? fromMonth : 0;
+              const endM = (y === toYear) ? toMonth : 11;
+              if (month >= startM && month <= endM) return true;
+            }
+            return false;
+          });
+          pdiRequired += requiredPdiMonths.length;
+          totalRequired += requiredPdiMonths.length;
+
+          const executedPdiMonths = new Set<number>();
+          memberPdiActions.forEach(action => {
+            const actionDate = parseISO(action.startDate);
+            if (isWithinInterval(actionDate, range) && requiredPdiMonths.includes(getMonth(actionDate))) {
+              executedPdiMonths.add(getMonth(actionDate));
+            }
+          });
+          pdiCompleted += executedPdiMonths.size;
+          totalCompleted += executedPdiMonths.size;
+
+          // Feedback (sob demanda - apenas contagem)
+          feedbackCount += memberInteractions.filter(i => 
+            i.type === 'Feedback' && isWithinInterval(parseISO(i.date), range)
+          ).length;
+        });
+
+        const adherenceScore = totalRequired > 0 ? (totalCompleted / totalRequired) * 100 : 0;
+
+        return {
+          leader,
+          teamSize: teamMembers.length,
+          totalInteractionsWeek: Math.round(totalInteractions / weeksInRange * 10) / 10,
+          totalInteractionsMonth: Math.round(totalInteractions / monthsInRange * 10) / 10,
+          adherenceScore: Math.round(adherenceScore * 10) / 10,
+          completedCount: totalCompleted,
+          requiredCount: totalRequired,
+          byType: {
+            n3: { 
+              completed: n3Completed, 
+              required: n3Required, 
+              adherence: n3Required > 0 ? Math.round((n3Completed / n3Required) * 100) : 0 
+            },
+            risco: { 
+              completed: riscoCompleted, 
+              required: riscoRequired, 
+              adherence: riscoRequired > 0 ? Math.round((riscoCompleted / riscoRequired) * 100) : 0 
+            },
+            oneOnOne: { 
+              completed: oneOnOneCompleted, 
+              required: oneOnOneRequired, 
+              adherence: oneOnOneRequired > 0 ? Math.round((oneOnOneCompleted / oneOnOneRequired) * 100) : 0 
+            },
+            pdi: { 
+              completed: pdiCompleted, 
+              required: pdiRequired, 
+              adherence: pdiRequired > 0 ? Math.round((pdiCompleted / pdiRequired) * 100) : 0 
+            },
+            feedback: { completed: feedbackCount, required: 0 },
+          },
+        };
+      }).sort((a, b) => b.adherenceScore - a.adherenceScore);
+    }, [employees, metricsInteractions, metricsPdiActions, metricsDateRange, metricsLoading]);
+
+    // ========================================
+    // CÁLCULOS DE MÉTRICAS PARA DIRETORES
+    // ========================================
+    const directorMetrics = useMemo((): DirectorMetrics[] => {
+      if (!employees || !metricsDateRange?.from || !metricsDateRange?.to || metricsLoading) {
+        return [];
+      }
+
+      const range = { start: metricsDateRange.from, end: metricsDateRange.to };
+      const monthsInRange = Math.max(1, differenceInMonths(range.end, range.start) + 1);
+      const weeksInRange = Math.max(1, differenceInWeeks(range.end, range.start) + 1);
+
+      // Filtrar diretores - apenas Gabriel usa o CRM
+      const directorsList = employees.filter(e => 
+        !(e as any)._isDeleted && 
+        e.isDirector &&
+        e.name?.toLowerCase().includes('gabriel')
+      );
+
+      return directorsList.map(director => {
+        // Líderes que reportam ao diretor (ou todos se for admin geral)
+        const leadersUnderDirector = employees.filter(e => 
+          !(e as any)._isDeleted && 
+          e.role === 'Líder' &&
+          !e.isDirector
+        );
+
+        if (leadersUnderDirector.length === 0) {
+          return {
+            director,
+            leadersCount: 0,
+            totalInteractionsWeek: 0,
+            totalInteractionsMonth: 0,
+            adherenceScore: 0,
+            completedCount: 0,
+            requiredCount: 0,
+            byType: {
+              n2: { completed: 0, required: 0, adherence: 0 },
+              qualidade: { completed: 0, required: 0, adherence: 0 },
+              feedback: { completed: 0, required: 0 },
+            },
+          };
+        }
+
+        let totalCompleted = 0;
+        let totalRequired = 0;
+        let totalInteractions = 0;
+
+        let n2Completed = 0, n2Required = 0;
+        let qualidadeCompleted = 0, qualidadeRequired = 0;
+        let feedbackCount = 0;
+
+        leadersUnderDirector.forEach(leader => {
+          const leaderInteractions = metricsInteractions.get(leader.id) || [];
+
+          // Contar interações do diretor com este líder
+          const interactionsInRange = leaderInteractions.filter(i => 
+            isWithinInterval(parseISO(i.date), range) &&
+            (i.type === 'N2 Individual' || i.type === 'Índice de Qualidade' || i.type === 'Feedback')
+          );
+          totalInteractions += interactionsInRange.length;
+
+          // N2 Individual (baseado na frequência)
+          const n2RequiredForLeader = getLeaderN2Frequency(leader.name) * monthsInRange;
+          n2Required += n2RequiredForLeader;
+          totalRequired += n2RequiredForLeader;
+
+          const n2Count = leaderInteractions.filter(i => 
+            i.type === 'N2 Individual' && isWithinInterval(parseISO(i.date), range)
+          ).length;
+          n2Completed += Math.min(n2Count, n2RequiredForLeader);
+          totalCompleted += Math.min(n2Count, n2RequiredForLeader);
+
+          // Índice de Qualidade (1 por mês por líder)
+          const qualidadeRequiredForLeader = monthsInRange;
+          qualidadeRequired += qualidadeRequiredForLeader;
+          totalRequired += qualidadeRequiredForLeader;
+
+          const qualidadeMonths = new Set<number>();
+          leaderInteractions.forEach(i => {
+            if (i.type === 'Índice de Qualidade' && isWithinInterval(parseISO(i.date), range)) {
+              qualidadeMonths.add(getMonth(parseISO(i.date)));
+            }
+          });
+          qualidadeCompleted += Math.min(qualidadeMonths.size, qualidadeRequiredForLeader);
+          totalCompleted += Math.min(qualidadeMonths.size, qualidadeRequiredForLeader);
+
+          // Feedback (sob demanda)
+          feedbackCount += leaderInteractions.filter(i => 
+            i.type === 'Feedback' && isWithinInterval(parseISO(i.date), range)
+          ).length;
+        });
+
+        const adherenceScore = totalRequired > 0 ? (totalCompleted / totalRequired) * 100 : 0;
+
+        return {
+          director,
+          leadersCount: leadersUnderDirector.length,
+          totalInteractionsWeek: Math.round(totalInteractions / weeksInRange * 10) / 10,
+          totalInteractionsMonth: Math.round(totalInteractions / monthsInRange * 10) / 10,
+          adherenceScore: Math.round(adherenceScore * 10) / 10,
+          completedCount: totalCompleted,
+          requiredCount: totalRequired,
+          byType: {
+            n2: { 
+              completed: n2Completed, 
+              required: n2Required, 
+              adherence: n2Required > 0 ? Math.round((n2Completed / n2Required) * 100) : 0 
+            },
+            qualidade: { 
+              completed: qualidadeCompleted, 
+              required: qualidadeRequired, 
+              adherence: qualidadeRequired > 0 ? Math.round((qualidadeCompleted / qualidadeRequired) * 100) : 0 
+            },
+            feedback: { completed: feedbackCount, required: 0 },
+          },
+        };
+      }).sort((a, b) => b.adherenceScore - a.adherenceScore);
+    }, [employees, metricsInteractions, metricsDateRange, metricsLoading]);
+
+    // Função para obter cor da barra de progresso
+    const getProgressColor = (value: number): string => {
+      if (value >= METRICS_GOAL) return 'bg-green-500';
+      if (value >= 60) return 'bg-yellow-500';
+      return 'bg-red-500';
+    };
+
+    // Função para obter status em texto
+    const getStatusBadge = (value: number): { label: string; variant: 'default' | 'secondary' | 'destructive' } => {
+      if (value >= METRICS_GOAL) return { label: 'Em dia', variant: 'default' };
+      if (value >= 60) return { label: 'Atenção', variant: 'secondary' };
+      return { label: 'Atrasado', variant: 'destructive' };
+    };
 
     const calculateAnnualInteractions = (employee: Employee) => {
       let total = 0;
@@ -967,11 +1436,12 @@ export default function AdminPage() {
   return (
     <>
     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-      <TabsList className="grid w-full grid-cols-6">
+      <TabsList className="grid w-full grid-cols-7">
         <TabsTrigger value="employees">Funcionários</TabsTrigger>
         <TabsTrigger value="teams">Equipes</TabsTrigger>
         <TabsTrigger value="projects">Projetos</TabsTrigger>
         <TabsTrigger value="reports">Relatórios</TabsTrigger>
+        <TabsTrigger value="metrics">Métricas</TabsTrigger>
         <TabsTrigger value="settings">Geral</TabsTrigger>
         <TabsTrigger value="backup">Backup & Import</TabsTrigger>
       </TabsList>
@@ -1783,6 +2253,418 @@ export default function AdminPage() {
             </CardContent>
         </Card>
         </>
+        )}
+      </TabsContent>
+
+      {/* TAB DE MÉTRICAS */}
+      <TabsContent value="metrics" forceMount className={activeTab !== "metrics" ? "hidden" : ""}>
+        {activeTab === "metrics" && (
+        <div className="space-y-6">
+          {/* Header com filtro de período */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+                <BarChart3 className="h-6 w-6" />
+                Métricas de Aderência
+              </h2>
+              <p className="text-muted-foreground">
+                Acompanhe as interações e a aderência dos líderes e diretores.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Target className="h-4 w-4" />
+                <span>Meta: <strong className="text-foreground">{METRICS_GOAL}%</strong></span>
+              </div>
+              <DateRangePicker 
+                date={metricsDateRange} 
+                onDateChange={setMetricsDateRange}
+              />
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={loadMetricsData}
+                disabled={metricsLoading}
+              >
+                {metricsLoading ? 'Carregando...' : 'Atualizar'}
+              </Button>
+            </div>
+          </div>
+
+          {/* Card 1: Visão Geral - Líderes */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Users className="h-5 w-5" />
+                    Visão Geral - Líderes
+                  </CardTitle>
+                  <CardDescription>
+                    Interações por semana/mês e aderência geral de cada líder
+                  </CardDescription>
+                </div>
+                <Badge variant="outline" className="text-lg px-3 py-1">
+                  {leaderMetrics.length} líder{leaderMetrics.length !== 1 ? 'es' : ''}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {metricsLoading ? (
+                <div className="space-y-3">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-4">
+                      <Skeleton className="h-10 w-10 rounded-full" />
+                      <Skeleton className="h-5 w-32" />
+                      <Skeleton className="h-5 w-20" />
+                      <Skeleton className="h-5 w-20" />
+                      <Skeleton className="h-4 flex-1" />
+                    </div>
+                  ))}
+                </div>
+              ) : leaderMetrics.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Users className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                  <p>Nenhum líder encontrado com colaboradores sob gestão.</p>
+                </div>
+              ) : (
+                <div className="border rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/50">
+                        <TableHead className="w-[200px]">Líder</TableHead>
+                        <TableHead className="text-center">Equipe</TableHead>
+                        <TableHead className="text-center">Int./Semana</TableHead>
+                        <TableHead className="text-center">Int./Mês</TableHead>
+                        <TableHead className="w-[200px]">Aderência</TableHead>
+                        <TableHead className="text-center">Status</TableHead>
+                        <TableHead className="w-[50px]"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {leaderMetrics.map((metrics) => {
+                        const status = getStatusBadge(metrics.adherenceScore);
+                        const isExpanded = expandedLeaders.has(metrics.leader.id);
+                        return <React.Fragment key={metrics.leader.id}>
+                            <TableRow 
+                              className="cursor-pointer hover:bg-muted/50"
+                              onClick={() => {
+                                const newExpanded = new Set(expandedLeaders);
+                                if (isExpanded) {
+                                  newExpanded.delete(metrics.leader.id);
+                                } else {
+                                  newExpanded.add(metrics.leader.id);
+                                }
+                                setExpandedLeaders(newExpanded);
+                              }}
+                            >
+                              <TableCell>
+                                <div className="flex items-center gap-3">
+                                  <Avatar className="h-8 w-8">
+                                    <AvatarImage src={metrics.leader.photoURL} />
+                                    <AvatarFallback>{metrics.leader.name?.substring(0, 2).toUpperCase()}</AvatarFallback>
+                                  </Avatar>
+                                  <span className="font-medium">{metrics.leader.name}</span>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Badge variant="outline">{metrics.teamSize}</Badge>
+                              </TableCell>
+                              <TableCell className="text-center font-mono">
+                                {metrics.totalInteractionsWeek}
+                              </TableCell>
+                              <TableCell className="text-center font-mono">
+                                {metrics.totalInteractionsMonth}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
+                                    <div 
+                                      className={`h-full transition-all ${getProgressColor(metrics.adherenceScore)}`}
+                                      style={{ width: `${Math.min(metrics.adherenceScore, 100)}%` }}
+                                    />
+                                  </div>
+                                  <span className="font-mono text-sm w-12 text-right">
+                                    {metrics.adherenceScore}%
+                                  </span>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Badge variant={status.variant}>{status.label}</Badge>
+                              </TableCell>
+                              <TableCell>
+                                {isExpanded ? (
+                                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                                ) : (
+                                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                )}
+                              </TableCell>
+                            </TableRow>
+                            {/* Linha expandida com detalhes por tipo */}
+                            {isExpanded && (
+                              <TableRow key={`${metrics.leader.id}-details`} className="bg-muted/30">
+                                <TableCell colSpan={7} className="p-4">
+                                  <div className="grid grid-cols-5 gap-4">
+                                    <div className="space-y-2">
+                                      <p className="text-sm font-medium">N3 Individual</p>
+                                      <div className="flex items-center gap-2">
+                                        <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                                          <div 
+                                            className={`h-full ${getProgressColor(metrics.byType.n3.adherence)}`}
+                                            style={{ width: `${Math.min(metrics.byType.n3.adherence, 100)}%` }}
+                                          />
+                                        </div>
+                                        <span className="text-xs font-mono">{metrics.byType.n3.adherence}%</span>
+                                      </div>
+                                      <p className="text-xs text-muted-foreground">
+                                        {metrics.byType.n3.completed}/{metrics.byType.n3.required}
+                                      </p>
+                                    </div>
+                                    <div className="space-y-2">
+                                      <p className="text-sm font-medium">Índice de Risco</p>
+                                      <div className="flex items-center gap-2">
+                                        <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                                          <div 
+                                            className={`h-full ${getProgressColor(metrics.byType.risco.adherence)}`}
+                                            style={{ width: `${Math.min(metrics.byType.risco.adherence, 100)}%` }}
+                                          />
+                                        </div>
+                                        <span className="text-xs font-mono">{metrics.byType.risco.adherence}%</span>
+                                      </div>
+                                      <p className="text-xs text-muted-foreground">
+                                        {metrics.byType.risco.completed}/{metrics.byType.risco.required}
+                                      </p>
+                                    </div>
+                                    <div className="space-y-2">
+                                      <p className="text-sm font-medium">1:1</p>
+                                      <div className="flex items-center gap-2">
+                                        <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                                          <div 
+                                            className={`h-full ${getProgressColor(metrics.byType.oneOnOne.adherence)}`}
+                                            style={{ width: `${Math.min(metrics.byType.oneOnOne.adherence, 100)}%` }}
+                                          />
+                                        </div>
+                                        <span className="text-xs font-mono">{metrics.byType.oneOnOne.adherence}%</span>
+                                      </div>
+                                      <p className="text-xs text-muted-foreground">
+                                        {metrics.byType.oneOnOne.completed}/{metrics.byType.oneOnOne.required}
+                                      </p>
+                                    </div>
+                                    <div className="space-y-2">
+                                      <p className="text-sm font-medium">PDI</p>
+                                      <div className="flex items-center gap-2">
+                                        <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                                          <div 
+                                            className={`h-full ${getProgressColor(metrics.byType.pdi.adherence)}`}
+                                            style={{ width: `${Math.min(metrics.byType.pdi.adherence, 100)}%` }}
+                                          />
+                                        </div>
+                                        <span className="text-xs font-mono">{metrics.byType.pdi.adherence}%</span>
+                                      </div>
+                                      <p className="text-xs text-muted-foreground">
+                                        {metrics.byType.pdi.completed}/{metrics.byType.pdi.required}
+                                      </p>
+                                    </div>
+                                    <div className="space-y-2">
+                                      <p className="text-sm font-medium">Feedback</p>
+                                      <p className="text-lg font-mono">{metrics.byType.feedback.completed}</p>
+                                      <p className="text-xs text-muted-foreground">registros</p>
+                                    </div>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </React.Fragment>;
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Card 2: Visão Geral - Diretores */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5" />
+                    Visão Geral - Diretores
+                  </CardTitle>
+                  <CardDescription>
+                    Acompanhamento de líderes pelos diretores (N2 Individual, Índice de Qualidade)
+                  </CardDescription>
+                </div>
+                <Badge variant="outline" className="text-lg px-3 py-1">
+                  {directorMetrics.length} diretor{directorMetrics.length !== 1 ? 'es' : ''}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {metricsLoading ? (
+                <div className="space-y-3">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-4">
+                      <Skeleton className="h-10 w-10 rounded-full" />
+                      <Skeleton className="h-5 w-32" />
+                      <Skeleton className="h-5 w-20" />
+                      <Skeleton className="h-5 w-20" />
+                      <Skeleton className="h-4 flex-1" />
+                    </div>
+                  ))}
+                </div>
+              ) : directorMetrics.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <TrendingUp className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                  <p>Nenhum diretor encontrado.</p>
+                </div>
+              ) : (
+                <div className="border rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-muted/50">
+                        <TableHead className="w-[200px]">Diretor</TableHead>
+                        <TableHead className="text-center">Líderes</TableHead>
+                        <TableHead className="text-center">Int./Semana</TableHead>
+                        <TableHead className="text-center">Int./Mês</TableHead>
+                        <TableHead className="w-[200px]">Aderência</TableHead>
+                        <TableHead className="text-center">Status</TableHead>
+                        <TableHead className="w-[50px]"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {directorMetrics.map((metrics) => {
+                        const status = getStatusBadge(metrics.adherenceScore);
+                        const isExpanded = expandedDirectors.has(metrics.director.id);
+                        return <React.Fragment key={metrics.director.id}>
+                            <TableRow 
+                              className="cursor-pointer hover:bg-muted/50"
+                              onClick={() => {
+                                const newExpanded = new Set(expandedDirectors);
+                                if (isExpanded) {
+                                  newExpanded.delete(metrics.director.id);
+                                } else {
+                                  newExpanded.add(metrics.director.id);
+                                }
+                                setExpandedDirectors(newExpanded);
+                              }}
+                            >
+                              <TableCell>
+                                <div className="flex items-center gap-3">
+                                  <Avatar className="h-8 w-8">
+                                    <AvatarImage src={metrics.director.photoURL} />
+                                    <AvatarFallback>{metrics.director.name?.substring(0, 2).toUpperCase()}</AvatarFallback>
+                                  </Avatar>
+                                  <span className="font-medium">{metrics.director.name}</span>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Badge variant="outline">{metrics.leadersCount}</Badge>
+                              </TableCell>
+                              <TableCell className="text-center font-mono">
+                                {metrics.totalInteractionsWeek}
+                              </TableCell>
+                              <TableCell className="text-center font-mono">
+                                {metrics.totalInteractionsMonth}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-2">
+                                  <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
+                                    <div 
+                                      className={`h-full transition-all ${getProgressColor(metrics.adherenceScore)}`}
+                                      style={{ width: `${Math.min(metrics.adherenceScore, 100)}%` }}
+                                    />
+                                  </div>
+                                  <span className="font-mono text-sm w-12 text-right">
+                                    {metrics.adherenceScore}%
+                                  </span>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Badge variant={status.variant}>{status.label}</Badge>
+                              </TableCell>
+                              <TableCell>
+                                {isExpanded ? (
+                                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                                ) : (
+                                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                )}
+                              </TableCell>
+                            </TableRow>
+                            {/* Linha expandida com detalhes por tipo */}
+                            {isExpanded && (
+                              <TableRow key={`${metrics.director.id}-details`} className="bg-muted/30">
+                                <TableCell colSpan={7} className="p-4">
+                                  <div className="grid grid-cols-3 gap-6">
+                                    <div className="space-y-2">
+                                      <p className="text-sm font-medium">N2 Individual</p>
+                                      <div className="flex items-center gap-2">
+                                        <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                                          <div 
+                                            className={`h-full ${getProgressColor(metrics.byType.n2.adherence)}`}
+                                            style={{ width: `${Math.min(metrics.byType.n2.adherence, 100)}%` }}
+                                          />
+                                        </div>
+                                        <span className="text-xs font-mono">{metrics.byType.n2.adherence}%</span>
+                                      </div>
+                                      <p className="text-xs text-muted-foreground">
+                                        {metrics.byType.n2.completed}/{metrics.byType.n2.required} realizados
+                                      </p>
+                                    </div>
+                                    <div className="space-y-2">
+                                      <p className="text-sm font-medium">Índice de Qualidade</p>
+                                      <div className="flex items-center gap-2">
+                                        <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                                          <div 
+                                            className={`h-full ${getProgressColor(metrics.byType.qualidade.adherence)}`}
+                                            style={{ width: `${Math.min(metrics.byType.qualidade.adherence, 100)}%` }}
+                                          />
+                                        </div>
+                                        <span className="text-xs font-mono">{metrics.byType.qualidade.adherence}%</span>
+                                      </div>
+                                      <p className="text-xs text-muted-foreground">
+                                        {metrics.byType.qualidade.completed}/{metrics.byType.qualidade.required} realizados
+                                      </p>
+                                    </div>
+                                    <div className="space-y-2">
+                                      <p className="text-sm font-medium">Feedback</p>
+                                      <p className="text-lg font-mono">{metrics.byType.feedback.completed}</p>
+                                      <p className="text-xs text-muted-foreground">registros</p>
+                                    </div>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            )}
+                          </React.Fragment>;
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Legenda */}
+          <Card>
+            <CardContent className="py-4">
+              <div className="flex items-center justify-center gap-8 text-sm">
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded bg-green-500" />
+                  <span>≥ {METRICS_GOAL}% (Em dia)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded bg-yellow-500" />
+                  <span>60-{METRICS_GOAL - 1}% (Atenção)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded bg-red-500" />
+                  <span>&lt; 60% (Atrasado)</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
         )}
       </TabsContent>
 

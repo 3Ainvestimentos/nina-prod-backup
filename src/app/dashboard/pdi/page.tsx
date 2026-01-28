@@ -340,7 +340,7 @@ export default function PdiPage() {
       const notesDetalhadas = `${isEditMode ? 'Plano comercial atualizado' : 'Plano comercial criado'} para ${year}
 • AUC Inicial: ${formatCurrency(premissasData.aucInicial)}
 • Captação Mensal: ${formatCurrency(premissasData.captacaoPrevista)}
-• Churn Anual: ${premissasData.churnPrevisto}%
+• Churn Mensal: ${premissasData.churnPrevisto}%
 • ROA Anual: ${premissasData.roaPrevisto}%
 • Tipo: ${premissasData.tipoAssessor}`;
       
@@ -562,7 +562,7 @@ export default function PdiPage() {
                                 {/* Churn Previsto */}
                                 <div className="space-y-2">
                                     <Label htmlFor="churnPrevisto" className="text-sm font-medium">
-                                        Churn Anual (%)
+                                        Churn Mensal (%)
                                     </Label>
                                     <Input
                                         id="churnPrevisto"

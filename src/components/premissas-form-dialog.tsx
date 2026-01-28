@@ -209,7 +209,7 @@ export function PremissasFormDialog({ open, onOpenChange, employee, premissas }:
       const notesDetalhadas = `${isEditMode ? 'Plano comercial atualizado' : 'Plano comercial criado'} para ${year}
 • AUC Inicial: ${formatCurrency(premissasData.aucInicial)}
 • Captação Mensal: ${formatCurrency(premissasData.captacaoPrevista)}
-• Churn Anual: ${premissasData.churnPrevisto}%
+• Churn Mensal: ${premissasData.churnPrevisto}%
 • ROA Anual: ${premissasData.roaPrevisto}%
 • Tipo: ${premissasData.tipoAssessor}`;
       
@@ -298,17 +298,17 @@ export function PremissasFormDialog({ open, onOpenChange, employee, premissas }:
 
             {/* Churn Previsto */}
             <div className="grid gap-2">
-              <Label htmlFor="churnPrevisto">Churn Previsto Anual (%)</Label>
+              <Label htmlFor="churnPrevisto">Churn Previsto Mensal (%)</Label>
               <Input
                 id="churnPrevisto"
                 type="number"
                 step="0.01"
-                placeholder="Ex: 24"
+                placeholder="Ex: 2"
                 value={formData.churnPrevisto}
                 onChange={(e) => setFormData(prev => ({ ...prev, churnPrevisto: e.target.value }))}
               />
               <p className="text-xs text-muted-foreground">
-                Expectativa de saída de recursos anual (em % do AUC)
+                Expectativa de saída de recursos mensal (em % do AUC)
               </p>
             </div>
 

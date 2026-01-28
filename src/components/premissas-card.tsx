@@ -34,7 +34,7 @@ function calcularROAMensal(roaAnual: number): number {
 function calcularProjecaoAUC(premissas: Premissas, cdiMensal: number): Array<{ mes: string; projetado: number }> {
   const meses = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
   const captacaoMensal = premissas.captacaoPrevista; // Captação mensal (já vem como mensal)
-  const churnMensalPercentual = premissas.churnPrevisto / 12; // Churn anual convertido para mensal
+  const churnMensalPercentual = premissas.churnPrevisto; // Churn já é mensal
   
   let aucAtual = premissas.aucInicial;
   const projecao: Array<{ mes: string; projetado: number }> = [];

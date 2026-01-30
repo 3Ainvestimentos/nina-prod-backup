@@ -46,6 +46,92 @@ const testAccountEmail = 'tester@3ainvestimentos.com.br';
 
 const adminEmails = ['matheus@3ainvestimentos.com.br', 'lucas.nogueira@3ainvestimentos.com.br', 'henrique.peixoto@3ainvestimentos.com.br'];
 
+// Frequências de reunião do Diretor com cada Líder
+// Incluindo variações de nomes (com e sem nomes do meio)
+const leaderMeetingFrequencies: { [key: string]: { frequency: 'semanal' | 'quinzenal' | 'mensal'; requiredPerMonth: number } } = {
+  // Semanal (4 por mês)
+  'Samuel Leite': { frequency: 'semanal', requiredPerMonth: 4 },
+  'Samuel Coelho Leite': { frequency: 'semanal', requiredPerMonth: 4 },
+  'Ivan Paes': { frequency: 'semanal', requiredPerMonth: 4 },
+  'Mateus Galhardo': { frequency: 'semanal', requiredPerMonth: 4 },
+  'Rodrigo Alcantara': { frequency: 'semanal', requiredPerMonth: 4 },
+  // Quinzenal (2 por mês)
+  'Thais Andrade': { frequency: 'quinzenal', requiredPerMonth: 2 },
+  'Rui Fontoura': { frequency: 'quinzenal', requiredPerMonth: 2 },
+  'Fabiana Fracalossi': { frequency: 'quinzenal', requiredPerMonth: 2 },
+  // Mensal (1 por mês)
+  'Fernando Guimaraes': { frequency: 'mensal', requiredPerMonth: 1 },
+  'Flavio Bicalho': { frequency: 'mensal', requiredPerMonth: 1 },
+  'Jaqueline Reis': { frequency: 'mensal', requiredPerMonth: 1 },
+  'Mauricio': { frequency: 'mensal', requiredPerMonth: 1 },
+  'Victor Arcuri': { frequency: 'mensal', requiredPerMonth: 1 },
+  'Sarita': { frequency: 'mensal', requiredPerMonth: 1 },
+};
+
+// Função para obter frequência de um líder pelo nome
+const getLeaderFrequency = (leaderName: string): { frequency: 'semanal' | 'quinzenal' | 'mensal'; requiredPerMonth: number } => {
+  if (!leaderName) {
+    return { frequency: 'mensal', requiredPerMonth: 1 };
+  }
+  
+  // Normalizar nomes para comparação (remover acentos e converter para minúsculas)
+  const normalize = (str: string) => str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+  const normalizedLeaderName = normalize(leaderName);
+  
+  // Busca exata primeiro (case-insensitive)
+  const exactMatch = Object.keys(leaderMeetingFrequencies).find(key => 
+    normalize(key) === normalizedLeaderName
+  );
+  if (exactMatch) {
+    return leaderMeetingFrequencies[exactMatch];
+  }
+  
+  // Busca por primeiro e último nome
+  const leaderNameParts = normalizedLeaderName.split(/\s+/).filter(p => p.length > 0);
+  if (leaderNameParts.length >= 2) {
+    const leaderFirstName = leaderNameParts[0];
+    const leaderLastName = leaderNameParts[leaderNameParts.length - 1];
+    
+    const found = Object.keys(leaderMeetingFrequencies).find(key => {
+      const normalizedKey = normalize(key);
+      const keyParts = normalizedKey.split(/\s+/).filter(p => p.length > 0);
+      
+      if (keyParts.length >= 2) {
+        const keyFirstName = keyParts[0];
+        const keyLastName = keyParts[keyParts.length - 1];
+        
+        // Verifica se primeiro e último nome coincidem
+        if (leaderFirstName === keyFirstName && leaderLastName === keyLastName) {
+          return true;
+        }
+      }
+      
+      // Fallback: busca por substring
+      return normalizedLeaderName.includes(normalizedKey) || normalizedKey.includes(normalizedLeaderName);
+    });
+    
+    if (found) {
+      return leaderMeetingFrequencies[found];
+    }
+  }
+  
+  // Para nomes com apenas uma palavra, busca exata
+  if (leaderNameParts.length === 1) {
+    const found = Object.keys(leaderMeetingFrequencies).find(key => 
+      normalize(key) === normalizedLeaderName || normalize(key).split(/\s+/)[0] === normalizedLeaderName
+    );
+    if (found) {
+      return leaderMeetingFrequencies[found];
+    }
+  }
+  
+  // Default: mensal (com log para debug)
+  if (process.env.NODE_ENV === 'development') {
+    console.warn(`[getLeaderFrequency] Líder não encontrado: "${leaderName}". Usando frequência padrão (mensal).`);
+  }
+  return { frequency: 'mensal', requiredPerMonth: 1 };
+};
+
 interface LeaderTrackingContentProps {
   employees?: Employee[];
   currentUserEmployee?: Employee | null;
@@ -204,18 +290,23 @@ export function LeaderTrackingContent({
     setIsSaving(true);
 
     const now = new Date();
-    const hasExistingN2 = interactions.some(
+    // Contar interações N2 do mês atual
+    const n2ThisMonth = interactions.filter(
       (interaction) =>
         interaction.type === 'N2 Individual' &&
         isSameMonth(parseISO(interaction.date), now) &&
         isSameYear(parseISO(interaction.date), now)
-    );
+    ).length;
 
-    if (hasExistingN2) {
+    // Obter frequência esperada do líder
+    const freq = getLeaderFrequency(selectedLeader.name);
+    
+    // Validar se já atingiu o limite mensal baseado na frequência
+    if (n2ThisMonth >= freq.requiredPerMonth) {
       toast({
         variant: "destructive",
-        title: "Registro Duplicado",
-        description: `Uma interação "N2 Individual" já foi registrada para este líder no mês corrente.`,
+        title: "Limite Atingido",
+        description: `O limite de ${freq.requiredPerMonth} interação(ões) N2 Individual já foi atingido este mês para ${selectedLeader.name}.`,
       });
       setIsSaving(false);
       return;

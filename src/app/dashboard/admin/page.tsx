@@ -68,9 +68,11 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
 import { exportData } from "@/lib/export";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { getFunctions, httpsCallable } from "firebase/functions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from "recharts";
+import { ArrowUp, ArrowDown, Minus } from "lucide-react";
 
 const superAdminEmails = ['lucas.nogueira@3ainvestimentos.com.br', 'matheus@3ainvestimentos.com.br', 'henrique.peixoto@3ainvestimentos.com.br'];
 const emailsToPromote = [
@@ -146,6 +148,22 @@ export default function AdminPage() {
   });
   const [expandedLeaders, setExpandedLeaders] = useState<Set<string>>(new Set());
   const [expandedDirectors, setExpandedDirectors] = useState<Set<string>>(new Set());
+  
+  // Estados para histórico e média ponderada
+  const [leadersHistory, setLeadersHistory] = useState<MonthlyHistory[]>([]);
+  const [directorsHistory, setDirectorsHistory] = useState<MonthlyHistory[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  
+  // Estados para progresso semanal
+  const [weeklyProgress, setWeeklyProgress] = useState<WeeklyProgressSummary | null>(null);
+  const [weeklyProgressLoading, setWeeklyProgressLoading] = useState(false);
+
+  // Estados para métricas de risco
+  const [riskMetrics, setRiskMetrics] = useState<{
+    history: RiskHistoryPoint[];
+    currentHighRisk: HighRiskAdvisor[];
+  } | null>(null);
+  const [riskMetricsLoading, setRiskMetricsLoading] = useState(false);
 
   // Constantes para cálculo de métricas (mesmo padrão do ranking)
   const METRICS_GOAL = 80; // Meta de 80%
@@ -163,10 +181,84 @@ export default function AdminPage() {
   };
 
   // Frequência de N2 Individual para diretores (baseado no líder)
+  const leaderMeetingFrequencies: { [key: string]: { frequency: 'semanal' | 'quinzenal' | 'mensal'; requiredPerMonth: number } } = {
+    // Semanal (4 por mês)
+    'Samuel Leite': { frequency: 'semanal', requiredPerMonth: 4 },
+    'Samuel Coelho Leite': { frequency: 'semanal', requiredPerMonth: 4 },
+    'Ivan Paes': { frequency: 'semanal', requiredPerMonth: 4 },
+    'Mateus Galhardo': { frequency: 'semanal', requiredPerMonth: 4 },
+    'Rodrigo Alcantara': { frequency: 'semanal', requiredPerMonth: 4 },
+    // Quinzenal (2 por mês)
+    'Thais Andrade': { frequency: 'quinzenal', requiredPerMonth: 2 },
+    'Rui Fontoura': { frequency: 'quinzenal', requiredPerMonth: 2 },
+    'Fabiana Fracalossi': { frequency: 'quinzenal', requiredPerMonth: 2 },
+    // Mensal (1 por mês)
+    'Fernando Guimaraes': { frequency: 'mensal', requiredPerMonth: 1 },
+    'Flavio Bicalho': { frequency: 'mensal', requiredPerMonth: 1 },
+    'Jaqueline Reis': { frequency: 'mensal', requiredPerMonth: 1 },
+    'Mauricio': { frequency: 'mensal', requiredPerMonth: 1 },
+    'Victor Arcuri': { frequency: 'mensal', requiredPerMonth: 1 },
+    'Sarita': { frequency: 'mensal', requiredPerMonth: 1 },
+  };
+
   const getLeaderN2Frequency = (leaderName: string): number => {
-    // Lógica simplificada - pode ser customizada
-    // Retorna número de N2s esperados por mês
-    return 1; // Padrão: 1 por mês
+    if (!leaderName) {
+      return 1; // Padrão: 1 por mês
+    }
+    
+    // Normalizar nomes para comparação (remover acentos e converter para minúsculas)
+    const normalize = (str: string) => str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+    const normalizedLeaderName = normalize(leaderName);
+    
+    // Busca exata primeiro (case-insensitive)
+    const exactMatch = Object.keys(leaderMeetingFrequencies).find(key => 
+      normalize(key) === normalizedLeaderName
+    );
+    if (exactMatch) {
+      return leaderMeetingFrequencies[exactMatch].requiredPerMonth;
+    }
+    
+    // Busca por primeiro e último nome
+    const leaderNameParts = normalizedLeaderName.split(/\s+/).filter(p => p.length > 0);
+    if (leaderNameParts.length >= 2) {
+      const leaderFirstName = leaderNameParts[0];
+      const leaderLastName = leaderNameParts[leaderNameParts.length - 1];
+      
+      const found = Object.keys(leaderMeetingFrequencies).find(key => {
+        const normalizedKey = normalize(key);
+        const keyParts = normalizedKey.split(/\s+/).filter(p => p.length > 0);
+        
+        if (keyParts.length >= 2) {
+          const keyFirstName = keyParts[0];
+          const keyLastName = keyParts[keyParts.length - 1];
+          
+          // Verifica se primeiro e último nome coincidem
+          if (leaderFirstName === keyFirstName && leaderLastName === keyLastName) {
+            return true;
+          }
+        }
+        
+        // Fallback: busca por substring
+        return normalizedLeaderName.includes(normalizedKey) || normalizedKey.includes(normalizedLeaderName);
+      });
+      
+      if (found) {
+        return leaderMeetingFrequencies[found].requiredPerMonth;
+      }
+    }
+    
+    // Para nomes com apenas uma palavra, busca exata
+    if (leaderNameParts.length === 1) {
+      const found = Object.keys(leaderMeetingFrequencies).find(key => 
+        normalize(key) === normalizedLeaderName || normalize(key).split(/\s+/)[0] === normalizedLeaderName
+      );
+      if (found) {
+        return leaderMeetingFrequencies[found].requiredPerMonth;
+      }
+    }
+    
+    // Default: mensal (1 por mês)
+    return 1;
   };
 
   // Filtros e ordenação
@@ -218,6 +310,536 @@ export default function AdminPage() {
     loadClaim();
     return () => { mounted = false; };
   }, [user]);
+
+  // ========================================
+  // INTERFACES E FUNÇÕES DE CÁLCULO DE HISTÓRICO
+  // ========================================
+  interface MonthlyHistory {
+    month: string; // "2024-01"
+    monthLabel: string; // "Jan/2024"
+    weightedAverage: number;
+    totalInteractions: number;
+    participants: number;
+  }
+
+  interface WeeklyProgress {
+    employeeId: string;
+    employeeName: string;
+    role: 'Líder' | 'Diretor';
+    currentWeek: number; // 1-4
+    monthlyRequired: number;
+    weeklyRequired: number; // monthlyRequired / 4
+    expectedAccumulated: number; // Esperado na semana (weeklyRequired)
+    completedAccumulated: number; // Realizado na semana
+    completedMonthly: number; // Total realizado no mês inteiro
+    percentage: number; // (completedWeekly / weeklyRequired) * 100
+    status: 'excellent' | 'on-track' | 'behind';
+  }
+
+  interface WeeklyProgressSummary {
+    leaders: WeeklyProgress[];
+    directors: WeeklyProgress[];
+    leadersSummary: {
+      excellent: number;
+      onTrack: number;
+      behind: number;
+      total: number;
+    };
+    directorsSummary: {
+      excellent: number;
+      onTrack: number;
+      behind: number;
+      total: number;
+    };
+  }
+
+  interface RiskHistoryPoint {
+    month: string;
+    count: number;
+    year: number;
+    monthIndex: number;
+  }
+
+  interface HighRiskAdvisor {
+    id: string;
+    name: string;
+    riskScore: number;
+    lastAssessmentDate: string;
+  }
+
+  // Definir calculateMonthlyHistory depois das constantes
+  const calculateMonthlyHistory = useCallback(async (
+    firestore: any,
+    employees: Employee[],
+    type: 'leaders' | 'directors'
+  ): Promise<MonthlyHistory[]> => {
+    if (!firestore || !employees || employees.length === 0) {
+      return [];
+    }
+
+    try {
+      // Buscar todas as interações desde o início
+      const allInteractionsMap = new Map<string, Interaction[]>();
+      const allPdiActionsMap = new Map<string, PDIAction[]>();
+
+      // Determinar quais IDs buscar baseado no tipo
+      let idsToFetch: string[] = [];
+      if (type === 'leaders') {
+        // Mesmo padrão do ranking: calcular todos os líderes, depois filtrar por axis
+        const allLeaders = employees.filter(e => 
+          !(e as any)._isDeleted && 
+          e.role === 'Líder' && 
+          !e.isDirector
+        );
+        const leadersList = allLeaders.filter(leader => leader.axis === 'Comercial');
+        idsToFetch = leadersList.flatMap(leader => {
+          const teamMembers = employees.filter(e => 
+            e.leaderId === leader.id && 
+            e.isUnderManagement && 
+            !(e as any)._isDeleted
+          );
+          return [leader.id, ...teamMembers.map(m => m.id)];
+        });
+      } else {
+        const directorsList = employees.filter(e => 
+          !(e as any)._isDeleted && 
+          e.isDirector &&
+          e.name?.toLowerCase().includes('gabriel') &&
+          e.name?.toLowerCase().includes('ayres')
+        );
+        const leadersUnderDirector = employees.filter(e => 
+          !(e as any)._isDeleted && 
+          e.role === 'Líder' &&
+          !e.isDirector
+        );
+        idsToFetch = [...directorsList.map(d => d.id), ...leadersUnderDirector.map(l => l.id)];
+      }
+
+      const uniqueIds = [...new Set(idsToFetch)];
+
+      // Carregar todas as interações e PDI actions
+      await Promise.all(uniqueIds.map(async (id) => {
+        try {
+          const interactionsQuery = query(collection(firestore, "employees", id, "interactions"));
+          const pdiActionsQuery = query(collection(firestore, "employees", id, "pdiActions"));
+          
+          const [interactionsSnap, pdiSnap] = await Promise.all([
+            getDocs(interactionsQuery),
+            getDocs(pdiActionsQuery)
+          ]);
+
+          const interactions = interactionsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Interaction));
+          const pdiActions = pdiSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as PDIAction));
+
+          if (interactions.length > 0) {
+            allInteractionsMap.set(id, interactions);
+          }
+          if (pdiActions.length > 0) {
+            allPdiActionsMap.set(id, pdiActions);
+          }
+        } catch (error) {
+          console.error(`[History] Erro ao carregar dados de ${id}:`, error);
+        }
+      }));
+
+      // Encontrar a primeira data (início do sistema)
+      let earliestDate: Date | null = null;
+      allInteractionsMap.forEach(interactions => {
+        interactions.forEach(interaction => {
+          const date = parseISO(interaction.date);
+          if (!earliestDate || date < earliestDate) {
+            earliestDate = date;
+          }
+        });
+      });
+
+      if (!earliestDate) {
+        return [];
+      }
+
+      // Agrupar por mês e calcular média ponderada para cada mês
+      const monthlyData = new Map<string, {
+        metrics: Array<{ adherenceScore: number; requiredCount: number; completedCount: number }>;
+        totalInteractions: number;
+        participants: Set<string>;
+      }>();
+
+      // Iterar mês a mês desde o início até hoje
+      const startMonth = startOfMonth(earliestDate);
+      const endMonth = endOfMonth(new Date());
+      let currentMonth: Date = startMonth;
+
+      while (currentMonth.getTime() <= endMonth.getTime()) {
+        const monthKey = format(currentMonth, 'yyyy-MM');
+        const monthStart = startOfMonth(currentMonth);
+        const monthEnd = endOfMonth(currentMonth);
+        const range = { start: monthStart, end: monthEnd };
+
+        const monthMetrics: Array<{ adherenceScore: number; requiredCount: number; completedCount: number }> = [];
+        const monthParticipants = new Set<string>();
+        let monthTotalInteractions = 0;
+
+        if (type === 'leaders') {
+          const leadersList = employees.filter(e => 
+            !(e as any)._isDeleted && 
+            e.role === 'Líder' && 
+            !e.isDirector
+          );
+
+          leadersList.forEach(leader => {
+            const teamMembers = employees.filter(e => 
+              e.leaderId === leader.id && 
+              e.isUnderManagement && 
+              !(e as any)._isDeleted
+            );
+
+            if (teamMembers.length === 0) return;
+
+            let totalCompleted = 0;
+            let totalRequired = 0;
+
+            teamMembers.forEach(member => {
+              const memberInteractions = allInteractionsMap.get(member.id) || [];
+              const memberPdiActions = allPdiActionsMap.get(member.id) || [];
+
+              const fromMonth = getMonth(range.start);
+              const fromYear = getYear(range.start);
+              const toMonth = getMonth(range.end);
+              const toYear = getYear(range.end);
+              const monthsInRange = 1; // Um mês por vez
+
+              // N3 Individual
+              const n3Segment = member.segment as string | undefined;
+              if (n3Segment && n3IndividualSchedule[n3Segment]) {
+                const required = n3IndividualSchedule[n3Segment] * monthsInRange;
+                const completed = memberInteractions.filter(i => 
+                  i.type === 'N3 Individual' && isWithinInterval(parseISO(i.date), range)
+                ).length;
+                totalRequired += required;
+                totalCompleted += Math.min(completed, required);
+              }
+
+              // Índice de Risco
+              const riscoSchedule = interactionSchedules['Índice de Risco'] || [];
+              const requiredRiscoMonths = riscoSchedule.filter(month => {
+                for (let y = fromYear; y <= toYear; y++) {
+                  const startM = (y === fromYear) ? fromMonth : 0;
+                  const endM = (y === toYear) ? toMonth : 11;
+                  if (month >= startM && month <= endM) return true;
+                }
+                return false;
+              });
+              totalRequired += requiredRiscoMonths.length;
+
+              const executedRiscoMonths = new Set<number>();
+              memberInteractions.forEach(i => {
+                const intDate = parseISO(i.date);
+                if (i.type === 'Índice de Risco' && isWithinInterval(intDate, range) && requiredRiscoMonths.includes(getMonth(intDate))) {
+                  executedRiscoMonths.add(getMonth(intDate));
+                }
+              });
+              totalCompleted += executedRiscoMonths.size;
+
+              // 1:1
+              const oneOnOneSchedule = interactionSchedules['1:1'] || [];
+              const requiredOneOnOneMonths = oneOnOneSchedule.filter(month => {
+                for (let y = fromYear; y <= toYear; y++) {
+                  const startM = (y === fromYear) ? fromMonth : 0;
+                  const endM = (y === toYear) ? toMonth : 11;
+                  if (month >= startM && month <= endM) return true;
+                }
+                return false;
+              });
+              totalRequired += requiredOneOnOneMonths.length;
+
+              const executedOneOnOneMonths = new Set<number>();
+              memberInteractions.forEach(i => {
+                const intDate = parseISO(i.date);
+                if (i.type === '1:1' && isWithinInterval(intDate, range) && requiredOneOnOneMonths.includes(getMonth(intDate))) {
+                  executedOneOnOneMonths.add(getMonth(intDate));
+                }
+              });
+              totalCompleted += executedOneOnOneMonths.size;
+
+              // PDI
+              const pdiSchedule = interactionSchedules['PDI'] || [];
+              const requiredPdiMonths = pdiSchedule.filter(month => {
+                for (let y = fromYear; y <= toYear; y++) {
+                  const startM = (y === fromYear) ? fromMonth : 0;
+                  const endM = (y === toYear) ? toMonth : 11;
+                  if (month >= startM && month <= endM) return true;
+                }
+                return false;
+              });
+              totalRequired += requiredPdiMonths.length;
+
+              const executedPdiMonths = new Set<number>();
+              memberPdiActions.forEach(action => {
+                const actionDate = parseISO(action.startDate);
+                if (isWithinInterval(actionDate, range) && requiredPdiMonths.includes(getMonth(actionDate))) {
+                  executedPdiMonths.add(getMonth(actionDate));
+                }
+              });
+              totalCompleted += executedPdiMonths.size;
+
+              // Contar interações
+              monthTotalInteractions += memberInteractions.filter(i => 
+                isWithinInterval(parseISO(i.date), range)
+              ).length;
+            });
+
+            const adherenceScore = totalRequired > 0 ? (totalCompleted / totalRequired) * 100 : 0;
+            
+            if (totalRequired > 0) {
+              monthMetrics.push({
+                adherenceScore: Math.round(adherenceScore * 10) / 10,
+                requiredCount: totalRequired,
+                completedCount: totalCompleted
+              });
+              monthParticipants.add(leader.id);
+            }
+          });
+        } else {
+          // Diretores
+          const directorsList = employees.filter(e => 
+            !(e as any)._isDeleted && 
+            e.isDirector &&
+            e.name?.toLowerCase().includes('gabriel')
+          );
+
+          directorsList.forEach(director => {
+            const leadersUnderDirector = employees.filter(e => 
+              !(e as any)._isDeleted && 
+              e.role === 'Líder' &&
+              !e.isDirector
+            );
+
+            if (leadersUnderDirector.length === 0) return;
+
+            let totalCompleted = 0;
+            let totalRequired = 0;
+
+            leadersUnderDirector.forEach(leader => {
+              const leaderInteractions = allInteractionsMap.get(leader.id) || [];
+              const monthsInRange = 1;
+
+              // N2 Individual
+              const n2RequiredForLeader = getLeaderN2Frequency(leader.name) * monthsInRange;
+              totalRequired += n2RequiredForLeader;
+
+              const n2Count = leaderInteractions.filter(i => 
+                i.type === 'N2 Individual' && isWithinInterval(parseISO(i.date), range)
+              ).length;
+              totalCompleted += Math.min(n2Count, n2RequiredForLeader);
+
+              // Índice de Qualidade
+              const qualidadeRequiredForLeader = monthsInRange;
+              totalRequired += qualidadeRequiredForLeader;
+
+              const qualidadeMonths = new Set<number>();
+              leaderInteractions.forEach(i => {
+                if (i.type === 'Índice de Qualidade' && isWithinInterval(parseISO(i.date), range)) {
+                  qualidadeMonths.add(getMonth(parseISO(i.date)));
+                }
+              });
+              totalCompleted += Math.min(qualidadeMonths.size, qualidadeRequiredForLeader);
+
+              // Contar interações
+              monthTotalInteractions += leaderInteractions.filter(i => 
+                isWithinInterval(parseISO(i.date), range) &&
+                (i.type === 'N2 Individual' || i.type === 'Índice de Qualidade' || i.type === 'Feedback')
+              ).length;
+            });
+
+            const adherenceScore = totalRequired > 0 ? (totalCompleted / totalRequired) * 100 : 0;
+            
+            if (totalRequired > 0) {
+              monthMetrics.push({
+                adherenceScore: Math.round(adherenceScore * 10) / 10,
+                requiredCount: totalRequired,
+                completedCount: totalCompleted
+              });
+              monthParticipants.add(director.id);
+            }
+          });
+        }
+
+        // Calcular média ponderada do mês
+        let weightedSum = 0;
+        let totalWeight = 0;
+        monthMetrics.forEach(metric => {
+          weightedSum += metric.adherenceScore * metric.requiredCount;
+          totalWeight += metric.requiredCount;
+        });
+
+        const weightedAverage = totalWeight > 0 ? Math.round((weightedSum / totalWeight) * 10) / 10 : 0;
+
+        monthlyData.set(monthKey, {
+          metrics: monthMetrics,
+          totalInteractions: monthTotalInteractions,
+          participants: monthParticipants
+        });
+
+        // Avançar para o próximo mês
+        currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1);
+      }
+
+      // Converter para array ordenado
+      const history: MonthlyHistory[] = Array.from(monthlyData.entries())
+        .map(([monthKey, data]) => {
+          let weightedSum = 0;
+          let totalWeight = 0;
+          data.metrics.forEach(metric => {
+            weightedSum += metric.adherenceScore * metric.requiredCount;
+            totalWeight += metric.requiredCount;
+          });
+          const weightedAverage = totalWeight > 0 ? Math.round((weightedSum / totalWeight) * 10) / 10 : 0;
+
+          return {
+            month: monthKey,
+            monthLabel: format(parseISO(`${monthKey}-01`), 'MMM/yyyy', { locale: ptBR }),
+            weightedAverage,
+            totalInteractions: data.totalInteractions,
+            participants: data.participants.size
+          };
+        })
+        .sort((a, b) => a.month.localeCompare(b.month));
+
+      return history;
+    } catch (error) {
+      console.error('[History] Erro ao calcular histórico:', error);
+      return [];
+    }
+  }, [employees]);
+
+  const calculateRiskMetrics = useCallback(async (
+    firestore: any,
+    employees: Employee[]
+  ) => {
+    if (!firestore || !employees || employees.length === 0) {
+      return null;
+    }
+
+    try {
+      // 1. Filtrar Assessores (Colaborador + Comercial)
+      const advisors = employees.filter(e => 
+        !(e as any)._isDeleted && 
+        e.role === 'Colaborador' && 
+        e.axis === 'Comercial'
+      );
+
+      // 2. Buscar interações de Índice de Risco para cada assessor
+      const interactionsMap = new Map<string, Interaction[]>();
+      
+      await Promise.all(advisors.map(async (advisor) => {
+        try {
+          const interactionsQuery = query(collection(firestore, "employees", advisor.id, "interactions"));
+          const snapshot = await getDocs(interactionsQuery);
+          
+          const riskInteractions = snapshot.docs
+            .map(doc => ({ id: doc.id, ...doc.data() } as Interaction))
+            .filter(i => i.type === 'Índice de Risco' && i.riskScore !== undefined);
+          
+          if (riskInteractions.length > 0) {
+            interactionsMap.set(advisor.id, riskInteractions);
+          }
+        } catch (error) {
+          console.error(`Erro ao buscar risco para ${advisor.name}:`, error);
+        }
+      }));
+
+      // Se não houver dados, retornar vazio
+      if (interactionsMap.size === 0) {
+        return { history: [], currentHighRisk: [] };
+      }
+
+      // Encontrar a data mais antiga para iniciar o histórico
+      let earliestDate: Date | null = null;
+      interactionsMap.forEach(interactions => {
+        interactions.forEach(i => {
+          const date = parseISO(i.date);
+          if (!earliestDate || date < earliestDate) {
+            earliestDate = date;
+          }
+        });
+      });
+
+      if (!earliestDate) earliestDate = new Date();
+
+      // 3. Calcular histórico mensal
+      const history: RiskHistoryPoint[] = [];
+      const now = new Date();
+      const start = startOfMonth(earliestDate);
+      const end = endOfMonth(now);
+      
+      let currentIter = start;
+      
+      while (currentIter <= end) {
+        const monthEnd = endOfMonth(currentIter);
+        let highRiskCount = 0;
+
+        // Para este mês, verificar status de cada assessor
+        advisors.forEach(advisor => {
+          const interactions = interactionsMap.get(advisor.id) || [];
+          
+          // Pegar a última avaliação até o fim deste mês
+          const relevantInteractions = interactions
+            .filter(i => parseISO(i.date) <= monthEnd)
+            .sort((a, b) => parseISO(b.date).getTime() - parseISO(a.date).getTime());
+          
+          if (relevantInteractions.length > 0) {
+            const lastScore = relevantInteractions[0].riskScore || 0;
+            if (lastScore > 5) {
+              highRiskCount++;
+            }
+          }
+        });
+
+        history.push({
+          month: format(currentIter, 'MMM/yy', { locale: ptBR }),
+          count: highRiskCount,
+          year: getYear(currentIter),
+          monthIndex: getMonth(currentIter)
+        });
+
+        currentIter = new Date(currentIter.getFullYear(), currentIter.getMonth() + 1, 1);
+      }
+
+      // 4. Calcular status atual (baseado na última interação de todas)
+      const currentHighRisk: HighRiskAdvisor[] = [];
+      
+      advisors.forEach(advisor => {
+        const interactions = interactionsMap.get(advisor.id) || [];
+        
+        // Pegar a última avaliação absoluta
+        const sortedInteractions = interactions
+          .sort((a, b) => parseISO(b.date).getTime() - parseISO(a.date).getTime());
+        
+        if (sortedInteractions.length > 0) {
+          const lastInteraction = sortedInteractions[0];
+          const lastScore = lastInteraction.riskScore || 0;
+          
+          if (lastScore > 5) {
+            currentHighRisk.push({
+              id: advisor.id,
+              name: advisor.name,
+              riskScore: lastScore,
+              lastAssessmentDate: lastInteraction.date
+            });
+          }
+        }
+      });
+
+      // Ordenar por score decrescente
+      currentHighRisk.sort((a, b) => b.riskScore - a.riskScore);
+
+      return { history, currentHighRisk };
+
+    } catch (error) {
+      console.error("Erro ao calcular métricas de risco:", error);
+      return null;
+    }
+  }, []);
 
   // ========================================
   // CARREGAR DADOS DE MÉTRICAS (quando aba ativa)
@@ -274,12 +896,81 @@ export default function AdminPage() {
       
       console.timeEnd('📊 [METRICS] Carregamento de dados');
       console.log(`✅ [METRICS] ${results.length} pessoas carregadas com sucesso`);
+
+      // Carregar histórico mensal
+      setHistoryLoading(true);
+      console.time('📊 [HISTORY] Carregamento de histórico');
+      try {
+        const [leadersHist, directorsHist] = await Promise.all([
+          calculateMonthlyHistory(firestore, employees, 'leaders'),
+          calculateMonthlyHistory(firestore, employees, 'directors')
+        ]);
+        setLeadersHistory(leadersHist);
+        setDirectorsHistory(directorsHist);
+        console.timeEnd('📊 [HISTORY] Carregamento de histórico');
+        console.log(`✅ [HISTORY] Histórico carregado: ${leadersHist.length} meses (líderes), ${directorsHist.length} meses (diretores)`);
+      } catch (error) {
+        console.error('❌ [HISTORY] Erro ao carregar histórico:', error);
+      } finally {
+        setHistoryLoading(false);
+      }
+
+      // Carregar progresso semanal
+      setWeeklyProgressLoading(true);
+      console.time('📊 [WEEKLY] Carregamento de progresso semanal');
+      try {
+        const currentMonth = new Date();
+        const [leadersProgress, directorsProgress] = await Promise.all([
+          calculateWeeklyProgress(firestore, employees, 'leaders', currentMonth),
+          calculateWeeklyProgress(firestore, employees, 'directors', currentMonth)
+        ]);
+        
+        const leadersSummary = {
+          excellent: leadersProgress.filter(p => p.status === 'excellent').length,
+          onTrack: leadersProgress.filter(p => p.status === 'on-track').length,
+          behind: leadersProgress.filter(p => p.status === 'behind').length,
+          total: leadersProgress.length
+        };
+        
+        const directorsSummary = {
+          excellent: directorsProgress.filter(p => p.status === 'excellent').length,
+          onTrack: directorsProgress.filter(p => p.status === 'on-track').length,
+          behind: directorsProgress.filter(p => p.status === 'behind').length,
+          total: directorsProgress.length
+        };
+        
+        setWeeklyProgress({
+          leaders: leadersProgress,
+          directors: directorsProgress,
+          leadersSummary,
+          directorsSummary
+        });
+        console.timeEnd('📊 [WEEKLY] Carregamento de progresso semanal');
+        console.log(`✅ [WEEKLY] Progresso semanal carregado: ${leadersProgress.length} líderes, ${directorsProgress.length} diretores`);
+      } catch (error) {
+        console.error('❌ [WEEKLY] Erro ao carregar progresso semanal:', error);
+      } finally {
+        setWeeklyProgressLoading(false);
+      }
+      // Carregar métricas de risco
+      setRiskMetricsLoading(true);
+      console.time('📊 [RISK] Carregamento de risco');
+      try {
+        const riskData = await calculateRiskMetrics(firestore, employees);
+        setRiskMetrics(riskData);
+        console.timeEnd('📊 [RISK] Carregamento de risco');
+      } catch (error) {
+        console.error('❌ [RISK] Erro ao carregar risco:', error);
+      } finally {
+        setRiskMetricsLoading(false);
+      }
+
     } catch (error) {
       console.error('❌ [METRICS] Erro ao carregar dados:', error);
     } finally {
       setMetricsLoading(false);
     }
-  }, [firestore, employees, activeTab]);
+  }, [firestore, employees, activeTab, calculateMonthlyHistory, calculateRiskMetrics]);
 
   useEffect(() => {
     if (activeTab === 'metrics' && employees && metricsInteractions.size === 0) {
@@ -486,12 +1177,15 @@ export default function AdminPage() {
       const monthsInRange = Math.max(1, differenceInMonths(range.end, range.start) + 1);
       const weeksInRange = Math.max(1, differenceInWeeks(range.end, range.start) + 1);
 
-      // Filtrar apenas líderes (não diretores)
-      const leadersList = employees.filter(e => 
+      // Filtrar apenas líderes (não diretores) - mesmo padrão do ranking
+      const allLeaders = employees.filter(e => 
         !(e as any)._isDeleted && 
         e.role === 'Líder' && 
         !e.isDirector
       );
+      
+      // Filtrar por axis (padrão: Comercial, igual ao ranking)
+      const leadersList = allLeaders.filter(leader => leader.axis === 'Comercial');
 
       return leadersList.map(leader => {
         const teamMembers = employees.filter(e => 
@@ -677,11 +1371,12 @@ export default function AdminPage() {
       const monthsInRange = Math.max(1, differenceInMonths(range.end, range.start) + 1);
       const weeksInRange = Math.max(1, differenceInWeeks(range.end, range.start) + 1);
 
-      // Filtrar diretores - apenas Gabriel usa o CRM
+      // Filtrar diretores - apenas Gabriel Ayres
       const directorsList = employees.filter(e => 
         !(e as any)._isDeleted && 
         e.isDirector &&
-        e.name?.toLowerCase().includes('gabriel')
+        e.name?.toLowerCase().includes('gabriel') &&
+        e.name?.toLowerCase().includes('ayres')
       );
 
       return directorsList.map(director => {
@@ -798,6 +1493,528 @@ export default function AdminPage() {
       if (value >= 60) return { label: 'Atenção', variant: 'secondary' };
       return { label: 'Atrasado', variant: 'destructive' };
     };
+
+    // ========================================
+    // CÁLCULO DE MÉDIA PONDERADA E HISTÓRICO
+    // ========================================
+    interface WeightedAverageResult {
+      weightedAverage: number; // Média ponderada em %
+      totalWeight: number; // Soma dos pesos
+      totalParticipants: number; // Número de participantes
+    }
+
+    interface MonthlyHistory {
+      month: string; // "2024-01"
+      monthLabel: string; // "Jan/2024"
+      weightedAverage: number;
+      totalInteractions: number;
+      participants: number;
+    }
+
+    interface TrendAnalysis {
+      currentAverage: number;
+      previousAverage: number;
+      trend: 'increasing' | 'decreasing' | 'stable';
+      percentageChange: number;
+      monthsAnalyzed: number;
+    }
+
+    // Calcular média ponderada da aderência
+    const calculateWeightedAverage = (
+      metrics: LeaderMetrics[] | DirectorMetrics[]
+    ): WeightedAverageResult => {
+      let totalWeightedScore = 0;
+      let totalWeight = 0;
+      
+      metrics.forEach(metric => {
+        // Peso = número de interações obrigatórias
+        const weight = metric.requiredCount;
+        
+        if (weight > 0) {
+          totalWeightedScore += metric.adherenceScore * weight;
+          totalWeight += weight;
+        }
+      });
+      
+      return {
+        weightedAverage: totalWeight > 0 ? Math.round((totalWeightedScore / totalWeight) * 10) / 10 : 0,
+        totalWeight,
+        totalParticipants: metrics.length
+      };
+    };
+
+
+    // Calcular tendência - calcula separadamente para líderes e diretores
+    const calculateTrend = (history: MonthlyHistory[], type: 'leaders' | 'directors' = 'leaders'): TrendAnalysis => {
+      if (history.length < 2) {
+        return {
+          currentAverage: history.length > 0 ? history[history.length - 1].weightedAverage : 0,
+          previousAverage: 0,
+          trend: 'stable',
+          percentageChange: 0,
+          monthsAnalyzed: history.length
+        };
+      }
+
+      // Filtrar apenas meses com dados válidos (weightedAverage > 0)
+      const validHistory = history.filter(h => h.weightedAverage > 0);
+      
+      if (validHistory.length < 2) {
+        return {
+          currentAverage: validHistory.length > 0 ? validHistory[validHistory.length - 1].weightedAverage : 0,
+          previousAverage: 0,
+          trend: 'stable',
+          percentageChange: 0,
+          monthsAnalyzed: validHistory.length
+        };
+      }
+
+      // Comparar último mês válido vs mês anterior válido (mais sensível a mudanças recentes)
+      const lastMonth = validHistory[validHistory.length - 1];
+      const previousMonth = validHistory[validHistory.length - 2];
+
+      const currentAverage = lastMonth.weightedAverage;
+      const previousAverage = previousMonth.weightedAverage;
+
+      const percentageChange = previousAverage > 0
+        ? Math.round(((currentAverage - previousAverage) / previousAverage) * 100 * 10) / 10
+        : 0;
+
+      let trend: 'increasing' | 'decreasing' | 'stable' = 'stable';
+      if (Math.abs(percentageChange) > 1) {
+        trend = percentageChange > 0 ? 'increasing' : 'decreasing';
+      }
+
+      console.log(`📊 [TREND ${type.toUpperCase()}] Último mês: ${currentAverage}%, Mês anterior: ${previousAverage}%, Variação: ${percentageChange}%, Tendência: ${trend}`);
+
+      return {
+        currentAverage: Math.round(currentAverage * 10) / 10,
+        previousAverage: Math.round(previousAverage * 10) / 10,
+        trend,
+        percentageChange,
+        monthsAnalyzed: validHistory.length
+      };
+    };
+
+    // Calcular semana atual do mês (1-4)
+    const getCurrentWeekOfMonth = (date: Date = new Date()): number => {
+      const monthStart = startOfMonth(date);
+      const startOfCurrentWeek = startOfWeek(date, { weekStartsOn: 1 }); // Segunda-feira
+      const weekNumber = Math.floor(differenceInWeeks(startOfCurrentWeek, monthStart, { roundingMethod: 'floor' }) + 1);
+      return Math.min(Math.max(weekNumber, 1), 4); // Garantir entre 1 e 4
+    };
+
+    // Calcular interações obrigatórias mensais
+    const calculateMonthlyRequiredInteractions = useCallback((
+      employee: Employee,
+      employees: Employee[],
+      type: 'leaders' | 'directors',
+      month: Date
+    ): number => {
+      const monthStart = startOfMonth(month);
+      const monthEnd = endOfMonth(month);
+      const fromMonth = getMonth(monthStart);
+      const fromYear = getYear(monthStart);
+      const toMonth = getMonth(monthEnd);
+      const toYear = getYear(monthEnd);
+      
+      let totalRequired = 0;
+      
+      if (type === 'leaders') {
+        // Líder: interações com seus colaboradores (mesmo padrão do ranking - não filtra por axis)
+        const teamMembers = employees.filter(e => 
+          e.leaderId === employee.id && 
+          e.isUnderManagement && 
+          !(e as any)._isDeleted
+        );
+        
+        teamMembers.forEach(member => {
+          // N3 Individual
+          const n3Segment = member.segment as keyof typeof n3IndividualSchedule | undefined;
+          if (n3Segment && n3IndividualSchedule[n3Segment]) {
+            totalRequired += n3IndividualSchedule[n3Segment];
+          }
+          
+          // Índice de Risco (mensal)
+          const riscoSchedule = interactionSchedules['Índice de Risco'] || [];
+          const requiredRiscoMonths = riscoSchedule.filter(monthNum => {
+            for (let y = fromYear; y <= toYear; y++) {
+              const startM = (y === fromYear) ? fromMonth : 0;
+              const endM = (y === toYear) ? toMonth : 11;
+              if (monthNum >= startM && monthNum <= endM) return true;
+            }
+            return false;
+          });
+          totalRequired += requiredRiscoMonths.length;
+          
+          // 1:1 (trimestral)
+          const oneOnOneSchedule = interactionSchedules['1:1'] || [];
+          const requiredOneOnOneMonths = oneOnOneSchedule.filter(monthNum => {
+            for (let y = fromYear; y <= toYear; y++) {
+              const startM = (y === fromYear) ? fromMonth : 0;
+              const endM = (y === toYear) ? toMonth : 11;
+              if (monthNum >= startM && monthNum <= endM) return true;
+            }
+            return false;
+          });
+          totalRequired += requiredOneOnOneMonths.length;
+          
+          // PDI (semestral)
+          const pdiSchedule = interactionSchedules['PDI'] || [];
+          const requiredPdiMonths = pdiSchedule.filter(monthNum => {
+            for (let y = fromYear; y <= toYear; y++) {
+              const startM = (y === fromYear) ? fromMonth : 0;
+              const endM = (y === toYear) ? toMonth : 11;
+              if (monthNum >= startM && monthNum <= endM) return true;
+            }
+            return false;
+          });
+          totalRequired += requiredPdiMonths.length;
+        });
+      } else {
+        // Diretor: interações com líderes (mesmo padrão do ranking - filtrar depois por axis)
+        // N2 Individual (baseado na frequência de cada líder)
+        const allLeaders = employees.filter(e => 
+          !(e as any)._isDeleted && 
+          e.role === 'Líder' && 
+          !e.isDirector
+        );
+        const leadersList = allLeaders.filter(leader => leader.axis === 'Comercial');
+        
+        leadersList.forEach(leader => {
+          // Usar getLeaderN2Frequency
+          const freq = getLeaderN2Frequency(leader.name || '');
+          totalRequired += freq;
+          
+          // Índice de Qualidade (1 por mês por líder)
+          totalRequired += 1;
+        });
+        
+        // Ações Diretor (2 por mês)
+        totalRequired += 2;
+      }
+      
+      return totalRequired;
+    }, []);
+
+    // Calcular progresso semanal
+    const calculateWeeklyProgress = useCallback(async (
+      firestore: any,
+      employees: Employee[],
+      type: 'leaders' | 'directors',
+      currentMonth: Date = new Date()
+    ): Promise<WeeklyProgress[]> => {
+      const currentWeek = getCurrentWeekOfMonth(currentMonth);
+      const monthStart = startOfMonth(currentMonth);
+      const monthEnd = endOfMonth(currentMonth);
+      const weekStart = startOfWeek(currentMonth, { weekStartsOn: 1 });
+      const weekEnd = endOfWeek(currentMonth, { weekStartsOn: 1 });
+      const weeklyRange = { start: weekStart, end: weekEnd }; // Range da semana atual
+      const monthlyRange = { start: monthStart, end: monthEnd }; // Range do mês inteiro
+      
+      // Buscar interações do mês atual
+      const allInteractionsMap = new Map<string, Interaction[]>();
+      const allPdiActionsMap = new Map<string, PDIAction[]>();
+      
+      // Mesmo padrão do ranking: filtrar líderes por axis depois
+      const allLeaders = employees.filter(e => 
+        !(e as any)._isDeleted && 
+        e.role === 'Líder' && 
+        !e.isDirector
+      );
+      const leadersFiltered = allLeaders.filter(leader => leader.axis === 'Comercial');
+      
+      const targetEmployees = type === 'leaders' 
+        ? leadersFiltered
+        : employees.filter(e => 
+            !(e as any)._isDeleted && 
+            e.isDirector &&
+            e.name?.toLowerCase().includes('gabriel') &&
+            e.name?.toLowerCase().includes('ayres')
+          );
+      
+      // Carregar interações e PDI actions
+      // Para líderes: precisamos carregar interações dos membros do time também
+      // Para diretores: carregamos apenas as interações do diretor
+      let idsToFetch: string[] = [];
+      
+      if (type === 'leaders') {
+        // Para cada líder, buscar IDs dos membros do time
+        targetEmployees.forEach(leader => {
+          const teamMembers = employees.filter(e => 
+            e.leaderId === leader.id && 
+            e.isUnderManagement && 
+            !(e as any)._isDeleted
+          );
+          idsToFetch.push(leader.id); // Líder também (caso tenha interações próprias)
+          teamMembers.forEach(member => {
+            idsToFetch.push(member.id);
+          });
+        });
+      } else {
+        // Para diretores: carregar interações do diretor (N2 Individual, Índice de Qualidade, Ações Diretor)
+        // Essas interações são registradas na subcoleção do diretor
+        targetEmployees.forEach(director => {
+          idsToFetch.push(director.id);
+        });
+      }
+      
+      const uniqueIds = [...new Set(idsToFetch)];
+      
+      await Promise.all(uniqueIds.map(async (id) => {
+        try {
+          const interactionsQuery = query(collection(firestore, "employees", id, "interactions"));
+          const pdiActionsQuery = query(collection(firestore, "employees", id, "pdiActions"));
+          
+          const [interactionsSnap, pdiSnap] = await Promise.all([
+            getDocs(interactionsQuery),
+            getDocs(pdiActionsQuery)
+          ]);
+          
+          const interactions = interactionsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Interaction));
+          const pdiActions = pdiSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as PDIAction));
+          
+          // Sempre adicionar ao Map, mesmo se vazio (para garantir que o get retorne array vazio)
+          allInteractionsMap.set(id, interactions);
+          allPdiActionsMap.set(id, pdiActions);
+        } catch (error) {
+          console.error(`Erro ao carregar dados de ${id}:`, error);
+        }
+      }));
+      
+      const progressList: WeeklyProgress[] = [];
+      
+      targetEmployees.forEach(employee => {
+        const monthlyRequired = calculateMonthlyRequiredInteractions(employee, employees, type, currentMonth);
+        const weeklyRequired = Math.ceil(monthlyRequired / 4);
+        
+        // Calcular realizado na semana atual e realizado mensal (mês inteiro)
+        let completedWeekly = 0;
+        let completedMonthly = 0;
+        
+        if (type === 'leaders') {
+          // Mesmo padrão do ranking - não filtra membros do time por axis
+          const teamMembers = employees.filter(e => 
+            e.leaderId === employee.id && 
+            e.isUnderManagement && 
+            !(e as any)._isDeleted
+          );
+          
+          teamMembers.forEach(member => {
+            const memberInteractions = allInteractionsMap.get(member.id) || [];
+            const memberPdiActions = allPdiActionsMap.get(member.id) || [];
+            
+            const monthlyFromMonth = getMonth(monthlyRange.start);
+            const monthlyFromYear = getYear(monthlyRange.start);
+            const monthlyToMonth = getMonth(monthlyRange.end);
+            const monthlyToYear = getYear(monthlyRange.end);
+            
+            // N3 Individual
+            const n3Segment = member.segment as keyof typeof n3IndividualSchedule | undefined;
+            if (n3Segment && n3IndividualSchedule[n3Segment]) {
+              const completedWeek = memberInteractions.filter(i => 
+                i.type === 'N3 Individual' && isWithinInterval(parseISO(i.date), weeklyRange)
+              ).length;
+              const completedMonth = memberInteractions.filter(i => 
+                i.type === 'N3 Individual' && isWithinInterval(parseISO(i.date), monthlyRange)
+              ).length;
+              // Semanal: limitar ao obrigatório mensal (não semanal, pois pode ter mais de 1 por semana)
+              completedWeekly += Math.min(completedWeek, n3IndividualSchedule[n3Segment]);
+              // Mensal: contar TODAS as interações N3 do mês inteiro
+              completedMonthly += completedMonth;
+            }
+            
+            // Índice de Risco
+            const riscoSchedule = interactionSchedules['Índice de Risco'] || [];
+            const requiredRiscoMonths = riscoSchedule.filter(monthNum => {
+              for (let y = monthlyFromYear; y <= monthlyToYear; y++) {
+                const startM = (y === monthlyFromYear) ? monthlyFromMonth : 0;
+                const endM = (y === monthlyToYear) ? monthlyToMonth : 11;
+                if (monthNum >= startM && monthNum <= endM) return true;
+              }
+              return false;
+            });
+            
+            // Semanal: contar meses únicos na semana
+            const executedRiscoMonthsWeekly = new Set<number>();
+            memberInteractions.forEach(i => {
+              const intDate = parseISO(i.date);
+              if (i.type === 'Índice de Risco' && requiredRiscoMonths.includes(getMonth(intDate))) {
+                if (isWithinInterval(intDate, weeklyRange)) {
+                  executedRiscoMonthsWeekly.add(getMonth(intDate));
+                }
+              }
+            });
+            completedWeekly += executedRiscoMonthsWeekly.size;
+            
+            // Mensal: contar TODAS as interações do mês inteiro
+            const riscoInteractionsMonthly = memberInteractions.filter(i => 
+              i.type === 'Índice de Risco' && 
+              isWithinInterval(parseISO(i.date), monthlyRange) &&
+              requiredRiscoMonths.includes(getMonth(parseISO(i.date)))
+            );
+            completedMonthly += riscoInteractionsMonthly.length;
+            
+            // 1:1
+            const oneOnOneSchedule = interactionSchedules['1:1'] || [];
+            const requiredOneOnOneMonths = oneOnOneSchedule.filter(monthNum => {
+              for (let y = monthlyFromYear; y <= monthlyToYear; y++) {
+                const startM = (y === monthlyFromYear) ? monthlyFromMonth : 0;
+                const endM = (y === monthlyToYear) ? monthlyToMonth : 11;
+                if (monthNum >= startM && monthNum <= endM) return true;
+              }
+              return false;
+            });
+            
+            // Semanal: contar meses únicos na semana
+            const executedOneOnOneMonthsWeekly = new Set<number>();
+            memberInteractions.forEach(i => {
+              const intDate = parseISO(i.date);
+              if (i.type === '1:1' && requiredOneOnOneMonths.includes(getMonth(intDate))) {
+                if (isWithinInterval(intDate, weeklyRange)) {
+                  executedOneOnOneMonthsWeekly.add(getMonth(intDate));
+                }
+              }
+            });
+            completedWeekly += executedOneOnOneMonthsWeekly.size;
+            
+            // Mensal: contar TODAS as interações do mês inteiro
+            const oneOnOneInteractionsMonthly = memberInteractions.filter(i => 
+              i.type === '1:1' && 
+              isWithinInterval(parseISO(i.date), monthlyRange) &&
+              requiredOneOnOneMonths.includes(getMonth(parseISO(i.date)))
+            );
+            completedMonthly += oneOnOneInteractionsMonthly.length;
+            
+            // PDI
+            const pdiSchedule = interactionSchedules['PDI'] || [];
+            const requiredPdiMonths = pdiSchedule.filter(monthNum => {
+              for (let y = monthlyFromYear; y <= monthlyToYear; y++) {
+                const startM = (y === monthlyFromYear) ? monthlyFromMonth : 0;
+                const endM = (y === monthlyToYear) ? monthlyToMonth : 11;
+                if (monthNum >= startM && monthNum <= endM) return true;
+              }
+              return false;
+            });
+            
+            // Semanal: contar meses únicos na semana
+            const executedPdiMonthsWeekly = new Set<number>();
+            memberPdiActions.forEach(action => {
+              const actionDate = parseISO(action.startDate);
+              if (requiredPdiMonths.includes(getMonth(actionDate))) {
+                if (isWithinInterval(actionDate, weeklyRange)) {
+                  executedPdiMonthsWeekly.add(getMonth(actionDate));
+                }
+              }
+            });
+            completedWeekly += executedPdiMonthsWeekly.size;
+            
+            // Mensal: contar TODAS as ações PDI do mês inteiro
+            const pdiActionsMonthly = memberPdiActions.filter(action => {
+              const actionDate = parseISO(action.startDate);
+              return isWithinInterval(actionDate, monthlyRange) &&
+                     requiredPdiMonths.includes(getMonth(actionDate));
+            });
+            completedMonthly += pdiActionsMonthly.length;
+          });
+        } else {
+          // Diretor: contar N2 Individual, Índice de Qualidade, Ações Diretor
+          // N2 Individual e Índice de Qualidade são salvos na coleção do LÍDER
+          // Ações Diretor são salvas na coleção do DIRETOR
+          
+          // Interações do diretor (Ações Diretor)
+          const directorInteractions = allInteractionsMap.get(employee.id) || [];
+          const directorActionsWeekly = directorInteractions.filter(i => 
+            isWithinInterval(parseISO(i.date), weeklyRange) &&
+            ['Análise do Índice de Qualidade', 'Análise do Índice de Risco'].includes(i.type)
+          );
+          const directorActionsMonthly = directorInteractions.filter(i => 
+            isWithinInterval(parseISO(i.date), monthlyRange) &&
+            ['Análise do Índice de Qualidade', 'Análise do Índice de Risco'].includes(i.type)
+          );
+          
+          // Interações dos líderes (N2 Individual e Índice de Qualidade)
+          const leadersList = employees.filter(e => 
+            !(e as any)._isDeleted && 
+            e.role === 'Líder' && 
+            !e.isDirector &&
+            e.axis === 'Comercial'
+          );
+          
+          let n2CountWeekly = 0;
+          let qualityCountWeekly = 0;
+          let n2CountMonthly = 0;
+          let qualityCountMonthly = 0;
+          
+          leadersList.forEach(leader => {
+            const leaderInteractions = allInteractionsMap.get(leader.id) || [];
+            
+            // N2 Individual: limitar ao obrigatório por líder (mesmo padrão do ranking)
+            const n2Required = getLeaderN2Frequency(leader.name || '');
+            const n2InteractionsWeekly = leaderInteractions.filter(i => 
+              i.type === 'N2 Individual' && isWithinInterval(parseISO(i.date), weeklyRange)
+            );
+            const n2InteractionsMonthly = leaderInteractions.filter(i => 
+              i.type === 'N2 Individual' && isWithinInterval(parseISO(i.date), monthlyRange)
+            );
+            // Semanal: limitar ao obrigatório mensal (não semanal, pois pode ter mais de 1 por semana)
+            n2CountWeekly += Math.min(n2InteractionsWeekly.length, n2Required);
+            // Mensal: contar TODAS as interações N2 do mês inteiro
+            n2CountMonthly += n2InteractionsMonthly.length;
+            
+            // Índice de Qualidade: 1 por mês por líder (agrupar por mês)
+            const qualityInteractionsWeekly = leaderInteractions.filter(i => 
+              i.type === 'Índice de Qualidade' && isWithinInterval(parseISO(i.date), weeklyRange)
+            );
+            const qualityInteractionsMonthly = leaderInteractions.filter(i => 
+              i.type === 'Índice de Qualidade' && isWithinInterval(parseISO(i.date), monthlyRange)
+            );
+            
+            // Semanal: agrupar por mês (máximo 1 por mês por líder)
+            const qualityMonthsWeekly = new Set<string>(); // Usar string para incluir ano+mês
+            qualityInteractionsWeekly.forEach(i => {
+              const date = parseISO(i.date);
+              qualityMonthsWeekly.add(`${getYear(date)}-${getMonth(date)}`);
+            });
+            qualityCountWeekly += Math.min(qualityMonthsWeekly.size, 1); // Máximo 1 por mês por líder
+            
+            // Mensal: contar TODAS as interações de Índice de Qualidade do mês inteiro
+            qualityCountMonthly += qualityInteractionsMonthly.length;
+          });
+          
+          completedWeekly = n2CountWeekly + qualityCountWeekly + directorActionsWeekly.length;
+          completedMonthly = n2CountMonthly + qualityCountMonthly + directorActionsMonthly.length;
+        }
+        
+        // Porcentagem baseada na semana: (realizado na semana / esperado na semana) * 100
+        const percentage = weeklyRequired > 0 
+          ? (completedWeekly / weeklyRequired) * 100 
+          : 0;
+        
+        // Status baseado na semana
+        const status: 'excellent' | 'on-track' | 'behind' = percentage > 100 
+          ? 'excellent' 
+          : percentage >= 80 
+            ? 'on-track' 
+            : 'behind';
+        
+        progressList.push({
+          employeeId: employee.id,
+          employeeName: employee.name || 'Sem nome',
+          role: type === 'leaders' ? 'Líder' : 'Diretor',
+          currentWeek,
+          monthlyRequired,
+          weeklyRequired,
+          expectedAccumulated: weeklyRequired, // Esperado na semana (não acumulado)
+          completedAccumulated: completedWeekly, // Realizado na semana
+          completedMonthly,
+          percentage: Math.round(percentage * 10) / 10,
+          status
+        });
+      });
+      
+      return progressList.sort((a, b) => b.percentage - a.percentage);
+    }, [calculateMonthlyRequiredInteractions]);
 
     const calculateAnnualInteractions = (employee: Employee) => {
       let total = 0;
@@ -1550,7 +2767,7 @@ export default function AdminPage() {
                       </TableCell>
                       <TableCell className="text-center">
                           <TooltipProvider>
-                              <Tooltip>
+                              <UITooltip>
                                   <TooltipTrigger asChild>
                                       <div className="flex items-center justify-center gap-1 font-medium cursor-default">
                                           {calculateAnnualInteractions(employee)}
@@ -1560,7 +2777,7 @@ export default function AdminPage() {
                                   <TooltipContent>
                                       <p className="text-xs">{getInteractionBreakdown(employee)}</p>
                                   </TooltipContent>
-                              </Tooltip>
+                              </UITooltip>
                           </TooltipProvider>
                       </TableCell>
                       <TableCell>
@@ -2027,14 +3244,14 @@ export default function AdminPage() {
                                     
                                     {isHardcodedAdmin ? (
                                         <TooltipProvider>
-                                            <Tooltip>
+                                            <UITooltip>
                                                 <TooltipTrigger asChild>
                                                     <ShieldCheck className="h-5 w-5 text-muted-foreground/50 cursor-not-allowed"/>
                                                 </TooltipTrigger>
                                                 <TooltipContent>
                                                     <p>Administrador definido pelo sistema.</p>
                                                 </TooltipContent>
-                                            </Tooltip>
+                                            </UITooltip>
                                         </TooltipProvider>
                                     ) : (
                                         <Button 
@@ -2290,6 +3507,531 @@ export default function AdminPage() {
               </Button>
             </div>
           </div>
+
+          {/* Card 0: Média Ponderada e Tendência */}
+          {(() => {
+            const leadersWeightedAvg = calculateWeightedAverage(leaderMetrics);
+            const directorsWeightedAvg = calculateWeightedAverage(directorMetrics);
+            const leadersTrend = calculateTrend(leadersHistory, 'leaders');
+            const directorsTrend = calculateTrend(directorsHistory, 'directors');
+            
+            // Combinar histórico de líderes e diretores para visualização geral
+            const historyMap = new Map<string, { leaders: number; directors: number; total: number }>();
+            
+            leadersHistory.forEach(h => {
+              historyMap.set(h.month, { leaders: h.weightedAverage, directors: 0, total: h.weightedAverage });
+            });
+            
+            directorsHistory.forEach(h => {
+              const existing = historyMap.get(h.month);
+              if (existing) {
+                existing.directors = h.weightedAverage;
+                existing.total = (existing.leaders + h.weightedAverage) / 2;
+              } else {
+                historyMap.set(h.month, { leaders: 0, directors: h.weightedAverage, total: h.weightedAverage });
+              }
+            });
+            
+            const combinedHistory = Array.from(historyMap.entries())
+              .map(([month, data]) => {
+                return {
+                  month: format(parseISO(`${month}-01`), 'MMM/yyyy', { locale: ptBR }),
+                  monthSortKey: month,
+                  'Líderes': Math.round(data.leaders * 10) / 10,
+                  'Diretores': Math.round(data.directors * 10) / 10,
+                  'Média Geral': Math.round(data.total * 10) / 10,
+                };
+              })
+              .sort((a, b) => (a as any).monthSortKey.localeCompare((b as any).monthSortKey));
+
+            return (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5" />
+                    Média Ponderada de Uso do CRM
+                  </CardTitle>
+                  <CardDescription>
+                    Taxa de aderência ponderada pelo número de interações obrigatórias desde o início do sistema.
+                    <br />
+                    <span className="text-xs text-muted-foreground/80">
+                      Cálculo: Média Ponderada = Σ(aderência × peso) / Σ(peso), onde peso = número de interações obrigatórias de cada líder/diretor.
+                    </span>
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {historyLoading ? (
+                    <div className="space-y-4">
+                      <Skeleton className="h-32 w-full" />
+                      <Skeleton className="h-64 w-full" />
+                    </div>
+                  ) : (
+                    <>
+                      {/* Médias Ponderadas Atuais */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="border rounded-lg p-4 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-muted-foreground">Líderes</span>
+                            <TooltipProvider>
+                              <UITooltip>
+                                <TooltipTrigger asChild>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs text-muted-foreground">Tendência:</span>
+                                    {leadersTrend.trend === 'increasing' && (
+                                      <Badge variant="default" className="gap-1 cursor-help">
+                                        <ArrowUp className="h-3 w-3" />
+                                        +{Math.abs(leadersTrend.percentageChange)}%
+                                      </Badge>
+                                    )}
+                                    {leadersTrend.trend === 'decreasing' && (
+                                      <Badge variant="destructive" className="gap-1 cursor-help">
+                                        <ArrowDown className="h-3 w-3" />
+                                        -{Math.abs(leadersTrend.percentageChange)}%
+                                      </Badge>
+                                    )}
+                                    {leadersTrend.trend === 'stable' && (
+                                      <Badge variant="secondary" className="gap-1 cursor-help">
+                                        <Minus className="h-3 w-3" />
+                                        Estável
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent className="max-w-xs">
+                                  <p className="text-xs font-medium mb-1">Variação da Média Ponderada</p>
+                                  <p className="text-xs">
+                                    {leadersTrend.trend === 'increasing' && `Aumento de ${Math.abs(leadersTrend.percentageChange)}% comparando o último mês (${leadersTrend.currentAverage}%) com o mês anterior (${leadersTrend.previousAverage}%)`}
+                                    {leadersTrend.trend === 'decreasing' && `Queda de ${Math.abs(leadersTrend.percentageChange)}% comparando o último mês (${leadersTrend.currentAverage}%) com o mês anterior (${leadersTrend.previousAverage}%)`}
+                                    {leadersTrend.trend === 'stable' && `Tendência estável: último mês com ${leadersTrend.currentAverage}% (variação menor que 1% comparado ao mês anterior de ${leadersTrend.previousAverage}%)`}
+                                  </p>
+                                </TooltipContent>
+                              </UITooltip>
+                            </TooltipProvider>
+                          </div>
+                          <div className="text-3xl font-bold">
+                            {leadersWeightedAvg.weightedAverage.toFixed(1)}%
+                          </div>
+                          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                            <span>{leadersWeightedAvg.totalParticipants} participantes</span>
+                            <span>•</span>
+                            <span>{leadersWeightedAvg.totalWeight} interações obrigatórias</span>
+                          </div>
+                          <div className="mt-2">
+                            <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
+                              <div 
+                                className={`h-full transition-all ${getProgressColor(leadersWeightedAvg.weightedAverage)}`}
+                                style={{ width: `${Math.min(leadersWeightedAvg.weightedAverage, 100)}%` }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="border rounded-lg p-4 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-muted-foreground">Diretores</span>
+                            <TooltipProvider>
+                              <UITooltip>
+                                <TooltipTrigger asChild>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs text-muted-foreground">Tendência:</span>
+                                    {directorsTrend.trend === 'increasing' && (
+                                      <Badge variant="default" className="gap-1 cursor-help">
+                                        <ArrowUp className="h-3 w-3" />
+                                        +{Math.abs(directorsTrend.percentageChange)}%
+                                      </Badge>
+                                    )}
+                                    {directorsTrend.trend === 'decreasing' && (
+                                      <Badge variant="destructive" className="gap-1 cursor-help">
+                                        <ArrowDown className="h-3 w-3" />
+                                        -{Math.abs(directorsTrend.percentageChange)}%
+                                      </Badge>
+                                    )}
+                                    {directorsTrend.trend === 'stable' && (
+                                      <Badge variant="secondary" className="gap-1 cursor-help">
+                                        <Minus className="h-3 w-3" />
+                                        Estável
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent className="max-w-xs">
+                                  <p className="text-xs font-medium mb-1">Variação da Média Ponderada</p>
+                                  <p className="text-xs">
+                                    {directorsTrend.trend === 'increasing' && `Aumento de ${Math.abs(directorsTrend.percentageChange)}% comparando o último mês (${directorsTrend.currentAverage}%) com o mês anterior (${directorsTrend.previousAverage}%)`}
+                                    {directorsTrend.trend === 'decreasing' && `Queda de ${Math.abs(directorsTrend.percentageChange)}% comparando o último mês (${directorsTrend.currentAverage}%) com o mês anterior (${directorsTrend.previousAverage}%)`}
+                                    {directorsTrend.trend === 'stable' && `Tendência estável: último mês com ${directorsTrend.currentAverage}% (variação menor que 1% comparado ao mês anterior de ${directorsTrend.previousAverage}%)`}
+                                  </p>
+                                </TooltipContent>
+                              </UITooltip>
+                            </TooltipProvider>
+                          </div>
+                          <div className="text-3xl font-bold">
+                            {directorsWeightedAvg.weightedAverage.toFixed(1)}%
+                          </div>
+                          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                            <span>{directorsWeightedAvg.totalParticipants} participantes</span>
+                            <span>•</span>
+                            <span>{directorsWeightedAvg.totalWeight} interações obrigatórias</span>
+                          </div>
+                          <div className="mt-2">
+                            <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
+                              <div 
+                                className={`h-full transition-all ${getProgressColor(directorsWeightedAvg.weightedAverage)}`}
+                                style={{ width: `${Math.min(directorsWeightedAvg.weightedAverage, 100)}%` }}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Gráfico de Histórico */}
+                      {combinedHistory.length > 0 && (
+                        <div className="space-y-2">
+                          <h3 className="text-sm font-medium">Histórico Mensal</h3>
+                          <div className="h-72 w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <LineChart 
+                                data={combinedHistory}
+                                margin={{ top: 40, right: 30, left: 60, bottom: 20 }}
+                              >
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis 
+                                  dataKey="month" 
+                                  angle={-45}
+                                  textAnchor="end"
+                                  height={80}
+                                  interval="preserveStartEnd"
+                                />
+                                <YAxis 
+                                  domain={[0, 100]}
+                                  width={40}
+                                  label={{ value: 'Aderência', angle: -90, position: 'insideLeft', dx: -5 }}
+                                />
+                                <RechartsTooltip 
+                                  formatter={(value: number) => [`${value.toFixed(1)}%`, '']}
+                                  labelFormatter={(label: string) => `Mês: ${label}`}
+                                />
+                                <Legend />
+                                <Line 
+                                  type="monotone" 
+                                  dataKey="Líderes" 
+                                  stroke="hsl(170, 60%, 50%)" 
+                                  strokeWidth={2}
+                                  dot={{ r: 3 }}
+                                  activeDot={{ r: 5 }}
+                                />
+                                <Line 
+                                  type="monotone" 
+                                  dataKey="Diretores" 
+                                  stroke="hsl(210, 60%, 50%)" 
+                                  strokeWidth={2}
+                                  dot={{ r: 3 }}
+                                  activeDot={{ r: 5 }}
+                                />
+                                <Line 
+                                  type="monotone" 
+                                  dataKey="Média Geral" 
+                                  stroke="hsl(0, 0%, 50%)" 
+                                  strokeWidth={2}
+                                  strokeDasharray="5 5"
+                                  dot={{ r: 3 }}
+                                  activeDot={{ r: 5 }}
+                                />
+                              </LineChart>
+                            </ResponsiveContainer>
+                          </div>
+                          <p className="text-xs text-muted-foreground text-center">
+                            {combinedHistory.length} meses analisados desde o início do sistema
+                          </p>
+                        </div>
+                      )}
+
+                      {combinedHistory.length === 0 && !historyLoading && (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <BarChart3 className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                          <p>Nenhum dado histórico disponível ainda.</p>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })()}
+
+          {/* Card: Acompanhamento Semanal */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Target className="h-5 w-5" />
+                Acompanhamento Semanal de Interações
+              </CardTitle>
+              <CardDescription>
+                Status semanal baseado no realizado na semana vs esperado na semana.
+                <br />
+                <span className="text-xs text-muted-foreground/80">
+                  Excelente: &gt;100% | Em dia: 80-100% | Atrasado: &lt;80%
+                </span>
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {weeklyProgressLoading ? (
+                <div className="space-y-4">
+                  <Skeleton className="h-32 w-full" />
+                  <Skeleton className="h-64 w-full" />
+                </div>
+              ) : weeklyProgress ? (
+                <div className="space-y-6">
+                  {/* Resumo */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Líderes */}
+                    <div className="border rounded-lg p-4 space-y-2">
+                      <h3 className="font-semibold">Líderes</h3>
+                      <div className="flex items-center gap-4 text-sm">
+                        <div className="flex items-center gap-1">
+                          <Badge variant="default" className="bg-green-500">Excelente</Badge>
+                          <span>{weeklyProgress.leadersSummary.excellent}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Badge variant="default" className="bg-blue-500">Em dia</Badge>
+                          <span>{weeklyProgress.leadersSummary.onTrack}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Badge variant="destructive">Atrasado</Badge>
+                          <span>{weeklyProgress.leadersSummary.behind}</span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Diretores */}
+                    <div className="border rounded-lg p-4 space-y-2">
+                      <h3 className="font-semibold">Diretores</h3>
+                      <div className="flex items-center gap-4 text-sm">
+                        <div className="flex items-center gap-1">
+                          <Badge variant="default" className="bg-green-500">Excelente</Badge>
+                          <span>{weeklyProgress.directorsSummary.excellent}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Badge variant="default" className="bg-blue-500">Em dia</Badge>
+                          <span>{weeklyProgress.directorsSummary.onTrack}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Badge variant="destructive">Atrasado</Badge>
+                          <span>{weeklyProgress.directorsSummary.behind}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Tabela de Líderes */}
+                  <div className="space-y-2">
+                    <h3 className="font-semibold text-sm">Líderes</h3>
+                    <div className="border rounded-md">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Nome</TableHead>
+                            <TableHead className="text-center">Semana</TableHead>
+                            <TableHead className="text-center">Obrigatório/Mês</TableHead>
+                            <TableHead className="text-center">Esperado na Semana</TableHead>
+                            <TableHead className="text-center">Realizado na Semana</TableHead>
+                            <TableHead className="text-center">Realizado Mensal</TableHead>
+                            <TableHead className="text-center">%</TableHead>
+                            <TableHead className="text-center">Status</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {weeklyProgress.leaders.map((progress) => (
+                            <TableRow key={progress.employeeId}>
+                              <TableCell className="font-medium">{progress.employeeName}</TableCell>
+                              <TableCell className="text-center">{progress.currentWeek}</TableCell>
+                              <TableCell className="text-center">{progress.monthlyRequired}</TableCell>
+                              <TableCell className="text-center">{progress.expectedAccumulated}</TableCell>
+                              <TableCell className="text-center">{progress.completedAccumulated}</TableCell>
+                              <TableCell className="text-center">{progress.completedMonthly}</TableCell>
+                              <TableCell className="text-center">{progress.percentage.toFixed(1)}%</TableCell>
+                              <TableCell className="text-center">
+                                {progress.status === 'excellent' && (
+                                  <Badge variant="default" className="bg-green-500">Excelente</Badge>
+                                )}
+                                {progress.status === 'on-track' && (
+                                  <Badge variant="default" className="bg-blue-500">Em dia</Badge>
+                                )}
+                                {progress.status === 'behind' && (
+                                  <Badge variant="destructive">Atrasado</Badge>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                  
+                  {/* Tabela de Diretores */}
+                  <div className="space-y-2">
+                    <h3 className="font-semibold text-sm">Diretores</h3>
+                    <div className="border rounded-md">
+                      <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Nome</TableHead>
+                                <TableHead className="text-center">Semana</TableHead>
+                                <TableHead className="text-center">Obrigatório/Mês</TableHead>
+                                <TableHead className="text-center">Esperado na Semana</TableHead>
+                                <TableHead className="text-center">Realizado na Semana</TableHead>
+                                <TableHead className="text-center">Realizado Mensal</TableHead>
+                                <TableHead className="text-center">%</TableHead>
+                                <TableHead className="text-center">Status</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {weeklyProgress.directors.map((progress) => (
+                                <TableRow key={progress.employeeId}>
+                                  <TableCell className="font-medium">{progress.employeeName}</TableCell>
+                                  <TableCell className="text-center">{progress.currentWeek}</TableCell>
+                                  <TableCell className="text-center">{progress.monthlyRequired}</TableCell>
+                                  <TableCell className="text-center">{progress.expectedAccumulated}</TableCell>
+                                  <TableCell className="text-center">{progress.completedAccumulated}</TableCell>
+                                  <TableCell className="text-center">{progress.completedMonthly}</TableCell>
+                                  <TableCell className="text-center">{progress.percentage.toFixed(1)}%</TableCell>
+                                  <TableCell className="text-center">
+                                    {progress.status === 'excellent' && (
+                                      <Badge variant="default" className="bg-green-500">Excelente</Badge>
+                                    )}
+                                    {progress.status === 'on-track' && (
+                                      <Badge variant="default" className="bg-blue-500">Em dia</Badge>
+                                    )}
+                                    {progress.status === 'behind' && (
+                                      <Badge variant="destructive">Atrasado</Badge>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center text-muted-foreground py-8">
+                  Nenhum dado disponível. Clique em "Atualizar" para carregar.
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* New Card: Monitoramento de Alto Risco */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ShieldCheck className="h-5 w-5" />
+                Monitoramento de Alto Risco
+              </CardTitle>
+              <CardDescription>
+                Acompanhamento de assessores com Índice de Risco maior que 5.
+                <br />
+                <span className="text-xs text-muted-foreground/80">
+                  Histórico mensal e lista atual de assessores em alto risco.
+                </span>
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {riskMetricsLoading ? (
+                <div className="space-y-4">
+                  <Skeleton className="h-32 w-full" />
+                  <Skeleton className="h-64 w-full" />
+                </div>
+              ) : riskMetrics ? (
+                <>
+                  {/* Gráfico de Histórico de Risco */}
+                  {riskMetrics.history.length > 0 && (
+                    <div className="space-y-2">
+                      <h3 className="text-sm font-medium">Histórico de Alto Risco (&gt;5)</h3>
+                      <div className="h-64 w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={riskMetrics.history}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis
+                              dataKey="month"
+                              angle={-45}
+                              textAnchor="end"
+                              height={60}
+                              interval="preserveStartEnd"
+                            />
+                            <YAxis
+                              allowDecimals={false}
+                              label={{ value: 'Qtd. Assessores', angle: -90, position: 'insideLeft' }}
+                            />
+                            <RechartsTooltip
+                              formatter={(value: number) => [`${value} assessores`, 'Alto Risco']}
+                              labelFormatter={(label: string) => `Mês: ${label}`}
+                            />
+                            <Legend />
+                            <Line
+                              type="monotone"
+                              dataKey="count"
+                              name="Assessores em Alto Risco"
+                              stroke="hsl(0, 84.2%, 60.2%)" // Red/Destructive color
+                              strokeWidth={2}
+                              dot={{ r: 4 }}
+                              activeDot={{ r: 6 }}
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Tabela de Assessores em Alto Risco */}
+                  <div className="space-y-2">
+                    <h3 className="text-sm font-medium flex items-center justify-between">
+                      <span>Assessores Atualmente em Alto Risco</span>
+                      <Badge variant="destructive">{riskMetrics.currentHighRisk.length}</Badge>
+                    </h3>
+                    <div className="border rounded-md max-h-[400px] overflow-y-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Nome</TableHead>
+                            <TableHead className="text-center">Índice de Risco</TableHead>
+                            <TableHead className="text-center">Última Avaliação</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {riskMetrics.currentHighRisk.length > 0 ? (
+                            riskMetrics.currentHighRisk.map((advisor) => (
+                              <TableRow key={advisor.id}>
+                                <TableCell className="font-medium">{advisor.name}</TableCell>
+                                <TableCell className="text-center">
+                                  <Badge variant="destructive" className="text-base px-2">
+                                    {advisor.riskScore}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-center">
+                                  {format(parseISO(advisor.lastAssessmentDate), 'dd/MM/yyyy', { locale: ptBR })}
+                                </TableCell>
+                              </TableRow>
+                            ))
+                          ) : (
+                            <TableRow>
+                              <TableCell colSpan={3} className="text-center text-muted-foreground py-4">
+                                Nenhum assessor em alto risco no momento.
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="text-center text-muted-foreground py-8">
+                  Nenhum dado disponível. Clique em "Atualizar" para carregar.
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Card 1: Visão Geral - Líderes */}
           <Card>

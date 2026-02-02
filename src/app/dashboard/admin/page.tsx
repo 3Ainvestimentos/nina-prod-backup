@@ -3705,7 +3705,7 @@ export default function AdminPage() {
                                 <YAxis 
                                   domain={[0, 100]}
                                   width={40}
-                                  label={{ value: 'Aderência', angle: -90, position: 'insideLeft', dx: -5 }}
+                                  label={{ value: 'Aderência', angle: -90, position: 'insideLeft', dx: -5, dy: 30 }}
                                 />
                                 <RechartsTooltip 
                                   formatter={(value: number) => [`${value.toFixed(1)}%`, '']}
@@ -3961,7 +3961,7 @@ export default function AdminPage() {
                             />
                             <YAxis
                               allowDecimals={false}
-                              label={{ value: 'Qtd. Assessores', angle: -90, position: 'insideLeft' }}
+                              label={{ value: 'Qtd. Assessores', angle: -90, position: 'insideLeft', dy: 50, dx: 15 }}
                             />
                             <RechartsTooltip
                               formatter={(value: number) => [`${value} assessores`, 'Alto Risco']}

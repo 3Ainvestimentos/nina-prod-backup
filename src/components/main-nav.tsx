@@ -10,6 +10,7 @@ import {
   ClipboardCheck,
   Trophy,
   Briefcase,
+  BarChart3,
   Users,
   Award,
 } from "lucide-react";
@@ -27,19 +28,22 @@ const navItems = [
   { href: "/dashboard/risk-analysis", label: "Análise de Índices", icon: ShieldAlert, requiresAuth: (user: Employee) => user.role === "Líder" || user.isDirector || user.isAdmin },
   { href: "/dashboard/ranking", label: "Ranking", icon: Trophy, requiresAuth: (user: Employee) => user.role === "Líder" || user.isDirector || user.isAdmin },
   { href: "/dashboard/projects", label: "Projetos", icon: Briefcase, requiresAuth: (user: Employee) => user.role === "Líder" || user.role === "Líder de Projeto" || user.isDirector || user.isAdmin },
+  { href: "/dashboard/metrics", label: "Métricas", icon: BarChart3, requiresAuth: (user: Employee) => user.isDirector || user.isAdmin },
 ];
 
 export function MainNav({ user }: { user: Employee }) {
   const pathname = usePathname();
 
   const canShowItem = (item: typeof navItems[0]) => {
-    if (typeof item.requiresAuth === 'boolean') {
-      return item.requiresAuth;
-    }
-    if (typeof item.requiresAuth === 'function') {
-      return item.requiresAuth(user);
-    }
-    return true; // Show by default if no auth rule
+    const result = typeof item.requiresAuth === 'boolean'
+      ? item.requiresAuth
+      : typeof item.requiresAuth === 'function'
+        ? item.requiresAuth(user)
+        : true;
+    // #region agent log
+    if (item.href === '/dashboard/metrics') typeof window!=='undefined'&&fetch('http://127.0.0.1:7319/ingest/47f83980-17ff-478b-92ce-f77a99eb0a35',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'96e80b'},body:JSON.stringify({sessionId:'96e80b',location:'main-nav.tsx:canShowItem',message:'[HYP E] sidebar Métricas visibilidade',data:{canShow:result,userIsAdmin:user?.isAdmin,userIsDirector:user?.isDirector,userRole:user?.role,userEmail:user?.email},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    return result;
   };
 
   const getLabel = (item: typeof navItems[0]) => {

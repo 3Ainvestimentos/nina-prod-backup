@@ -73,6 +73,7 @@ import { getFunctions, httpsCallable } from "firebase/functions";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from "recharts";
 import { ArrowUp, ArrowDown, Minus } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 
 const superAdminEmails = ['lucas.nogueira@3ainvestimentos.com.br', 'matheus@3ainvestimentos.com.br', 'henrique.peixoto@3ainvestimentos.com.br'];
 const emailsToPromote = [
@@ -94,7 +95,11 @@ import { useIsConfigAdmin } from "@/hooks/use-is-config-admin";
 import { useAppConfig } from "@/hooks/use-app-config";
 import { usePremissasConfig } from "@/hooks/use-premissas-config";
 
-export default function AdminPage() {
+type AdminPageProps = {
+  forceMetricsOnly?: boolean;
+};
+
+export default function AdminPage({ forceMetricsOnly = false }: AdminPageProps = {}) {
   // ========================================
   // TODOS OS HOOKS DEVEM VIR ANTES DE QUALQUER RETURN CONDICIONAL!
   // ========================================
@@ -133,8 +138,14 @@ export default function AdminPage() {
   });
   const [premissasLoading, setPremissasLoading] = useState(false);
   
+  const searchParams = useSearchParams();
+  const isMetricsOnlyMode = forceMetricsOnly || searchParams?.get("mode") === "metrics-only";
+
   // Estado para controlar aba ativa (permite trocar antes de carregar)
-  const [activeTab, setActiveTab] = useState<string>("employees");
+  const [activeTab, setActiveTab] = useState<string>(isMetricsOnlyMode ? "metrics" : "employees");
+  // #region agent log
+  typeof window!=='undefined'&&fetch('http://127.0.0.1:7319/ingest/47f83980-17ff-478b-92ce-f77a99eb0a35',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'96e80b'},body:JSON.stringify({sessionId:'96e80b',location:'admin/page.tsx:145',message:'[HYP A+B] isMetricsOnlyMode e activeTab iniciais',data:{forceMetricsOnly,isMetricsOnlyMode,activeTabInit:isMetricsOnlyMode?'metrics':'employees'},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
 
   // ========================================
   // ESTADOS PARA ABA DE MÉTRICAS
@@ -282,6 +293,24 @@ export default function AdminPage() {
   );
   
   const { data: employees, isLoading: areEmployeesLoading } = useCollection<Employee>(employeesCollection);
+  const currentEmployee = useMemo(
+    () =>
+      employees?.find(
+        (employee) =>
+          employee.email === user?.email &&
+          !(employee as any)._isDeleted
+      ),
+    [employees, user?.email]
+  );
+  const canAccessMetrics = Boolean(
+    isConfigAdmin ||
+      currentEmployee?.isAdmin ||
+      currentEmployee?.isDirector ||
+      currentEmployee?.role === "Diretor"
+  );
+  // #region agent log
+  typeof window!=='undefined'&&isMetricsOnlyMode&&fetch('http://127.0.0.1:7319/ingest/47f83980-17ff-478b-92ce-f77a99eb0a35',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'96e80b'},body:JSON.stringify({sessionId:'96e80b',location:'admin/page.tsx:308',message:'[HYP C] canAccessMetrics calc',data:{canAccessMetrics,isConfigAdmin,empIsAdmin:currentEmployee?.isAdmin,empIsDirector:currentEmployee?.isDirector,empRole:currentEmployee?.role,userEmail:user?.email},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
 
   // Collection de Projetos
   const projectsCollection = useMemoFirebase(
@@ -845,6 +874,9 @@ export default function AdminPage() {
   // CARREGAR DADOS DE MÉTRICAS (quando aba ativa)
   // ========================================
   const loadMetricsData = useCallback(async () => {
+    // #region agent log
+    typeof window!=='undefined'&&fetch('http://127.0.0.1:7319/ingest/47f83980-17ff-478b-92ce-f77a99eb0a35',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'96e80b'},body:JSON.stringify({sessionId:'96e80b',location:'admin/page.tsx:loadMetricsData',message:'[HYP D] loadMetricsData chamado',data:{hasFirestore:!!firestore,hasEmployees:!!employees,activeTab,willProceed:!(!firestore||!employees||activeTab!=='metrics')},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     if (!firestore || !employees || activeTab !== 'metrics') return;
     
     setMetricsLoading(true);
@@ -973,10 +1005,14 @@ export default function AdminPage() {
   }, [firestore, employees, activeTab, calculateMonthlyHistory, calculateRiskMetrics]);
 
   useEffect(() => {
+    // #region agent log
+    fetch('http://127.0.0.1:7319/ingest/47f83980-17ff-478b-92ce-f77a99eb0a35',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'96e80b'},body:JSON.stringify({sessionId:'96e80b',location:'admin/page.tsx:useEffect-metrics',message:'[HYP D] useEffect metrics disparado',data:{activeTab,hasEmployees:!!employees,metricsInteractionsSize:metricsInteractions.size,willCall:activeTab==='metrics'&&!!employees&&metricsInteractions.size===0},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     if (activeTab === 'metrics' && employees && metricsInteractions.size === 0) {
       loadMetricsData();
     }
   }, [activeTab, employees, metricsInteractions.size, loadMetricsData]);
+  // NOTE: useEffect já roda somente no cliente — sem guard typeof window necessário
 
   const checkCustomClaim = async()=>{
     if (!user) {
@@ -2641,7 +2677,15 @@ export default function AdminPage() {
   );
 
   // Guard: renderização condicional em vez de early return
-  if (!isConfigAdmin) {
+  if (isMetricsOnlyMode && (isUserLoading || areEmployeesLoading)) {
+    return (
+      <main className="p-6">
+        <h1 className="text-xl font-semibold">Carregando métricas...</h1>
+      </main>
+    );
+  }
+
+  if ((isMetricsOnlyMode && !canAccessMetrics) || (!isMetricsOnlyMode && !isConfigAdmin)) {
     return (
       <main className="p-6">
         <h1 className="text-xl font-semibold">Acesso negado</h1>
@@ -2653,14 +2697,19 @@ export default function AdminPage() {
   return (
     <>
     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-      <TabsList className="grid w-full grid-cols-7">
-        <TabsTrigger value="employees">Funcionários</TabsTrigger>
-        <TabsTrigger value="teams">Equipes</TabsTrigger>
-        <TabsTrigger value="projects">Projetos</TabsTrigger>
-        <TabsTrigger value="reports">Relatórios</TabsTrigger>
-        <TabsTrigger value="metrics">Métricas</TabsTrigger>
-        <TabsTrigger value="settings">Geral</TabsTrigger>
-        <TabsTrigger value="backup">Backup & Import</TabsTrigger>
+      <TabsList className={`grid w-full ${isMetricsOnlyMode ? "grid-cols-1" : "grid-cols-6"}`}>
+        {isMetricsOnlyMode ? (
+          <TabsTrigger value="metrics">Métricas</TabsTrigger>
+        ) : (
+          <>
+            <TabsTrigger value="employees">Funcionários</TabsTrigger>
+            <TabsTrigger value="teams">Equipes</TabsTrigger>
+            <TabsTrigger value="projects">Projetos</TabsTrigger>
+            <TabsTrigger value="reports">Relatórios</TabsTrigger>
+            <TabsTrigger value="settings">Geral</TabsTrigger>
+            <TabsTrigger value="backup">Backup & Import</TabsTrigger>
+          </>
+        )}
       </TabsList>
       <TabsContent value="employees" forceMount className={activeTab !== "employees" ? "hidden" : ""}>
         {activeTab === "employees" && (

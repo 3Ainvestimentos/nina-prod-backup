@@ -66,8 +66,15 @@ function getPageDetails(pathname: string): { title: string; description?: string
     return titles[pathname] || { title: "Nina 1.0" };
 }
 
+const ROUTES_WITHOUT_HEADER = ["/dashboard/metrics"];
+
 export function PageHeaderController() {
   const pathname = usePathname();
+
+  if (ROUTES_WITHOUT_HEADER.includes(pathname)) {
+    return null;
+  }
+
   const { title: defaultTitle, description } = getPageDetails(pathname);
   
   const firestore = useFirestore();

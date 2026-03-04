@@ -2708,20 +2708,16 @@ function AdminPageContent({ forceMetricsOnly = false }: AdminPageProps = {}) {
   return (
     <>
     <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-      <TabsList className={`grid w-full ${isMetricsOnlyMode ? "grid-cols-1" : "grid-cols-6"}`}>
-        {isMetricsOnlyMode ? (
-          <TabsTrigger value="metrics">Métricas</TabsTrigger>
-        ) : (
-          <>
-            <TabsTrigger value="employees">Funcionários</TabsTrigger>
-            <TabsTrigger value="teams">Equipes</TabsTrigger>
-            <TabsTrigger value="projects">Projetos</TabsTrigger>
-            <TabsTrigger value="reports">Relatórios</TabsTrigger>
-            <TabsTrigger value="settings">Geral</TabsTrigger>
-            <TabsTrigger value="backup">Backup & Import</TabsTrigger>
-          </>
-        )}
-      </TabsList>
+      {!isMetricsOnlyMode && (
+        <TabsList className="grid w-full grid-cols-6">
+          <TabsTrigger value="employees">Funcionários</TabsTrigger>
+          <TabsTrigger value="teams">Equipes</TabsTrigger>
+          <TabsTrigger value="projects">Projetos</TabsTrigger>
+          <TabsTrigger value="reports">Relatórios</TabsTrigger>
+          <TabsTrigger value="settings">Geral</TabsTrigger>
+          <TabsTrigger value="backup">Backup & Import</TabsTrigger>
+        </TabsList>
+      )}
       <TabsContent value="employees" forceMount className={activeTab !== "employees" ? "hidden" : ""}>
         {activeTab === "employees" && (
         <Card>
@@ -3536,7 +3532,7 @@ function AdminPageContent({ forceMetricsOnly = false }: AdminPageProps = {}) {
       {/* TAB DE MÉTRICAS */}
       <TabsContent value="metrics" forceMount className={activeTab !== "metrics" ? "hidden" : ""}>
         {activeTab === "metrics" && (
-        <div className="space-y-6">
+        <div className="space-y-6 pt-2">
           {/* Header com filtro de período */}
           <div className="flex items-center justify-between">
             <div>

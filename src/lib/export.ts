@@ -19,7 +19,7 @@ async function fetchEmployeeHistory(firestore: Firestore, employeeId: string) {
   return { interactions, pdiActions };
 }
 
-function convertToCSV(data: any[]) {
+export function convertToCSV(data: any[]) {
     if (data.length === 0) return "";
     const headers = Object.keys(data[0]);
     const csvRows = [headers.join(",")];

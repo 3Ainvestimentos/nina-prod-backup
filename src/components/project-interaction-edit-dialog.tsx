@@ -23,7 +23,10 @@ import { Input } from "./ui/input";
 import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
+import {
+  projectInteractionEditSchema,
+  type ProjectInteractionEditFormData,
+} from "@/lib/schemas";
 import { useFirestore } from "@/firebase";
 import { 
   doc, 
@@ -44,13 +47,6 @@ const sanitize = (text: string) => {
   return DOMPurify.sanitize(text, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] });
 };
 
-const formSchema = z.object({
-  content: z.string().min(5, "As anotações devem ter pelo menos 5 caracteres."),
-  indicator: z.string().optional(),
-});
-
-type InteractionFormData = z.infer<typeof formSchema>;
-
 interface ProjectInteractionEditDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -70,8 +66,8 @@ export function ProjectInteractionEditDialog({
   const { toast } = useToast();
   const [isSaving, setIsSaving] = useState(false);
 
-  const form = useForm<InteractionFormData>({
-    resolver: zodResolver(formSchema),
+  const form = useForm<ProjectInteractionEditFormData>({
+    resolver: zodResolver(projectInteractionEditSchema),
     defaultValues: {
       content: interaction.notes.content || "",
       indicator: interaction.notes.indicator || "",
@@ -88,7 +84,7 @@ export function ProjectInteractionEditDialog({
     }
   }, [interaction, form]);
 
-  const handleSubmit = async (data: InteractionFormData) => {
+  const handleSubmit = async (data: ProjectInteractionEditFormData) => {
     const isAdmin = currentUser.isAdmin === true;
     const isLeader = isProjectLeader(project, currentUser);
 
@@ -96,7 +92,7 @@ export function ProjectInteractionEditDialog({
     if (!isAdmin && !isLeader) {
       toast({
         variant: "destructive",
-        title: ProjectErrors.PERMISSION_DENIED.title,
+        title: ProjectErrors.PERMISSION_NOT_PROJECT_OWNER.title,
         description: "Apenas administradores ou o líder do projeto podem editar esta interação.",
       });
       return;

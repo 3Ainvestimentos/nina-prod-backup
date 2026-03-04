@@ -30,8 +30,11 @@ import { Input } from "./ui/input";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
 import { useFirestore, useUser } from "@/firebase";
+import {
+  projectInteractionFormSchema,
+  type ProjectInteractionFormData,
+} from "@/lib/schemas";
 import { collection, addDoc } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import type { Employee, Project, ProjectInteractionNotes } from "@/lib/types";
@@ -43,15 +46,6 @@ const sanitize = (text: string) => {
   if (typeof window === 'undefined') return text;
   return DOMPurify.sanitize(text, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] });
 };
-
-const formSchema = z.object({
-  type: z.enum(["1:1"]),
-  targetMemberId: z.string().min(1, "Selecione um membro."),
-  content: z.string().min(5, "As anotações devem ter pelo menos 5 caracteres."),
-  indicator: z.string().optional(),
-});
-
-type InteractionFormData = z.infer<typeof formSchema>;
 
 interface ProjectInteractionDialogProps {
   open: boolean;
@@ -75,8 +69,8 @@ export function ProjectInteractionDialog({
   const { toast } = useToast();
   const [isSaving, setIsSaving] = useState(false);
 
-  const form = useForm<InteractionFormData>({
-    resolver: zodResolver(formSchema),
+  const form = useForm<ProjectInteractionFormData>({
+    resolver: zodResolver(projectInteractionFormSchema),
     defaultValues: {
       type: "1:1",
       targetMemberId: preSelectedMemberId || "",
@@ -85,7 +79,7 @@ export function ProjectInteractionDialog({
     },
   });
 
-  const handleSubmit = async (data: InteractionFormData) => {
+  const handleSubmit = async (data: ProjectInteractionFormData) => {
     console.log('🚀 [PROJECT_INTERACTION] Iniciando criação de interação', {
       projectId: project.id,
       type: data.type,

@@ -48,7 +48,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { CsvUploadDialog } from "@/components/csv-upload-dialog";
 import { InteractionCsvUploadDialog } from "@/components/interaction-csv-upload-dialog";
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useEffect, useCallback, Suspense } from "react";
 import { useCollection, useFirestore, useMemoFirebase, useUser, useFirebase, softDeleteDocument } from "@/firebase";
 import { collection, doc, deleteDoc, updateDoc, setDoc, getDocs, query } from "firebase/firestore";
 import { Progress } from "@/components/ui/progress";
@@ -99,7 +99,18 @@ type AdminPageProps = {
   forceMetricsOnly?: boolean;
 };
 
-export default function AdminPage({ forceMetricsOnly = false }: AdminPageProps = {}) {
+function AdminPageFallback() {
+  return (
+    <div className="flex min-h-[60vh] items-center justify-center p-8">
+      <div className="flex flex-col items-center gap-4">
+        <Skeleton className="h-10 w-48" />
+        <Skeleton className="h-64 w-full max-w-2xl" />
+      </div>
+    </div>
+  );
+}
+
+function AdminPageContent({ forceMetricsOnly = false }: AdminPageProps = {}) {
   // ========================================
   // TODOS OS HOOKS DEVEM VIR ANTES DE QUALQUER RETURN CONDICIONAL!
   // ========================================
@@ -4503,3 +4514,10 @@ export default function AdminPage({ forceMetricsOnly = false }: AdminPageProps =
   );
 }
 
+export default function AdminPage(props: AdminPageProps) {
+  return (
+    <Suspense fallback={<AdminPageFallback />}>
+      <AdminPageContent {...props} />
+    </Suspense>
+  );
+}

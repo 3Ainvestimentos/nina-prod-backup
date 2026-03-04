@@ -4,7 +4,7 @@
 import { useEffect, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
+import { pdiActionSchema, type PdiActionFormData } from "@/lib/schemas";
 import {
   Dialog,
   DialogContent,
@@ -47,19 +47,6 @@ const sanitize = (text: string) => {
   return DOMPurify.sanitize(text, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] });
 };
 
-const actionSchema = z.object({
-  description: z.string().min(1, "A descrição da ação é obrigatória."),
-  startDate: z.date({
-    required_error: "A data de início é obrigatória.",
-  }),
-  endDate: z.date({
-    required_error: "A data de prazo é obrigatória.",
-  }),
-  status: z.enum(["To Do", "In Progress", "Completed"]),
-});
-
-type ActionFormData = z.infer<typeof actionSchema>;
-
 interface PdiActionFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -77,8 +64,8 @@ export function PdiActionFormDialog({
   const { toast } = useToast();
   const isEditMode = !!action;
 
-  const form = useForm<ActionFormData>({
-    resolver: zodResolver(actionSchema),
+  const form = useForm<PdiActionFormData>({
+    resolver: zodResolver(pdiActionSchema),
     defaultValues: {
       description: "",
       status: "To Do",
@@ -116,14 +103,18 @@ export function PdiActionFormDialog({
 
   useEffect(() => {
     if (open) {
-      const subscription = form.watch((value) => {
+      const subscription = form.watch((value: Partial<PdiActionFormData>) => {
         localStorage.setItem(getStorageKey(), JSON.stringify(value));
       });
-      return () => subscription.unsubscribe();
+      return () => {
+        if (typeof (subscription as { unsubscribe?: () => void })?.unsubscribe === "function") {
+          (subscription as { unsubscribe: () => void }).unsubscribe();
+        }
+      };
     }
   }, [open, form, getStorageKey]);
 
-  const onSubmit = async (data: ActionFormData) => {
+  const onSubmit = async (data: PdiActionFormData) => {
     if (!firestore) return;
     
     const collectionRef = collection(firestore, "employees", employeeId, "pdiActions");

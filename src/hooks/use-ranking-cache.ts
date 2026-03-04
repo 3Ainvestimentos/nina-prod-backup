@@ -1,17 +1,13 @@
-import { useState, useEffect } from 'react';
-import type { Interaction, PDIAction } from '@/lib/types';
+import { useState, useEffect } from "react";
+import {
+  CACHE_DURATION_MS,
+  type RankingCacheData,
+  isCacheExpired,
+  isBonusConfigChanged,
+  parseRankingCachePayload,
+} from "@/lib/ranking-cache";
 
-const CACHE_KEY = 'ranking-data-cache';
-const CACHE_CONFIG_KEY = 'ranking-bonus-config'; // Guarda o estado da config quando o cache foi criado
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutos
-
-interface RankingCacheData {
-  interactions: Map<string, Interaction[]>;
-  pdiActions: Map<string, PDIAction[]>;
-  timestamp: number;
-  employeeIds: string[];
-  bonusEnabled?: boolean; // Estado do bônus quando o cache foi criado
-}
+const CACHE_KEY = "ranking-data-cache";
 
 /**
  * Hook para gerenciar cache de dados do ranking
@@ -21,56 +17,53 @@ interface RankingCacheData {
 export function useRankingCache(currentBonusEnabled?: boolean) {
   const [cachedData, setCachedData] = useState<RankingCacheData | null>(null);
 
-  // Carregar cache do localStorage ao montar
   useEffect(() => {
     try {
       const cached = localStorage.getItem(CACHE_KEY);
       if (cached) {
-        const parsed = JSON.parse(cached);
+        const parsed = JSON.parse(cached) as Record<string, unknown>;
         const now = Date.now();
-        
-        // Verificar se cache ainda é válido (não expirou)
-        const isExpired = parsed.timestamp && (now - parsed.timestamp >= CACHE_DURATION);
-        
-        // Verificar se a configuração de bônus mudou desde que o cache foi criado
-        const bonusConfigChanged = currentBonusEnabled !== undefined && parsed.bonusEnabled !== currentBonusEnabled;
-        
-        if (isExpired) {
-          console.log('⚠️ [RANKING_CACHE] Cache expirado, removendo');
+
+        if (isCacheExpired(parsed.timestamp as number, now, CACHE_DURATION_MS)) {
+          console.log("⚠️ [RANKING_CACHE] Cache expirado, removendo");
           localStorage.removeItem(CACHE_KEY);
-        } else if (bonusConfigChanged) {
-          console.log('⚠️ [RANKING_CACHE] Configuração de bônus mudou, invalidando cache');
+        } else if (
+          isBonusConfigChanged(
+            parsed.bonusEnabled as boolean | undefined,
+            currentBonusEnabled
+          )
+        ) {
+          console.log(
+            "⚠️ [RANKING_CACHE] Configuração de bônus mudou, invalidando cache"
+          );
           localStorage.removeItem(CACHE_KEY);
-        } else if (parsed.timestamp && (now - parsed.timestamp < CACHE_DURATION)) {
-          console.log('✅ [RANKING_CACHE] Cache válido encontrado', {
-            age: Math.round((now - parsed.timestamp) / 1000) + 's',
-            employees: parsed.employeeIds?.length || 0,
-            bonusEnabled: parsed.bonusEnabled,
-          });
-          
-          // Reconverter arrays para Maps
-          const data: RankingCacheData = {
-            interactions: new Map(Object.entries(parsed.interactions || {})),
-            pdiActions: new Map(Object.entries(parsed.pdiActions || {})),
-            timestamp: parsed.timestamp,
-            employeeIds: parsed.employeeIds || [],
-            bonusEnabled: parsed.bonusEnabled,
-          };
-          
-          setCachedData(data);
+        } else if (
+          parsed.timestamp &&
+          (now - (parsed.timestamp as number) < CACHE_DURATION_MS)
+        ) {
+          const data = parseRankingCachePayload(parsed);
+          if (data) {
+            console.log("✅ [RANKING_CACHE] Cache válido encontrado", {
+              age:
+                Math.round((now - data.timestamp) / 1000) + "s",
+              employees: data.employeeIds?.length || 0,
+              bonusEnabled: data.bonusEnabled,
+            });
+            setCachedData(data);
+          }
         }
       } else {
-        console.log('ℹ️ [RANKING_CACHE] Nenhum cache encontrado');
+        console.log("ℹ️ [RANKING_CACHE] Nenhum cache encontrado");
       }
     } catch (error) {
-      console.error('❌ [RANKING_CACHE] Erro ao carregar cache:', error);
+      console.error("❌ [RANKING_CACHE] Erro ao carregar cache:", error);
       localStorage.removeItem(CACHE_KEY);
     }
   }, [currentBonusEnabled]);
 
   const saveCache = (
-    interactions: Map<string, Interaction[]>,
-    pdiActions: Map<string, PDIAction[]>,
+    interactions: RankingCacheData["interactions"],
+    pdiActions: RankingCacheData["pdiActions"],
     employeeIds: string[],
     bonusEnabled?: boolean
   ) => {
@@ -82,15 +75,15 @@ export function useRankingCache(currentBonusEnabled?: boolean) {
         employeeIds,
         bonusEnabled,
       };
-      
+
       localStorage.setItem(CACHE_KEY, JSON.stringify(data));
-      
-      console.log('💾 [RANKING_CACHE] Cache salvo com sucesso', {
+
+      console.log("💾 [RANKING_CACHE] Cache salvo com sucesso", {
         employees: employeeIds.length,
-        size: new Blob([JSON.stringify(data)]).size + ' bytes',
+        size: new Blob([JSON.stringify(data)]).size + " bytes",
         bonusEnabled,
       });
-      
+
       setCachedData({
         interactions,
         pdiActions,
@@ -99,14 +92,14 @@ export function useRankingCache(currentBonusEnabled?: boolean) {
         bonusEnabled,
       });
     } catch (error) {
-      console.error('❌ [RANKING_CACHE] Erro ao salvar cache:', error);
+      console.error("❌ [RANKING_CACHE] Erro ao salvar cache:", error);
     }
   };
 
   const clearCache = () => {
     localStorage.removeItem(CACHE_KEY);
     setCachedData(null);
-    console.log('🗑️ [RANKING_CACHE] Cache limpo');
+    console.log("🗑️ [RANKING_CACHE] Cache limpo");
   };
 
   return {
@@ -116,4 +109,3 @@ export function useRankingCache(currentBonusEnabled?: boolean) {
     hasFreshCache: cachedData !== null,
   };
 }
-

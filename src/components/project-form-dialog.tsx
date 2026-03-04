@@ -30,8 +30,8 @@ import { Textarea } from "./ui/textarea";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
 import { useFirestore, useUser } from "@/firebase";
+import { projectFormSchema, type ProjectFormData } from "@/lib/schemas";
 import { collection, addDoc, doc, updateDoc } from "firebase/firestore";
 import { useToast } from "@/hooks/use-toast";
 import type { Employee, Project } from "@/lib/types";
@@ -45,15 +45,6 @@ const sanitize = (text: string) => {
   if (typeof window === 'undefined') return text;
   return DOMPurify.sanitize(text, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] });
 };
-
-const formSchema = z.object({
-  name: z.string().min(3, "O nome deve ter pelo menos 3 caracteres."),
-  description: z.string().min(10, "A descrição deve ter pelo menos 10 caracteres."),
-  leaderId: z.string().optional(), // Admin seleciona o líder
-  memberIds: z.array(z.string()).min(1, "Selecione pelo menos um membro."),
-});
-
-type ProjectFormData = z.infer<typeof formSchema>;
 
 interface ProjectFormDialogProps {
   open: boolean;
@@ -81,7 +72,7 @@ export function ProjectFormDialog({
   const isEditMode = !!project?.id;
 
   const form = useForm<ProjectFormData>({
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(projectFormSchema),
     defaultValues: {
       name: project?.name || "",
       description: project?.description || "",

@@ -4,7 +4,7 @@
 import { useEffect, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
+import { diagnosisSchema, type DiagnosisFormData } from "@/lib/schemas";
 import {
   Dialog,
   DialogContent,
@@ -35,13 +35,6 @@ import { doc } from "firebase/firestore";
 import { setDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 import { useToast } from "@/hooks/use-toast";
 import type { Employee, Diagnosis } from "@/lib/types";
-
-const diagnosisSchema = z.object({
-  status: z.enum(["Pendente", "Em Andamento", "Concluído"]),
-  details: z.string().optional(),
-});
-
-type DiagnosisFormData = z.infer<typeof diagnosisSchema>;
 
 interface DiagnosisFormDialogProps {
   open: boolean;

@@ -29,28 +29,12 @@ import { Input } from "./ui/input";
 import { useEffect, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
 import { useFirestore } from "@/firebase";
+import { employeeFormSchema, formSchema, type EmployeeFormData } from "@/lib/schemas";
 import { doc } from "firebase/firestore";
 import { setDocumentNonBlocking } from "@/firebase/non-blocking-updates";
 import { useToast } from "@/hooks/use-toast";
 import type { Employee, Role } from "@/lib/types";
-
-const formSchema = z.object({
-  id3a: z.string().min(1, "O ID externo é obrigatório."),
-  name: z.string().min(1, "O nome é obrigatório."),
-  email: z.string().email("O email é inválido."),
-  position: z.string().optional(),
-  axis: z.string().optional(),
-  area: z.string().optional(),
-  segment: z.string().optional(),
-  leaderId: z.string().optional(),
-  city: z.string().optional(),
-  role: z.string().optional(),
-  photoURL: z.string().url().optional().or(z.literal('')),
-});
-
-type EmployeeFormData = z.infer<typeof formSchema>;
 
 interface EmployeeFormDialogProps {
   open: boolean;
